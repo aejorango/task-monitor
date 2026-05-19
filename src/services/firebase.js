@@ -127,7 +127,17 @@ export function subscribeToProjects(userId, callback) {
 
 // One-time migration: seed default projects from the legacy categories
 // and link existing tasks. Idempotent — safe to call on every sign-in.
-export async function migrateLegacyCategories(userId) {
+// Module-level promise cache prevents duplicate concurrent runs (React Strict
+// Mode invokes the calling effect twice in dev, which previously caused 6 or 9
+// projects to be seeded instead of 3).
+const _migrationCache = new Map();  // userId → Promise
+export function migrateLegacyCategories(userId) {
+  if (_migrationCache.has(userId)) return _migrationCache.get(userId);
+  const p = _migrateLegacyCategoriesImpl(userId);
+  _migrationCache.set(userId, p);
+  return p;
+}
+async function _migrateLegacyCategoriesImpl(userId) {
   const existing = await getDocs(query(projectsRef, where('userId', '==', userId), limit(1)));
   if (!existing.empty) return { migrated: false, reason: 'projects already exist' };
 
@@ -198,6 +208,11 @@ export async function addTask(userId, task) {
       startDate: null,
       endDate:   null,
     },
+
+    // PM suite v4 fields
+    dependsOn: task.dependsOn || [],      // [taskId, ...]
+    subtasks:  task.subtasks  || [],      // [{ id, text, done }]
+    tags:      task.tags      || [],      // [string, ...]
 
     activityCount:    0,
     totalHoursLogged: 0,

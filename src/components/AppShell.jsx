@@ -1,13 +1,16 @@
 // src/components/AppShell.jsx — sidebar nav + topbar + content area
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useTasks, useAllActivities, useProjects } from '../hooks/useTasks';
 
 const VIEWS = [
   { id: 'board',    label: 'Board',    icon: '▦' },
   { id: 'table',    label: 'Table',    icon: '☰' },
   { id: 'gantt',    label: 'Gantt',    icon: '▭' },
+  { id: 'calendar', label: 'Calendar', icon: '▤' },
   { id: 'review',   label: 'Review',   icon: '◇' },
   { id: 'projects', label: 'Projects', icon: '◉' },
+  { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
 function parseHash() {
@@ -81,9 +84,123 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           onChange={(projectFilter) => navigate({ projectFilter })}
         />
         <div className="topbar-spacer" />
+        <GlobalSearch projects={projects} navigate={navigate} />
       </header>
 
       <main className="content">{children}</main>
+    </div>
+  );
+}
+
+// ─── Global search ─────────────────────────────────────────
+
+function GlobalSearch({ projects, navigate }) {
+  const { tasks } = useTasks();
+  const { activities } = useAllActivities();
+  const { byId: projectById } = useProjects();
+  const [q, setQ]       = useState('');
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
+
+  // ⌘K / Ctrl+K to focus search
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+      if (e.key === 'Escape') {
+        setOpen(false);
+        inputRef.current?.blur();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const results = useMemo(() => {
+    if (!q.trim()) return { tasks: [], activities: [] };
+    const needle = q.toLowerCase();
+    const taskMatches = tasks
+      .filter((t) =>
+        t.title?.toLowerCase().includes(needle) ||
+        t.description?.toLowerCase().includes(needle) ||
+        (t.tags || []).some((tg) => tg.toLowerCase().includes(needle))
+      )
+      .slice(0, 8);
+    const activityMatches = activities
+      .filter((a) =>
+        a.comment?.toLowerCase().includes(needle) ||
+        a.bottleneckRemarks?.toLowerCase().includes(needle) ||
+        a.taskTitle?.toLowerCase().includes(needle)
+      )
+      .slice(0, 6);
+    return { tasks: taskMatches, activities: activityMatches };
+  }, [q, tasks, activities]);
+
+  const goToTask = (t) => {
+    navigate({ view: 'board', projectFilter: t.projectId || 'all' });
+    setQ(''); setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  return (
+    <div className="search-wrap">
+      <input
+        ref={inputRef}
+        type="search"
+        className="search-input"
+        placeholder="Search tasks & activities…   ⌘K"
+        value={q}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => q && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && q.trim() && (
+        <div className="search-results">
+          {results.tasks.length === 0 && results.activities.length === 0 && (
+            <div className="search-empty">No matches.</div>
+          )}
+          {results.tasks.length > 0 && (
+            <>
+              <div className="search-group-label">Tasks</div>
+              {results.tasks.map((t) => {
+                const proj = projectById[t.projectId];
+                return (
+                  <button key={t.id} className="search-result" onMouseDown={() => goToTask(t)}>
+                    {proj && <span className="proj-dot" style={{ background: proj.color }} />}
+                    <span className="search-result-title">{t.title}</span>
+                    <span className={`badge badge-soft-${
+                      t.status === 'done' ? 'success' :
+                      t.status === 'doing' ? 'info' : 'muted'
+                    }`}>{t.status}</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
+          {results.activities.length > 0 && (
+            <>
+              <div className="search-group-label">Activities</div>
+              {results.activities.map((a) => {
+                const proj = projectById[a.projectId];
+                return (
+                  <button key={a.id} className="search-result" onMouseDown={() => {
+                    const t = tasks.find((x) => x.id === a.taskId);
+                    if (t) goToTask(t);
+                  }}>
+                    {proj && <span className="proj-dot" style={{ background: proj.color }} />}
+                    <div className="search-result-multi">
+                      <div className="search-result-title">{a.taskTitle}</div>
+                      <div className="muted small">{a.date} — {a.comment?.slice(0, 60) || a.bottleneckRemarks?.slice(0, 60)}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

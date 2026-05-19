@@ -40,15 +40,27 @@ export default function Board({ projectFilter }) {
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [activeDrag, setActiveDrag]     = useState(null);
   const [groupByPhase, setGroupByPhase] = useState(false);
+  const [tagFilter, setTagFilter] = useState(null);  // null = no tag filter
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),
   );
 
-  const filtered = projectFilter === 'all'
+  const projectFiltered = projectFilter === 'all'
     ? tasks
     : tasks.filter((t) => t.projectId === projectFilter);
+
+  const filtered = tagFilter
+    ? projectFiltered.filter((t) => (t.tags || []).includes(tagFilter))
+    : projectFiltered;
+
+  // All tags available across the (project-filtered) tasks, for the chip strip
+  const availableTags = (() => {
+    const set = new Set();
+    projectFiltered.forEach((t) => (t.tags || []).forEach((tg) => set.add(tg)));
+    return [...set].sort();
+  })();
 
   if (loading) return <p className="muted">Loading tasks…</p>;
   if (!userId) return <p className="muted">Signing you in…</p>;
@@ -115,6 +127,23 @@ export default function Board({ projectFilter }) {
           )}
         </div>
       </div>
+
+      {availableTags.length > 0 && (
+        <div className="tag-filter-bar">
+          <span className="small muted" style={{ marginRight: 4 }}>Tags:</span>
+          <button
+            className={`chip ${!tagFilter ? 'active' : ''}`}
+            onClick={() => setTagFilter(null)}
+          >All</button>
+          {availableTags.map((tg) => (
+            <button
+              key={tg}
+              className={`chip ${tagFilter === tg ? 'active' : ''}`}
+              onClick={() => setTagFilter(tagFilter === tg ? null : tg)}
+            >#{tg}</button>
+          ))}
+        </div>
+      )}
 
       <TaskForm projects={projects} projectFilter={projectFilter} />
 
@@ -299,6 +328,10 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
   const finishedLate =
     task.status === 'done' && task.actual?.endDate && task.plan?.endDate &&
     task.actual.endDate > task.plan.endDate;
+  const subtaskCount = task.subtasks?.length || 0;
+  const subtasksDone = task.subtasks?.filter((s) => s.done).length || 0;
+  const tags = task.tags || [];
+  const depsCount = task.dependsOn?.length || 0;
 
   return (
     <div className={`task-card ${dragging ? 'dragging' : ''} ${isOverdue ? 'overdue' : ''}`}>
@@ -325,7 +358,33 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
         {isOverdue && <span className="badge badge-soft-danger">Overdue</span>}
         {finishedEarly && <span className="badge badge-soft-success">Done early</span>}
         {finishedLate && <span className="badge badge-soft-warn">Done late</span>}
+        {depsCount > 0 && (
+          <span className="badge badge-soft-muted" title={`${depsCount} dependenc${depsCount === 1 ? 'y' : 'ies'}`}>
+            🔗 {depsCount}
+          </span>
+        )}
       </div>
+
+      {tags.length > 0 && (
+        <div className="task-card-tags">
+          {tags.slice(0, 4).map((tg) => (
+            <span key={tg} className="tag-pill small">#{tg}</span>
+          ))}
+          {tags.length > 4 && <span className="muted small">+{tags.length - 4}</span>}
+        </div>
+      )}
+
+      {subtaskCount > 0 && (
+        <div className="subtask-progress">
+          <div className="subtask-progress-bar">
+            <div
+              className="subtask-progress-fill"
+              style={{ width: `${(subtasksDone / subtaskCount) * 100}%` }}
+            />
+          </div>
+          <span className="subtask-progress-label">{subtasksDone}/{subtaskCount}</span>
+        </div>
+      )}
 
       {(task.plan?.startDate || task.plan?.endDate || task.actual?.startDate || task.actual?.endDate) && (
         <div className="task-card-dates">

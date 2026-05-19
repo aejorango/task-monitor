@@ -45,10 +45,26 @@ export default function GanttView({ projectFilter }) {
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
 
   const rows = useMemo(() => {
+    // Earliest date on a task (plan or actual start, then ends as fallback)
+    const earliestOf = (t) => {
+      const candidates = [t.plan?.startDate, t.actual?.startDate, t.plan?.endDate, t.actual?.endDate]
+        .filter(Boolean)
+        .sort();
+      return candidates[0] || '9999-12-31';
+    };
+
     return tasks
       .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
-      .filter((t) => t.plan?.startDate || t.plan?.endDate || t.actual?.startDate || t.actual?.endDate);
-  }, [tasks, projectFilter]);
+      .filter((t) => t.plan?.startDate || t.plan?.endDate || t.actual?.startDate || t.actual?.endDate)
+      .sort((a, b) => {
+        // 1. Group by project (alphabetical by project name; null project last)
+        const aProj = projectById[a.projectId]?.name || '￿';
+        const bProj = projectById[b.projectId]?.name || '￿';
+        if (aProj !== bProj) return aProj.localeCompare(bProj);
+        // 2. Within a project, earliest start first
+        return earliestOf(a).localeCompare(earliestOf(b));
+      });
+  }, [tasks, projectFilter, projectById]);
 
   const range = useMemo(() => {
     let min = parseDate(todayLocal());
@@ -85,6 +101,36 @@ export default function GanttView({ projectFilter }) {
 
   const totalWidth = range.total * zoomConf.dayWidth;
   const labelWidth = 240;
+  const rowHeight  = 40;
+  const headerHeight = 33;
+
+  // Index rows for arrow computation
+  const rowIndex = new Map();
+  rows.forEach((t, i) => rowIndex.set(t.id, i));
+
+  // Compute dependency arrows: from end of dep's plan bar to start of this task's plan bar.
+  // Coordinates are relative to the SVG which sits over the track area only (so x is in the
+  // task time-range coordinate space; y indexes rows including the header row).
+  const arrows = [];
+  rows.forEach((t) => {
+    const depIds = t.dependsOn || [];
+    const myPlanStart = parseDate(t.plan?.startDate);
+    if (!myPlanStart) return;
+    const myIdx = rowIndex.get(t.id);
+    const toX = diffDays(range.min, myPlanStart) * zoomConf.dayWidth;
+    const toY = headerHeight + myIdx * rowHeight + rowHeight / 2;
+
+    depIds.forEach((depId) => {
+      const dep = rows.find((r) => r.id === depId);
+      if (!dep) return;  // dep not in current filter/view
+      const depPlanEnd = parseDate(dep.plan?.endDate);
+      if (!depPlanEnd) return;
+      const depIdx = rowIndex.get(depId);
+      const fromX = (diffDays(range.min, depPlanEnd) + 1) * zoomConf.dayWidth;
+      const fromY = headerHeight + depIdx * rowHeight + rowHeight / 2;
+      arrows.push({ id: `${depId}->${t.id}`, fromX, fromY, toX, toY });
+    });
+  });
 
   const dayHeaders = [];
   for (let i = 0; i < range.total; i++) {
@@ -98,7 +144,7 @@ export default function GanttView({ projectFilter }) {
     <>
       <PageHeader zoom={zoom} setZoom={setZoom} />
 
-      <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px` }}>
+      <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px`, position: 'relative' }}>
         <div className="gantt-row header" style={{ gridTemplateColumns: `${labelWidth}px ${totalWidth}px` }}>
           <div className="gantt-label">Task</div>
           <div className="gantt-track" style={{ display: 'grid', gridTemplateColumns: `repeat(${range.total}, ${zoomConf.dayWidth}px)` }}>
@@ -110,6 +156,42 @@ export default function GanttView({ projectFilter }) {
             ))}
           </div>
         </div>
+
+        {/* Dependency arrows overlay (positioned over the track area only) */}
+        {arrows.length > 0 && (
+          <svg
+            className="gantt-arrows"
+            width={totalWidth}
+            height={headerHeight + rows.length * rowHeight}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: labelWidth,
+              pointerEvents: 'none',
+            }}
+          >
+            <defs>
+              <marker id="dep-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--c-text-3)" />
+              </marker>
+            </defs>
+            {arrows.map((a) => {
+              // Elbow path: from end of dep bar, jog down/up halfway, jog right to start of this bar.
+              const midX = (a.fromX + a.toX) / 2;
+              return (
+                <path
+                  key={a.id}
+                  d={`M ${a.fromX} ${a.fromY} L ${midX} ${a.fromY} L ${midX} ${a.toY} L ${a.toX - 4} ${a.toY}`}
+                  fill="none"
+                  stroke="var(--c-text-3)"
+                  strokeWidth="1.5"
+                  strokeDasharray="3 3"
+                  markerEnd="url(#dep-arrow)"
+                />
+              );
+            })}
+          </svg>
+        )}
 
         {rows.map((t) => (
           <GanttRow

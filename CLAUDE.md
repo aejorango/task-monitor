@@ -28,12 +28,15 @@ projects/{projectId}:
 
 tasks/{taskId}:
   userId, title, description
-  projectId, phaseId               ← new (PM suite)
+  projectId, phaseId               ← PM suite
   category                         ← legacy back-compat
   priority, status, progress
-  requestedBy                      ← new
+  requestedBy
   plan: { startDate, endDate }
   actual: { startDate, endDate }
+  tags: [string, ...]              ← v4: cross-cutting tags
+  subtasks: [{ id, text, done }]   ← v4: checklist
+  dependsOn: [taskId, ...]         ← v4: dependencies
   activityCount, totalHoursLogged, attachmentCount, lastActivityAt
   archived, deleted, createdAt, updatedAt
 
@@ -55,13 +58,15 @@ activities/{activityId}:
 `useProjects` hook). It seeds three projects (BRIDGED / AIM / Personal) and
 links existing tasks to them. **Idempotent** — safe to call repeatedly.
 
-## Views
+## Views (in sidebar order)
 
-1. **Board** — Kanban (To Do / In Progress / Done) with drag-and-drop between columns. Cards have inline log/edit actions and expand to show activity history. **Optional "Group by phase" mode** subdivides each status column into phase swim-lanes (only available when a single project is selected).
-2. **Table** — Flat activity log. Columns: Project | Phase | Task | Activity details | Date | Completion | Output link | Bottlenecks | Requested by | Hours. Sortable. CSV export. **Bulk actions:** row selection + bulk delete / set completion / export selected.
-3. **Gantt** — CSS-grid timeline with plan bars (faded) overlaid by actual bars (solid). Today line. Day/Week/Month zoom. Color-coded by project. **Plan bars are draggable**: edges resize, middle moves the whole bar. Snaps to whole days, writes back via `updateTask`.
-4. **Review** — Period-scoped summary (7/14/30/90 days). KPI cards (hours logged, tasks completed/created, overdue, activities, completed/blocked entries). Horizontal bar chart of hours-by-project. Daily-hours strip with today highlighted. Lists: overdue tasks, completed in period, bottlenecks.
-5. **Projects** — Create, edit, archive, delete projects. Manage phase list per project.
+1. **Board** — Kanban with drag-drop. Tag-filter chip-strip above the board (auto-populated from existing tags in the current project filter). Cards show: project, status badges, **🔗 deps count**, **tag pills**, **subtask progress bar (e.g. 2/5)**. Optional "Group by phase" mode (single-project filter only).
+2. **Table** — Flat activity log with bulk actions (delete / set completion / export). Sortable columns.
+3. **Gantt** — Timeline. Plan bars are draggable. **SVG dependency arrows** drawn between predecessor/successor plan bars. **Rows grouped by project, sorted by earliest start within each group.**
+4. **Calendar** — Month grid. Tasks placed on their `plan.endDate`. Click a task to edit. Respects `weekStart` setting.
+5. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
+6. **Projects** — Project + phase CRUD.
+7. **Settings** — Per-device prefs in localStorage: theme override (system/light/dark), default project, week start. Plus JSON data export.
 
 ## Conventions
 
@@ -77,20 +82,23 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 ```
 src/
 ├── components/
-│   ├── AppShell.jsx          ← sidebar + topbar + view router (useRoute)
-│   ├── Board.jsx             ← kanban with drag-and-drop + swim-lanes
+│   ├── AppShell.jsx          ← sidebar + topbar + view router + global search + ⌘K
+│   ├── Board.jsx             ← kanban with drag-drop + swim-lanes + tag filter
 │   ├── TaskForm.jsx          ← quick-add (top of Board)
-│   ├── TaskEditor.jsx        ← modal: edit any task field
-│   ├── ActivityLogger.jsx    ← modal: log new activity (PM fields)
+│   ├── TaskEditor.jsx        ← modal with tabs: Details / Subtasks / Dependencies
+│   ├── ActivityLogger.jsx    ← modal: log new activity
 │   ├── ActivityEditor.jsx    ← modal: edit existing activity (atomic counter sync)
-│   ├── TableView.jsx         ← activity table + bulk actions + CSV export
-│   ├── GanttView.jsx         ← timeline with draggable plan bars
+│   ├── TableView.jsx         ← activity table + bulk actions + CSV
+│   ├── GanttView.jsx         ← timeline + draggable bars + dependency arrows
+│   ├── CalendarView.jsx      ← month grid by plan.endDate
 │   ├── ReviewView.jsx        ← KPIs, charts, lists
-│   └── ProjectsView.jsx      ← project & phase CRUD
+│   ├── ProjectsView.jsx      ← project & phase CRUD
+│   └── SettingsView.jsx      ← per-device prefs + data export
 ├── hooks/
-│   └── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
+│   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
+│   └── useSettings.js        ← localStorage-backed settings + theme application
 ├── services/
-│   └── firebase.js           ← init, CRUD, subscriptions, migration helper
+│   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
 ├── App.jsx                   ← root: routes view based on URL hash
 └── App.css                   ← single stylesheet, design tokens + components
 ```
