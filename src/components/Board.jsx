@@ -400,20 +400,8 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
         </div>
       )}
 
-      {(task.plan?.startDate || task.plan?.endDate || task.actual?.startDate || task.actual?.endDate) && (
-        <div className="task-card-dates">
-          {(task.plan?.startDate || task.plan?.endDate) && (
-            <div className="date-line">
-              <strong>Plan</strong> <span>{task.plan?.startDate || '—'} → {task.plan?.endDate || '—'}</span>
-            </div>
-          )}
-          {(task.actual?.startDate || task.actual?.endDate) && (
-            <div className="date-line">
-              <strong>Actual</strong> <span>{task.actual?.startDate || '—'} → {task.actual?.endDate || '—'}</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Plan/actual dates are intentionally hidden from the card to keep it
+          compact. Full dates are visible in the editor + Gantt + Calendar. */}
 
       <div className="task-card-footer">
         <div className="counters">

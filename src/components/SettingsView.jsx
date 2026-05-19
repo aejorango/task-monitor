@@ -13,6 +13,12 @@ import {
   getNotificationPermission,
   requestNotificationPermission,
 } from '../hooks/useNotifications';
+import {
+  getApiKey as getAnthropicKey,
+  setApiKey as setAnthropicKey,
+  getModel as getAnthropicModel,
+  setModel as setAnthropicModel,
+} from '../services/anthropic';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -23,6 +29,9 @@ export default function SettingsView() {
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
   const [signInError, setSignInError] = useState(null);  // { code, message } or null
   const [signingIn, setSigningIn] = useState(false);
+  const [anthroKey, setAnthroKey]     = useState(getAnthropicKey());
+  const [anthroModel, setAnthroModel] = useState(getAnthropicModel());
+  const [aiKeyVisible, setAiKeyVisible] = useState(false);
   const currentUser = auth.currentUser;
   const isAnonymous = !!currentUser?.isAnonymous;
   const displayName = currentUser?.displayName || currentUser?.email || (isAnonymous ? 'Anonymous' : 'Signed out');
@@ -186,6 +195,53 @@ export default function SettingsView() {
             )}
           </div>
         )}
+      </section>
+
+      <section className="review-section">
+        <h2 className="review-h2">AI (Anthropic API)</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Used by the ✨ <strong>Generate tasks from description</strong> feature on each project.
+          Get a key at <a className="table-link" href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a>.
+          Stored only in this browser.
+        </p>
+        <div className="field">
+          <label className="label">Anthropic API key</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type={aiKeyVisible ? 'text' : 'password'}
+              className="input"
+              value={anthroKey}
+              onChange={(e) => setAnthroKey(e.target.value)}
+              placeholder="sk-ant-…"
+              autoComplete="off"
+            />
+            <button type="button" className="btn btn-sm" onClick={() => setAiKeyVisible(!aiKeyVisible)}>
+              {aiKeyVisible ? 'Hide' : 'Show'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setAnthropicKey(anthroKey.trim());
+                setAnthropicModel(anthroModel.trim() || 'claude-sonnet-4-5-20250929');
+                alert(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
+              }}
+            >Save</button>
+          </div>
+        </div>
+        <div className="field">
+          <label className="label">Model</label>
+          <input
+            type="text"
+            className="input"
+            value={anthroModel}
+            onChange={(e) => setAnthroModel(e.target.value)}
+            placeholder="claude-sonnet-4-5-20250929"
+          />
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Default: <span className="mono">claude-sonnet-4-5-20250929</span>. Change if you want a different Claude model.
+          </p>
+        </div>
       </section>
 
       <section className="review-section">

@@ -8,6 +8,7 @@ import {
   bulkUpdateActivityCompletion,
 } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
+import CsvImporter from './CsvImporter';
 
 const COLUMNS = [
   { key: 'project',     label: 'Project' },
@@ -41,6 +42,7 @@ export default function TableView({ projectFilter }) {
   const [sortDir, setSortDir] = useState('desc');
   const [selected, setSelected] = useState(new Set());
   const [editing, setEditing]   = useState(null);
+  const [importerOpen, setImporterOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return activities.filter((a) => projectFilter === 'all' || a.projectId === projectFilter);
@@ -118,9 +120,12 @@ export default function TableView({ projectFilter }) {
           <p className="page-subtitle">All logged activities across your tasks and projects. Click a column to sort. Select rows for bulk actions.</p>
         </div>
         <div className="page-actions">
+          <button className="btn" onClick={() => setImporterOpen(true)}>Import CSV</button>
           <button className="btn" onClick={() => exportCsv(sorted)}>Export all CSV</button>
         </div>
       </div>
+
+      {importerOpen && <CsvImporter onClose={() => setImporterOpen(false)} />}
 
       {selected.size > 0 && (
         <BulkBar

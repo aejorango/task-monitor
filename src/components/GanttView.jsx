@@ -5,8 +5,8 @@
 //   - middle     (move whole bar)
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useTasks, useProjects } from '../hooks/useTasks';
-import { todayLocal, updateTask } from '../services/firebase';
+import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
+import { todayLocal, updateTask, addTask } from '../services/firebase';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -40,8 +40,9 @@ function fmtShort(d, zoomId) {
 
 export default function GanttView({ projectFilter }) {
   const { tasks, loading } = useTasks();
-  const { byId: projectById } = useProjects();
+  const { projects, byId: projectById } = useProjects();
   const [zoom, setZoom] = useState('day');
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
 
   const rows = useMemo(() => {
@@ -89,18 +90,23 @@ export default function GanttView({ projectFilter }) {
   if (rows.length === 0) {
     return (
       <>
-        <PageHeader zoom={zoom} setZoom={setZoom} />
+        <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} />
         <div className="empty-state">
           <div className="empty-state-icon">▭</div>
           <p>No tasks with plan or actual dates yet.</p>
-          <p className="small">Add plan start/end dates to your tasks to see them on the Gantt.</p>
+          <p className="small">Click <strong>+ New task</strong> above, or add plan start/end dates to existing tasks.</p>
         </div>
+        {quickAddOpen && (
+          <GanttQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
+        )}
       </>
     );
   }
 
   const totalWidth = range.total * zoomConf.dayWidth;
-  const labelWidth = 240;
+  const phaseWidth = 120;
+  const taskWidth  = 240;
+  const labelWidth = phaseWidth + taskWidth;
   const rowHeight  = 40;
   const headerHeight = 33;
 
@@ -145,7 +151,8 @@ export default function GanttView({ projectFilter }) {
       <PageHeader zoom={zoom} setZoom={setZoom} />
 
       <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px`, position: 'relative' }}>
-        <div className="gantt-row header" style={{ gridTemplateColumns: `${labelWidth}px ${totalWidth}px` }}>
+        <div className="gantt-row header" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}>
+          <div className="gantt-label gantt-label-phase">Phase</div>
           <div className="gantt-label">Task</div>
           <div className="gantt-track" style={{ display: 'grid', gridTemplateColumns: `repeat(${range.total}, ${zoomConf.dayWidth}px)` }}>
             {dayHeaders.map((h, i) => (
@@ -166,7 +173,7 @@ export default function GanttView({ projectFilter }) {
             style={{
               position: 'absolute',
               top: 0,
-              left: labelWidth,
+              left: phaseWidth + taskWidth,
               pointerEvents: 'none',
             }}
           >
@@ -193,18 +200,24 @@ export default function GanttView({ projectFilter }) {
           </svg>
         )}
 
-        {rows.map((t) => (
-          <GanttRow
-            key={t.id}
-            task={t}
-            project={projectById[t.projectId]}
-            range={range}
-            zoomConf={zoomConf}
-            totalWidth={totalWidth}
-            labelWidth={labelWidth}
-            today={today}
-          />
-        ))}
+        {rows.map((t) => {
+          const proj = projectById[t.projectId];
+          const phase = proj?.phases?.find((p) => p.id === t.phaseId);
+          return (
+            <GanttRow
+              key={t.id}
+              task={t}
+              project={proj}
+              phaseName={phase?.name || ''}
+              range={range}
+              zoomConf={zoomConf}
+              totalWidth={totalWidth}
+              phaseWidth={phaseWidth}
+              taskWidth={taskWidth}
+              today={today}
+            />
+          );
+        })}
       </div>
 
       <div className="toolbar" style={{ marginTop: 16 }}>
@@ -215,13 +228,17 @@ export default function GanttView({ projectFilter }) {
         <span className="badge" style={{ background: 'var(--c-danger)', color: 'white' }}>Overdue</span>
         <span className="small muted" style={{ marginLeft: 8 }}>Drag plan bar edges to resize, middle to move.</span>
       </div>
+
+      {quickAddOpen && (
+        <GanttQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
+      )}
     </>
   );
 }
 
 // ─── Individual row with draggable plan bar ────────────────────────────────
 
-function GanttRow({ task, project, range, zoomConf, totalWidth, labelWidth, today }) {
+function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, today }) {
   const planStart = parseDate(task.plan?.startDate);
   const planEnd   = parseDate(task.plan?.endDate);
   const actStart  = parseDate(task.actual?.startDate);
@@ -307,7 +324,14 @@ function GanttRow({ task, project, range, zoomConf, totalWidth, labelWidth, toda
   };
 
   return (
-    <div className="gantt-row" style={{ gridTemplateColumns: `${labelWidth}px ${totalWidth}px` }}>
+    <div className="gantt-row" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}>
+      <div className="gantt-label gantt-label-phase">
+        {phaseName ? (
+          <span className="phase-tag" title={phaseName}>{phaseName}</span>
+        ) : (
+          <span className="muted small">—</span>
+        )}
+      </div>
       <div className="gantt-label">
         {project && <span className="proj-dot" style={{ background: project.color }} />}
         <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -365,7 +389,7 @@ function GanttRow({ task, project, range, zoomConf, totalWidth, labelWidth, toda
   );
 }
 
-function PageHeader({ zoom, setZoom }) {
+function PageHeader({ zoom, setZoom, onNewTask }) {
   return (
     <div className="page-header">
       <div>
@@ -380,6 +404,114 @@ function PageHeader({ zoom, setZoom }) {
             onClick={() => setZoom(z.id)}
           >{z.label}</button>
         ))}
+        {onNewTask && (
+          <button className="btn btn-primary btn-sm" onClick={onNewTask}>
+            + New task
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Lightweight quick-add modal optimized for adding a task to the Gantt: title +
+// project + phase + plan dates (the fields you actually need on a timeline).
+function GanttQuickAdd({ projects, projectFilter, onClose }) {
+  const { userId } = useAuth();
+  const [title, setTitle]     = useState('');
+  const [projectId, setProjectId] = useState(
+    projectFilter !== 'all' ? projectFilter : (projects[0]?.id || '')
+  );
+  const [phaseId, setPhaseId] = useState('');
+  const [priority, setPriority] = useState('medium');
+  const [planStart, setPlanStart] = useState(todayLocal());
+  const [planEnd, setPlanEnd]     = useState(todayLocal());
+  const [saving, setSaving] = useState(false);
+
+  const project = projects.find((p) => p.id === projectId);
+
+  const save = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      await addTask(userId, {
+        title: title.trim(),
+        category: project?.name || 'Personal',
+        projectId: projectId || null,
+        phaseId:   phaseId   || null,
+        priority,
+        plan: { startDate: planStart || null, endDate: planEnd || null },
+      });
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('Could not save task. Check console.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <h3 className="modal-title">New task</h3>
+        <p className="modal-sub">Add a task directly to the timeline.</p>
+
+        <div className="field">
+          <label className="label">Title</label>
+          <input
+            className="input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What needs doing?"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter' && title.trim()) save(); }}
+          />
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label className="label">Project</label>
+            <select className="select" value={projectId} onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }}>
+              <option value="">— None —</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label className="label">Phase</label>
+            <select className="select" value={phaseId} onChange={(e) => setPhaseId(e.target.value)} disabled={!project}>
+              <option value="">— None —</option>
+              {project?.phases?.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label className="label">Plan start</label>
+            <input type="date" className="input" value={planStart} onChange={(e) => setPlanStart(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="label">Plan end</label>
+            <input type="date" className="input" value={planEnd} onChange={(e) => setPlanEnd(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="label">Priority</label>
+          <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || !title.trim()}>
+            {saving ? 'Saving…' : 'Add task'}
+          </button>
+        </div>
       </div>
     </div>
   );

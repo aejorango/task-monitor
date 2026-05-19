@@ -12,6 +12,7 @@ import {
   softDeleteTemplate,
   projectAsTemplatePayload,
 } from '../services/firebase';
+import AiTaskGenerator from './AiTaskGenerator';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -24,6 +25,7 @@ export default function ProjectsView() {
   const taskTemplates    = templates.filter((t) => t.kind === 'task');
   const [editing, setEditing] = useState(null);          // project or 'new'
   const [createFromTemplate, setCreateFromTemplate] = useState(null);
+  const [aiFor, setAiFor] = useState(null);              // project to generate tasks for
 
   const stats = (projectId) => {
     const t = tasks.filter((x) => x.projectId === projectId);
@@ -64,6 +66,12 @@ export default function ProjectsView() {
                 <div className="project-card-head">
                   <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
                   <h3 className="project-name">{p.name}</h3>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    title="Generate tasks from this project's description"
+                    onClick={(e) => { e.stopPropagation(); setAiFor(p); }}
+                    style={{ marginLeft: 'auto' }}
+                  >✨ AI</button>
                 </div>
                 <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
                 <div className="project-phases">
@@ -136,6 +144,13 @@ export default function ProjectsView() {
           userId={userId}
           fromTemplate={createFromTemplate}
           onClose={() => setCreateFromTemplate(null)}
+        />
+      )}
+
+      {aiFor && (
+        <AiTaskGenerator
+          project={aiFor}
+          onClose={() => setAiFor(null)}
         />
       )}
     </>
