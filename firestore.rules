@@ -89,6 +89,12 @@ service cloud.firestore {
       allow delete: if isOwner(resource);
     }
 
+    match /webhooks/{hookId} {
+      allow read:   if isOwner(resource);
+      allow create: if isCreatingOwn();
+      allow update, delete: if isOwner(resource);
+    }
+
     match /categories/{categoryId} {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();

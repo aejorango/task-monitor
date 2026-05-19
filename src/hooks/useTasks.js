@@ -12,6 +12,7 @@ import {
   subscribeToTemplates,
   subscribeToTaskComments,
   subscribeToSavedViews,
+  subscribeToWebhooks,
   migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
@@ -149,6 +150,25 @@ export function useAllActivities() {
 }
 
 // ─── useRecentActivities ────────────────────────────────────────────────────
+
+// ─── useWebhooks ───────────────────────────────────────────────────────────
+
+export function useWebhooks() {
+  const { userId, ready } = useAuth();
+  const [hooks, setHooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId) return;
+    const unsub = subscribeToWebhooks(userId, (data) => {
+      setHooks(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId, ready]);
+
+  return { hooks, loading, userId };
+}
 
 // ─── useSavedViews ──────────────────────────────────────────────────────────
 

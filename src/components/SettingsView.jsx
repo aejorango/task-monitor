@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useSettings } from '../hooks/useSettings';
-import { useProjects, useTasks, useAllActivities, useAuth } from '../hooks/useTasks';
+import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '../hooks/useTasks';
+import {
+  addWebhook,
+  updateWebhook,
+  softDeleteWebhook,
+} from '../services/firebase';
 import {
   auth,
   signInWithGoogle,
@@ -333,6 +338,8 @@ export default function SettingsView() {
         </div>
       </section>
 
+      <WebhooksSection userId={userId} />
+
       <section className="review-section">
         <h2 className="review-h2">About this device</h2>
         <p className="muted small">
@@ -363,4 +370,137 @@ function exportData(data, userId) {
   a.download = `task-monitor-export-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+const EVENT_OPTIONS = [
+  { value: 'task.created',   label: 'Task created' },
+  { value: 'task.updated',   label: 'Task updated' },
+  { value: 'task.completed', label: 'Task completed' },
+  { value: 'task.deleted',   label: 'Task deleted' },
+  { value: 'activity.logged',label: 'Activity logged' },
+];
+
+function WebhooksSection({ userId }) {
+  const { hooks } = useWebhooks();
+  const [editing, setEditing] = useState(null);
+
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">Webhooks</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        POST a JSON payload to a URL when something changes. The HTTP delivery
+        requires a Cloud Function (see <strong>FEATURE_ROADMAP.md</strong> → Tier 4);
+        the storage + UI here are ready.
+      </p>
+
+      {hooks.length === 0 ? (
+        <p className="muted small">No webhooks configured.</p>
+      ) : (
+        <ul className="dep-list">
+          {hooks.map((h) => (
+            <li key={h.id} className="dep-item" style={{ gridTemplateColumns: 'auto 1fr auto auto auto' }}>
+              <span className={`badge badge-soft-${h.enabled ? 'success' : 'muted'}`}>
+                {h.enabled ? 'on' : 'off'}
+              </span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <strong>{h.name || '(unnamed)'}</strong>
+                <span className="muted small" style={{ marginLeft: 8 }}>{h.url}</span>
+              </span>
+              <span className="muted small">{(h.events || []).length} events</span>
+              <button className="btn btn-sm btn-ghost" onClick={() => setEditing(h)}>Edit</button>
+              <button className="btn btn-sm btn-ghost link-danger" onClick={() => {
+                if (confirm('Delete this webhook?')) softDeleteWebhook(h.id);
+              }}>✕</button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => setEditing('new')}>
+        + New webhook
+      </button>
+
+      {editing && (
+        <WebhookEditor
+          hook={editing === 'new' ? null : editing}
+          userId={userId}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </section>
+  );
+}
+
+function WebhookEditor({ hook, userId, onClose }) {
+  const isNew = !hook;
+  const [name, setName]   = useState(hook?.name || '');
+  const [url, setUrl]     = useState(hook?.url || '');
+  const [secret, setSecret] = useState(hook?.secret || '');
+  const [events, setEvents] = useState(hook?.events || ['task.created', 'task.completed']);
+  const [enabled, setEnabled] = useState(hook?.enabled !== false);
+  const [busy, setBusy] = useState(false);
+
+  const toggleEvent = (ev) => {
+    setEvents(events.includes(ev) ? events.filter((e) => e !== ev) : [...events, ev]);
+  };
+
+  const save = async () => {
+    if (!url.trim()) { alert('URL is required.'); return; }
+    setBusy(true);
+    try {
+      if (isNew) await addWebhook(userId, { name, url, secret, events, enabled });
+      else       await updateWebhook(hook.id, { name, url, secret, events, enabled });
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('Could not save webhook. Check console.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+        <h3 className="modal-title">{isNew ? 'New webhook' : 'Edit webhook'}</h3>
+        <div className="field">
+          <label className="label">Name</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Slack #project-updates" />
+        </div>
+        <div className="field">
+          <label className="label">URL</label>
+          <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" />
+        </div>
+        <div className="field">
+          <label className="label">Secret (optional)</label>
+          <input className="input" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="HMAC signing secret" />
+        </div>
+        <div className="field">
+          <label className="label">Events</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {EVENT_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                className={`chip ${events.includes(o.value) ? 'active' : ''}`}
+                onClick={() => toggleEvent(o.value)}
+              >{o.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} style={{ accentColor: 'var(--c-accent)' }} />
+            <span>Enabled</span>
+          </label>
+        </div>
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || !url.trim()}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

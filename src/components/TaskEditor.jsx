@@ -28,6 +28,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [actualEnd, setActualEnd]     = useState(task.actual?.endDate || '');
   const [requestedBy, setRequestedBy] = useState(task.requestedBy || '');
   const [tags, setTags]               = useState(task.tags || []);
+  const [customValues, setCustomValues] = useState(task.customValues || {});
   const [subtasks, setSubtasks]       = useState(task.subtasks || []);
   const [dependsOn, setDependsOn]     = useState(task.dependsOn || []);
   const [links, setLinks]             = useState(task.links || []);
@@ -127,6 +128,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         dependsOn,
         links,
         recurrence,
+        customValues,
         'plan.startDate':   planStart   || null,
         'plan.endDate':     planEnd     || null,
         'actual.startDate': actualStart || null,
@@ -289,6 +291,12 @@ export default function TaskEditor({ task, projects, onClose }) {
             </div>
 
             <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
+
+            <CustomFieldsForm
+              fields={selectedProject?.customFields || []}
+              values={customValues}
+              onChange={setCustomValues}
+            />
           </>
         )}
 
@@ -400,6 +408,38 @@ export default function TaskEditor({ task, projects, onClose }) {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomFieldsForm({ fields, values, onChange }) {
+  if (!fields?.length) return null;
+  const setValue = (id, v) => onChange({ ...values, [id]: v });
+  return (
+    <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
+      <label className="label">Project custom fields</label>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {fields.map((f) => (
+          <div key={f.id}>
+            <label className="label">{f.name}</label>
+            {f.type === 'text' && (
+              <input className="input" value={values[f.id] || ''} onChange={(e) => setValue(f.id, e.target.value)} />
+            )}
+            {f.type === 'number' && (
+              <input type="number" className="input" value={values[f.id] ?? ''} onChange={(e) => setValue(f.id, e.target.value === '' ? '' : Number(e.target.value))} />
+            )}
+            {f.type === 'date' && (
+              <input type="date" className="input" value={values[f.id] || ''} onChange={(e) => setValue(f.id, e.target.value)} />
+            )}
+            {f.type === 'select' && (
+              <select className="select" value={values[f.id] || ''} onChange={(e) => setValue(f.id, e.target.value)}>
+                <option value="">—</option>
+                {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

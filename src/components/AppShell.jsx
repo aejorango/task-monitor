@@ -10,9 +10,10 @@ const VIEWS = [
   { id: 'table',    label: 'Table',    icon: '☰' },
   { id: 'gantt',    label: 'Gantt',    icon: '▭' },
   { id: 'calendar', label: 'Calendar', icon: '▤' },
-  { id: 'review',   label: 'Review',   icon: '◇' },
-  { id: 'projects', label: 'Projects', icon: '◉' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+  { id: 'review',    label: 'Review',    icon: '◇' },
+  { id: 'analytics', label: 'Analytics', icon: '◢' },
+  { id: 'projects',  label: 'Projects',  icon: '◉' },
+  { id: 'settings',  label: 'Settings',  icon: '⚙' },
 ];
 
 function parseHash() {

@@ -11,7 +11,8 @@ import './App.css';
 const TableView    = lazy(() => import('./components/TableView'));
 const GanttView    = lazy(() => import('./components/GanttView'));
 const CalendarView = lazy(() => import('./components/CalendarView'));
-const ReviewView   = lazy(() => import('./components/ReviewView'));
+const ReviewView    = lazy(() => import('./components/ReviewView'));
+const AnalyticsView = lazy(() => import('./components/AnalyticsView'));
 const ProjectsView = lazy(() => import('./components/ProjectsView'));
 const SettingsView = lazy(() => import('./components/SettingsView'));
 
@@ -43,7 +44,8 @@ export default function App() {
         {route.view === 'table'    && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'gantt'    && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'calendar' && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
-        {route.view === 'review'   && <ReviewView />}
+        {route.view === 'review'    && <ReviewView />}
+        {route.view === 'analytics' && <AnalyticsView projectFilter={route.projectFilter} />}
         {route.view === 'projects' && <ProjectsView />}
         {route.view === 'settings' && <SettingsView />}
       </Suspense>

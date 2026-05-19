@@ -250,6 +250,55 @@ function ProjectSharing({ project }) {
   );
 }
 
+function CustomFieldsEditor({ fields, onChange }) {
+  const add = () => onChange([...fields, { id: uid(), name: 'New field', type: 'text', options: [] }]);
+  const remove = (id) => onChange(fields.filter((f) => f.id !== id));
+  const update = (id, patch) => onChange(fields.map((f) => f.id === id ? { ...f, ...patch } : f));
+
+  return (
+    <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
+      <label className="label">Custom fields</label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Extra fields that appear on every task in this project. Text, number, date, or select (predefined options).
+      </p>
+
+      {fields.length === 0 ? (
+        <p className="muted small">No custom fields.</p>
+      ) : (
+        <ul className="dep-list">
+          {fields.map((f) => (
+            <li key={f.id} className="dep-item" style={{ gridTemplateColumns: '1fr auto auto auto', gap: 6 }}>
+              <input
+                className="input input-sm"
+                value={f.name}
+                onChange={(e) => update(f.id, { name: e.target.value })}
+                placeholder="Field name"
+              />
+              <select className="select select-sm" value={f.type} onChange={(e) => update(f.id, { type: e.target.value })}>
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="date">Date</option>
+                <option value="select">Select</option>
+              </select>
+              {f.type === 'select' && (
+                <input
+                  className="input input-sm"
+                  style={{ minWidth: 160 }}
+                  value={(f.options || []).join(', ')}
+                  onChange={(e) => update(f.id, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                  placeholder="comma, separated, values"
+                />
+              )}
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => remove(f.id)}>✕</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button" className="btn btn-sm" style={{ marginTop: 6 }} onClick={add}>+ Add field</button>
+    </div>
+  );
+}
+
 function TemplateCard({ template, onUse, note }) {
   const handleDelete = (e) => {
     e.stopPropagation();
@@ -296,6 +345,7 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
       { id: uid(), name: 'Review',    order: 2 },
     ]
   );
+  const [customFields, setCustomFields] = useState(project?.customFields || []);
   const [saving, setSaving] = useState(false);
 
   const addPhase = () => setPhases([...phases, { id: uid(), name: 'New phase', order: phases.length }]);
@@ -314,9 +364,9 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { name: name.trim(), description: description.trim(), color, phases });
+        await addProject(userId, { name: name.trim(), description: description.trim(), color, phases, customFields });
       } else {
-        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, phases });
+        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, phases, customFields });
       }
       onClose();
     } catch (err) {
@@ -401,6 +451,8 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
             <button type="button" className="btn btn-sm" onClick={addPhase} style={{ alignSelf: 'flex-start', marginTop: 4 }}>+ Add phase</button>
           </div>
         </div>
+
+        <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
 
         {!isNew && (
           <ProjectSharing project={project} />

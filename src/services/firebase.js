@@ -173,6 +173,7 @@ const templatesRef = collection(db, 'templates');
 const taskCommentsRef = collection(db, 'taskComments');
 const savedViewsRef = collection(db, 'savedViews');
 const presenceRef   = collection(db, 'presence');
+const webhooksRef   = collection(db, 'webhooks');
 
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
@@ -374,6 +375,10 @@ export async function addTask(userId, task) {
     // v7: typed task-to-task links (in addition to dependsOn).
     //   [{ targetId, type: 'blocks' | 'related-to' | 'duplicate-of' }]
     links: task.links || [],
+
+    // v8 (Tier 4.4): per-project custom field values, keyed by field id.
+    //   { [fieldId]: scalar }
+    customValues: task.customValues || {},
 
     activityCount:    0,
     totalHoursLogged: 0,
@@ -981,5 +986,39 @@ export function subscribeToPresence(taskId, callback) {
         return now - ts < 60_000;  // 60s freshness window
       });
     callback(fresh);
+  });
+}
+
+// ─── WEBHOOKS ───────────────────────────────────────────────────────────────
+// Stored config only — actually firing the HTTP POST requires a Cloud
+// Function listening on Firestore changes (see FEATURE_ROADMAP.md → Tier 4).
+
+export async function addWebhook(userId, hook) {
+  return await addDoc(webhooksRef, {
+    userId,
+    name:    hook.name || '',
+    url:     hook.url,
+    secret:  hook.secret || '',
+    events:  hook.events || ['task.created', 'task.completed'],
+    enabled: hook.enabled !== false,
+    createdAt: serverTimestamp(),
+    deleted: false,
+  });
+}
+export async function updateWebhook(hookId, updates) {
+  return await updateDoc(doc(db, 'webhooks', hookId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+export async function softDeleteWebhook(hookId) {
+  return await updateWebhook(hookId, { deleted: true });
+}
+export function subscribeToWebhooks(userId, callback) {
+  const q = query(webhooksRef, where('userId', '==', userId), where('deleted', '==', false));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(data);
   });
 }
