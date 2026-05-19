@@ -9,6 +9,7 @@ import {
   subscribeToRecentActivities,
   subscribeToAllActivities,
   subscribeToProjects,
+  subscribeToTemplates,
   migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
@@ -146,6 +147,25 @@ export function useAllActivities() {
 }
 
 // ─── useRecentActivities ────────────────────────────────────────────────────
+
+// ─── useTemplates ───────────────────────────────────────────────────────────
+
+export function useTemplates() {
+  const { userId, ready } = useAuth();
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId) return;
+    const unsub = subscribeToTemplates(userId, (data) => {
+      setTemplates(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId, ready]);
+
+  return { templates, loading, userId };
+}
 
 export function useRecentActivities(days = 7) {
   const { userId, ready } = useAuth();

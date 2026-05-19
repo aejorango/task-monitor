@@ -1,13 +1,16 @@
 // src/components/ProjectsView.jsx — list, create, edit projects + phases.
 
 import { useState } from 'react';
-import { useProjects, useTasks, useAuth } from '../hooks/useTasks';
+import { useProjects, useTasks, useAuth, useTemplates } from '../hooks/useTasks';
 import {
   addProject,
   updateProject,
   archiveProject,
   softDeleteProject,
   uid,
+  addTemplate,
+  softDeleteTemplate,
+  projectAsTemplatePayload,
 } from '../services/firebase';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
@@ -16,7 +19,11 @@ export default function ProjectsView() {
   const { userId } = useAuth();
   const { projects, loading } = useProjects();
   const { tasks } = useTasks();
+  const { templates } = useTemplates();
+  const projectTemplates = templates.filter((t) => t.kind === 'project');
+  const taskTemplates    = templates.filter((t) => t.kind === 'task');
   const [editing, setEditing] = useState(null);          // project or 'new'
+  const [createFromTemplate, setCreateFromTemplate] = useState(null);
 
   const stats = (projectId) => {
     const t = tasks.filter((x) => x.projectId === projectId);
@@ -76,6 +83,45 @@ export default function ProjectsView() {
         </div>
       )}
 
+      <section className="review-section" style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 className="review-h2" style={{ margin: 0 }}>Templates ({templates.length})</h2>
+          <span className="muted small">
+            Reusable starting points. Save tasks as templates from the task editor.
+          </span>
+        </div>
+        {templates.length === 0 ? (
+          <p className="muted small">No templates yet. In the task editor, click <strong>Save as template</strong> to add one.</p>
+        ) : (
+          <div className="template-grid">
+            {projectTemplates.length > 0 && (
+              <>
+                <div className="template-section-label">Project templates</div>
+                {projectTemplates.map((tpl) => (
+                  <TemplateCard
+                    key={tpl.id}
+                    template={tpl}
+                    onUse={() => setCreateFromTemplate(tpl)}
+                  />
+                ))}
+              </>
+            )}
+            {taskTemplates.length > 0 && (
+              <>
+                <div className="template-section-label">Task templates</div>
+                {taskTemplates.map((tpl) => (
+                  <TemplateCard
+                    key={tpl.id}
+                    template={tpl}
+                    note="Use from the Board → Quick-add → + From template"
+                  />
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
       {editing && (
         <ProjectEditor
           project={editing === 'new' ? null : editing}
@@ -83,17 +129,60 @@ export default function ProjectsView() {
           onClose={() => setEditing(null)}
         />
       )}
+
+      {createFromTemplate && (
+        <ProjectEditor
+          project={null}
+          userId={userId}
+          fromTemplate={createFromTemplate}
+          onClose={() => setCreateFromTemplate(null)}
+        />
+      )}
     </>
   );
 }
 
-function ProjectEditor({ project, userId, onClose }) {
+function TemplateCard({ template, onUse, note }) {
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    if (!confirm(`Delete template "${template.name}"?`)) return;
+    softDeleteTemplate(template.id);
+  };
+  return (
+    <div className="template-card" onClick={onUse} style={{ cursor: onUse ? 'pointer' : 'default' }}>
+      <div className="template-card-head">
+        <span className="badge badge-soft-info">{template.kind}</span>
+        <strong>{template.name}</strong>
+        <button className="btn btn-sm btn-ghost link-danger" onClick={handleDelete} style={{ marginLeft: 'auto' }}>✕</button>
+      </div>
+      {template.kind === 'project' && (
+        <p className="muted small">
+          {template.payload?.phases?.length || 0} phases
+        </p>
+      )}
+      {template.kind === 'task' && (
+        <>
+          <p className="template-task-title">{template.payload?.title}</p>
+          {template.payload?.subtasks?.length > 0 && (
+            <span className="muted small">{template.payload.subtasks.length} subtask{template.payload.subtasks.length === 1 ? '' : 's'}</span>
+          )}
+        </>
+      )}
+      {note && <p className="muted small" style={{ marginTop: 4 }}>{note}</p>}
+    </div>
+  );
+}
+
+function ProjectEditor({ project, userId, fromTemplate, onClose }) {
   const isNew = !project;
-  const [name, setName]         = useState(project?.name || '');
-  const [description, setDescription] = useState(project?.description || '');
-  const [color, setColor]       = useState(project?.color || COLORS[0]);
+  const seed = fromTemplate?.payload;
+  const [name, setName]         = useState(project?.name || seed?.name || '');
+  const [description, setDescription] = useState(project?.description || seed?.description || '');
+  const [color, setColor]       = useState(project?.color || seed?.color || COLORS[0]);
   const [phases, setPhases]     = useState(
-    project?.phases?.length ? project.phases : [
+    project?.phases?.length ? project.phases :
+    seed?.phases?.length ? seed.phases.map((p) => ({ id: uid(), name: p.name, order: p.order })) :
+    [
       { id: uid(), name: 'Planning',  order: 0 },
       { id: uid(), name: 'Execution', order: 1 },
       { id: uid(), name: 'Review',    order: 2 },
@@ -138,6 +227,22 @@ function ProjectEditor({ project, userId, onClose }) {
   const archive = async () => {
     await archiveProject(project.id);
     onClose();
+  };
+
+  const saveAsTemplate = async () => {
+    const tplName = prompt('Template name:', name.trim() || 'New project template');
+    if (!tplName) return;
+    try {
+      await addTemplate(userId, {
+        name: tplName.trim(),
+        kind: 'project',
+        payload: projectAsTemplatePayload({ name: name.trim(), description: description.trim(), color, phases }),
+      });
+      alert(`Saved template "${tplName.trim()}".`);
+    } catch (err) {
+      console.error(err);
+      alert('Could not save template. Check console.');
+    }
   };
 
   return (
@@ -196,6 +301,7 @@ function ProjectEditor({ project, userId, onClose }) {
               <button className="btn" onClick={archive} disabled={saving}>Archive</button>
             </>
           )}
+          <button className="btn" onClick={saveAsTemplate} disabled={saving || !name.trim()}>Save as template</button>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving || !name.trim()}>

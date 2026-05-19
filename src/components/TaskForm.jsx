@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { addTask } from '../services/firebase';
-import { useAuth } from '../hooks/useTasks';
+import { useAuth, useTemplates } from '../hooks/useTasks';
 
 export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const { userId, ready } = useAuth();
+  const { templates } = useTemplates();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -15,9 +16,29 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const [planStart, setPlanStart] = useState('');
   const [planEnd, setPlanEnd] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
+  const [tags, setTags] = useState([]);
+  const [subtasks, setSubtasks] = useState([]);
+  const [recurrence, setRecurrence] = useState(null);
 
   const [expanded, setExpanded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
+  const taskTemplates = templates.filter((t) => t.kind === 'task');
+
+  const applyTemplate = (tpl) => {
+    const p = tpl.payload || {};
+    setTitle(p.title || '');
+    setDescription(p.description || '');
+    setPriority(p.priority || 'medium');
+    setRequestedBy(p.requestedBy || '');
+    if (p.projectId) setProjectId(p.projectId);
+    if (p.phaseId) setPhaseId(p.phaseId);
+    setTags(p.tags || []);
+    setSubtasks(p.subtasks || []);
+    setRecurrence(p.recurrence || null);
+    setExpanded(true);
+    setTplOpen(false);
+  };
 
   // When projectFilter narrows to a specific project, prefill projectId
   useEffect(() => {
@@ -40,12 +61,14 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
       await addTask(userId, {
         title: title.trim(),
         description: description.trim(),
-        // Keep legacy `category` so older queries still work.
         category: selectedProject?.name || 'Personal',
         projectId: projectId || null,
         phaseId: phaseId || null,
         priority,
         requestedBy: requestedBy.trim(),
+        tags,
+        subtasks,
+        recurrence,
         plan: {
           startDate: planStart || null,
           endDate:   planEnd   || null,
@@ -56,6 +79,9 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
       setPlanStart('');
       setPlanEnd('');
       setRequestedBy('');
+      setTags([]);
+      setSubtasks([]);
+      setRecurrence(null);
     } catch (err) {
       console.error('Failed to add task:', err);
       alert('Could not save task. Check console.');
@@ -130,10 +156,35 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
         </>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpanded(!expanded)}>
-          {expanded ? '− Hide details' : '+ More details'}
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpanded(!expanded)}>
+            {expanded ? '− Hide details' : '+ More details'}
+          </button>
+          {taskTemplates.length > 0 && (
+            <div className="dropdown">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTplOpen(!tplOpen)}>
+                + From template ▾
+              </button>
+              {tplOpen && (
+                <div className="dropdown-menu" style={{ left: 0, right: 'auto' }}>
+                  {taskTemplates.map((tpl) => (
+                    <button key={tpl.id} type="button" className="dropdown-item" onClick={() => applyTemplate(tpl)}>
+                      <span className="mono small">{tpl.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {(tags.length > 0 || subtasks.length > 0 || recurrence) && (
+          <span className="muted small">
+            {tags.length > 0 && `${tags.length} tag${tags.length === 1 ? '' : 's'}`}
+            {subtasks.length > 0 && ` · ${subtasks.length} subtask${subtasks.length === 1 ? '' : 's'}`}
+            {recurrence && ` · 🔁 ${recurrence.rule}`}
+          </span>
+        )}
       </div>
     </form>
   );

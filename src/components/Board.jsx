@@ -12,6 +12,7 @@ import {
   DragOverlay,
 } from '@dnd-kit/core';
 import { useTasks, useProjects, useActivities } from '../hooks/useTasks';
+import { useTimer } from '../hooks/useTimer';
 import {
   setTaskStatus,
   updateTask,
@@ -320,6 +321,7 @@ function DraggableCard({ task, project, expanded, onToggleExpand, onLog, onEdit,
 
 function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEditActivity, dragging }) {
   const today = todayLocal();
+  const { running, state: timerState, start: startTimer } = useTimer();
   const isOverdue =
     task.status !== 'done' && task.plan?.endDate && task.plan.endDate < today;
   const finishedEarly =
@@ -332,6 +334,8 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
   const subtasksDone = task.subtasks?.filter((s) => s.done).length || 0;
   const tags = task.tags || [];
   const depsCount = task.dependsOn?.length || 0;
+  const isRecurring = !!task.recurrence;
+  const isTrackingThis = running && timerState?.taskId === task.id;
 
   return (
     <div className={`task-card ${dragging ? 'dragging' : ''} ${isOverdue ? 'overdue' : ''}`}>
@@ -361,6 +365,16 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
         {depsCount > 0 && (
           <span className="badge badge-soft-muted" title={`${depsCount} dependenc${depsCount === 1 ? 'y' : 'ies'}`}>
             🔗 {depsCount}
+          </span>
+        )}
+        {isRecurring && (
+          <span className="badge badge-soft-info" title={`Recurring: ${task.recurrence.rule}`}>
+            🔁 {task.recurrence.rule}
+          </span>
+        )}
+        {isTrackingThis && (
+          <span className="badge badge-soft-success" title="Timer running">
+            ⏱ tracking
           </span>
         )}
       </div>
@@ -409,6 +423,14 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
           {task.attachmentCount > 0 && (<><span>·</span><span>📎 {task.attachmentCount}</span></>)}
         </div>
         <div className="task-card-actions">
+          {!isTrackingThis && (
+            <button
+              className="btn btn-sm btn-ghost"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); startTimer(task); }}
+              title="Start time tracking on this task"
+            >▶</button>
+          )}
           <button className="btn btn-sm btn-ghost" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onLog && onLog(); }}>+ Log</button>
           <button className="btn btn-sm btn-ghost" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onToggleExpand && onToggleExpand(); }}>{expanded ? 'Hide' : 'Log'}</button>
           <button className="btn btn-sm btn-ghost" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>Edit</button>

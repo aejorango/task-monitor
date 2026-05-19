@@ -5,6 +5,10 @@ import { initializeApp } from 'firebase/app';
 import {
   getAuth,
   signInAnonymously,
+  signInWithPopup,
+  linkWithPopup,
+  signOut,
+  GoogleAuthProvider,
   onAuthStateChanged,
 } from 'firebase/auth';
 import {
@@ -40,12 +44,56 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-signInAnonymously(auth).catch((err) => {
-  console.error('Anonymous sign-in failed:', err);
+// Bootstrap auth: if no user is signed in after Firebase initializes, kick off
+// anonymous auth. If a real user is signed in (Google), don't touch it.
+let _authBootstrapped = false;
+onAuthStateChanged(auth, (user) => {
+  if (_authBootstrapped) return;
+  _authBootstrapped = true;
+  if (!user) {
+    signInAnonymously(auth).catch((err) => {
+      console.error('Anonymous sign-in failed:', err);
+    });
+  }
 });
 
 export function onAuthChange(callback) {
   return onAuthStateChanged(auth, callback);
+}
+
+// Google sign-in. If the current user is anonymous, link the Google credential
+// onto the anonymous account so existing data carries over. Otherwise just sign in.
+export async function signInWithGoogle() {
+  const provider = new GoogleAuthProvider();
+  const current = auth.currentUser;
+  try {
+    if (current?.isAnonymous) {
+      const result = await linkWithPopup(current, provider);
+      return result.user;
+    }
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (err) {
+    // Common race: link fails because the Google credential is already linked
+    // to another (non-anonymous) account. In that case, sign out anonymous and
+    // sign into the existing account. Data on the anonymous account stays in
+    // Firestore but is no longer accessible; user can export first if needed.
+    if (err?.code === 'auth/credential-already-in-use' || err?.code === 'auth/email-already-in-use') {
+      await signOut(auth);
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
+    }
+    throw err;
+  }
+}
+
+export async function signOutUser() {
+  await signOut(auth);
+  // After sign-out, the onAuthStateChanged listener will fire with null and
+  // _authBootstrapped is still true, so we need to manually kick off anonymous
+  // again so the app stays usable.
+  try { await signInAnonymously(auth); }
+  catch (err) { console.error('Re-anonymous sign-in after sign-out failed:', err); }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -65,6 +113,7 @@ export function uid() {
 const tasksRef = collection(db, 'tasks');
 const activitiesRef = collection(db, 'activities');
 const projectsRef = collection(db, 'projects');
+const templatesRef = collection(db, 'templates');
 
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
@@ -214,6 +263,10 @@ export async function addTask(userId, task) {
     subtasks:  task.subtasks  || [],      // [{ id, text, done }]
     tags:      task.tags      || [],      // [string, ...]
 
+    // v5: recurrence rule. null means non-recurring.
+    recurrence: task.recurrence || null,  // { rule: 'daily'|'weekly'|'monthly', interval, dayOfWeek?, dayOfMonth?, until? }
+    recurrenceParentId: task.recurrenceParentId || null,  // points to the original recurring task
+
     activityCount:    0,
     totalHoursLogged: 0,
     attachmentCount:  0,
@@ -233,7 +286,8 @@ export async function updateTask(taskId, updates) {
   });
 }
 
-// Set status directly (used by drag-and-drop).
+// Set status directly (used by drag-and-drop). If marked done and the task is
+// recurring, also spawn the next instance.
 export async function setTaskStatus(task, nextStatus) {
   if (task.status === nextStatus) return;
   const updates = { status: nextStatus, updatedAt: serverTimestamp() };
@@ -251,7 +305,122 @@ export async function setTaskStatus(task, nextStatus) {
     updates['actual.endDate']   = null;
     updates.progress = 0;
   }
-  return await updateDoc(doc(db, 'tasks', task.id), updates);
+  await updateDoc(doc(db, 'tasks', task.id), updates);
+
+  if (nextStatus === 'done' && task.recurrence) {
+    try { await spawnNextRecurrence(task); }
+    catch (err) { console.error('Failed to spawn next recurrence:', err); }
+  }
+}
+
+// ─── Recurrence ─────────────────────────────────────────────────────────────
+
+const DAY = 24 * 60 * 60 * 1000;
+function parseISO(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function isoOf(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function addDaysISO(s, n) {
+  const d = parseISO(s); if (!d) return null;
+  d.setDate(d.getDate() + n);
+  return isoOf(d);
+}
+function addMonthsISO(s, n) {
+  const d = parseISO(s); if (!d) return null;
+  d.setMonth(d.getMonth() + n);
+  return isoOf(d);
+}
+
+// Given a recurring task, compute the next (start, end) plan dates.
+// Returns { start, end } or null if no further occurrences.
+export function nextRecurrenceDates(task) {
+  const r = task.recurrence;
+  if (!r) return null;
+  const interval = r.interval || 1;
+  const oldStart = task.plan?.startDate;
+  const oldEnd   = task.plan?.endDate;
+
+  if (!oldStart && !oldEnd) {
+    // No anchoring dates → schedule starting today
+    const t = todayLocal();
+    return { start: t, end: t };
+  }
+
+  const shiftDays = r.rule === 'daily'   ? interval :
+                    r.rule === 'weekly'  ? 7 * interval :
+                    null;
+
+  let nextStart, nextEnd;
+  if (r.rule === 'monthly') {
+    nextStart = oldStart ? addMonthsISO(oldStart, interval) : null;
+    nextEnd   = oldEnd   ? addMonthsISO(oldEnd,   interval) : nextStart;
+  } else {
+    nextStart = oldStart ? addDaysISO(oldStart, shiftDays) : null;
+    nextEnd   = oldEnd   ? addDaysISO(oldEnd,   shiftDays) : nextStart;
+  }
+  if (!nextStart && !nextEnd) return null;
+
+  // Respect `until`
+  if (r.until && (nextStart || nextEnd) > r.until) return null;
+
+  return { start: nextStart, end: nextEnd };
+}
+
+async function spawnNextRecurrence(task) {
+  const next = nextRecurrenceDates(task);
+  if (!next) return null;
+
+  // Idempotency: if a sibling task with the same recurrenceParentId already exists
+  // with these dates, don't create a duplicate.
+  const parentId = task.recurrenceParentId || task.id;
+  const existing = await getDocs(query(
+    tasksRef,
+    where('userId', '==', task.userId),
+    where('recurrenceParentId', '==', parentId),
+    where('deleted', '==', false),
+  ));
+  const dup = existing.docs.find((d) => {
+    const t = d.data();
+    return t.plan?.startDate === next.start && t.plan?.endDate === next.end;
+  });
+  if (dup) return null;
+
+  return await addDoc(tasksRef, {
+    userId: task.userId,
+    title: task.title,
+    description: task.description || '',
+    category: task.category || 'Personal',
+    projectId: task.projectId || null,
+    phaseId: task.phaseId || null,
+    priority: task.priority || 'medium',
+    status: 'todo',
+    progress: 0,
+    requestedBy: task.requestedBy || '',
+
+    plan:   { startDate: next.start, endDate: next.end },
+    actual: { startDate: null, endDate: null },
+
+    dependsOn: [],
+    subtasks: (task.subtasks || []).map((s) => ({ ...s, done: false })),  // reset checks
+    tags: task.tags || [],
+
+    recurrence: task.recurrence,
+    recurrenceParentId: parentId,
+
+    activityCount:    0,
+    totalHoursLogged: 0,
+    attachmentCount:  0,
+    lastActivityAt:   null,
+
+    archived:  false,
+    deleted:   false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 // Cycle-only API — kept for back-compat with TaskList's Move button.
@@ -431,3 +600,70 @@ export function subscribeToRecentActivities(userId, sinceDate, callback) {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   });
 }
+
+// ─── TEMPLATES ──────────────────────────────────────────────────────────────
+// A template is a reusable starting point for either a task or a project.
+//   kind: 'task' | 'project'
+//   payload: task or project shape (only the structural fields, no IDs/dates)
+
+export async function addTemplate(userId, template) {
+  return await addDoc(templatesRef, {
+    userId,
+    name:        template.name,
+    description: template.description || '',
+    kind:        template.kind,
+    payload:     template.payload,
+    deleted:     false,
+    createdAt:   serverTimestamp(),
+    updatedAt:   serverTimestamp(),
+  });
+}
+
+export async function updateTemplate(templateId, updates) {
+  return await updateDoc(doc(db, 'templates', templateId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function softDeleteTemplate(templateId) {
+  return await updateTemplate(templateId, { deleted: true });
+}
+
+export function subscribeToTemplates(userId, callback) {
+  const q = query(
+    templatesRef,
+    where('userId', '==', userId),
+    where('deleted', '==', false),
+  );
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(data);
+  });
+}
+
+// Save the structural shape of a task as a template (no dates, IDs, counters).
+export function taskAsTemplatePayload(task) {
+  return {
+    title: task.title,
+    description: task.description || '',
+    priority: task.priority || 'medium',
+    requestedBy: task.requestedBy || '',
+    projectId: task.projectId || null,
+    phaseId: task.phaseId || null,
+    tags: task.tags || [],
+    subtasks: (task.subtasks || []).map((s) => ({ id: uid(), text: s.text, done: false })),
+    recurrence: task.recurrence || null,
+  };
+}
+
+export function projectAsTemplatePayload(project) {
+  return {
+    name: project.name,
+    description: project.description || '',
+    color: project.color,
+    phases: (project.phases || []).map((p) => ({ id: uid(), name: p.name, order: p.order })),
+  };
+}
+

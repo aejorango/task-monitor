@@ -1,20 +1,33 @@
-// src/App.jsx — root shell + view router.
+// src/App.jsx — root shell + view router with code-split non-Board views.
 
+import { lazy, Suspense } from 'react';
 import { useAuth, useProjects } from './hooks/useTasks';
+import { useOverdueScan } from './hooks/useNotifications';
 import AppShell, { useRoute } from './components/AppShell';
-import Board from './components/Board';
-import TableView from './components/TableView';
-import GanttView from './components/GanttView';
-import CalendarView from './components/CalendarView';
-import ReviewView from './components/ReviewView';
-import ProjectsView from './components/ProjectsView';
-import SettingsView from './components/SettingsView';
+import Board from './components/Board';   // eager: most common entry point
+import TimerWidget from './components/TimerWidget';
 import './App.css';
+
+const TableView    = lazy(() => import('./components/TableView'));
+const GanttView    = lazy(() => import('./components/GanttView'));
+const CalendarView = lazy(() => import('./components/CalendarView'));
+const ReviewView   = lazy(() => import('./components/ReviewView'));
+const ProjectsView = lazy(() => import('./components/ProjectsView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+
+function ViewSpinner() {
+  return (
+    <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}>
+      <div className="spinner" /> &nbsp; Loading view…
+    </div>
+  );
+}
 
 export default function App() {
   const { userId, ready } = useAuth();
   const { projects } = useProjects();
   const { route, navigate } = useRoute();
+  useOverdueScan();
 
   return (
     <AppShell
@@ -23,14 +36,17 @@ export default function App() {
       projects={projects}
       route={route}
       navigate={navigate}
+      timerWidget={<TimerWidget />}
     >
-      {route.view === 'board'    && <Board    projectFilter={route.projectFilter} />}
-      {route.view === 'table'    && <TableView projectFilter={route.projectFilter} />}
-      {route.view === 'gantt'    && <GanttView projectFilter={route.projectFilter} />}
-      {route.view === 'calendar' && <CalendarView projectFilter={route.projectFilter} />}
-      {route.view === 'review'   && <ReviewView />}
-      {route.view === 'projects' && <ProjectsView />}
-      {route.view === 'settings' && <SettingsView />}
+      <Suspense fallback={<ViewSpinner />}>
+        {route.view === 'board'    && <Board    projectFilter={route.projectFilter} />}
+        {route.view === 'table'    && <TableView projectFilter={route.projectFilter} />}
+        {route.view === 'gantt'    && <GanttView projectFilter={route.projectFilter} />}
+        {route.view === 'calendar' && <CalendarView projectFilter={route.projectFilter} />}
+        {route.view === 'review'   && <ReviewView />}
+        {route.view === 'projects' && <ProjectsView />}
+        {route.view === 'settings' && <SettingsView />}
+      </Suspense>
     </AppShell>
   );
 }

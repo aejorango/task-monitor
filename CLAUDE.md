@@ -37,8 +37,16 @@ tasks/{taskId}:
   tags: [string, ...]              ← v4: cross-cutting tags
   subtasks: [{ id, text, done }]   ← v4: checklist
   dependsOn: [taskId, ...]         ← v4: dependencies
+  recurrence: { rule, interval, dayOfWeek?, dayOfMonth?, until? }  ← v5
+  recurrenceParentId: taskId       ← v5: points to original recurring task
   activityCount, totalHoursLogged, attachmentCount, lastActivityAt
   archived, deleted, createdAt, updatedAt
+
+templates/{templateId}:                                            ← v5
+  userId, name, description
+  kind: 'task' | 'project'
+  payload: <task or project shape; no IDs, no dates, no counters>
+  deleted, createdAt, updatedAt
 
 activities/{activityId}:
   taskId, userId
@@ -60,13 +68,22 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 
 ## Views (in sidebar order)
 
-1. **Board** — Kanban with drag-drop. Tag-filter chip-strip above the board (auto-populated from existing tags in the current project filter). Cards show: project, status badges, **🔗 deps count**, **tag pills**, **subtask progress bar (e.g. 2/5)**. Optional "Group by phase" mode (single-project filter only).
+1. **Board** — Kanban with drag-drop. Tag-filter chip-strip auto-populated. Cards show: project, status badges, **🔗 deps**, **🔁 recurrence**, **⏱ tracking**, tag pills, subtask progress bar, ▶ Start-timer button. Optional "Group by phase" mode (single-project filter only). **"+ From template"** quick-add button when task templates exist.
 2. **Table** — Flat activity log with bulk actions (delete / set completion / export). Sortable columns.
-3. **Gantt** — Timeline. Plan bars are draggable. **SVG dependency arrows** drawn between predecessor/successor plan bars. **Rows grouped by project, sorted by earliest start within each group.**
-4. **Calendar** — Month grid. Tasks placed on their `plan.endDate`. Click a task to edit. Respects `weekStart` setting.
+3. **Gantt** — Timeline. Plan bars are draggable (resize + move). SVG dependency arrows. Rows grouped by project, sorted by earliest start.
+4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 5. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
-6. **Projects** — Project + phase CRUD.
-7. **Settings** — Per-device prefs in localStorage: theme override (system/light/dark), default project, week start. Plus JSON data export.
+6. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
+7. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. Data export.
+
+## v5 Cross-cutting features
+
+- **Code-splitting** — Board is eager; every other view is `React.lazy()` + Suspense.
+- **Time tracker** — Single-track timer in localStorage. Topbar widget shows live elapsed time. ▶ button on each Board card starts tracking. Stop → modal pre-filled with elapsed hours → log activity in one click.
+- **Recurring tasks** — On marking done, `spawnNextRecurrence` creates the next instance with shifted plan dates (daily/weekly/monthly + interval). Idempotent: skips if the dates already exist for this `recurrenceParentId`. Subtasks reset.
+- **Templates** — Two kinds: `task` and `project`. Save-as-template button in editors. Picker in TaskForm (task) and as click-to-use cards in Projects view (project).
+- **Notifications** — Service worker at `public/sw.js`. Browser notifications fired for newly-overdue tasks (deduped by `localStorage`-tracked "shown" set). Permission requested from Settings. Scan runs on load + every 5 min.
+- **Google sign-in** — `signInWithGoogle()` does `linkWithPopup` if anonymous (keeps existing data), `signInWithPopup` otherwise. `signOutUser()` signs out then re-anonymous-signs-in so the app stays usable. Sidebar footer shows avatar + name when signed in.
 
 ## Conventions
 

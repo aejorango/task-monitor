@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTasks, useAllActivities, useProjects } from '../hooks/useTasks';
+import { auth } from '../services/firebase';
 
 const VIEWS = [
   { id: 'board',    label: 'Board',    icon: '▦' },
@@ -37,7 +38,7 @@ export function useRoute() {
   return { route, navigate };
 }
 
-export default function AppShell({ userId, ready, projects, route, navigate, children }) {
+export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget }) {
   const current = VIEWS.find((v) => v.id === route.view) || VIEWS[0];
 
   return (
@@ -63,16 +64,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         </nav>
 
         <div className="sidebar-footer">
-          {ready && userId && (
-            <>
-              <span>Session</span>
-              <span className="session-pill">{userId.slice(0, 6)}</span>
-            </>
-          )}
-          {ready && !userId && (
-            <span className="session-pill warn">auth offline</span>
-          )}
-          {!ready && <span className="muted-2">signing in…</span>}
+          <SidebarUserBlock userId={userId} ready={ready} navigate={navigate} />
         </div>
       </aside>
 
@@ -84,11 +76,58 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           onChange={(projectFilter) => navigate({ projectFilter })}
         />
         <div className="topbar-spacer" />
+        {timerWidget}
         <GlobalSearch projects={projects} navigate={navigate} />
       </header>
 
       <main className="content">{children}</main>
     </div>
+  );
+}
+
+// ─── Sidebar user block ───────────────────────────────────
+
+function SidebarUserBlock({ userId, ready, navigate }) {
+  const [user, setUser] = useState(auth.currentUser);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const u = auth.currentUser;
+      if (u !== user) setUser(u);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  if (!ready) return <span className="muted-2">signing in…</span>;
+  if (ready && !userId) return <span className="session-pill warn">auth offline</span>;
+
+  const isAnonymous = user?.isAnonymous;
+  if (isAnonymous) {
+    return (
+      <button
+        className="sidebar-user-anon"
+        onClick={() => navigate({ view: 'settings' })}
+        title="Anonymous session — click to sign in with Google"
+      >
+        <span>Session</span>
+        <span className="session-pill">{userId.slice(0, 6)}</span>
+      </button>
+    );
+  }
+  return (
+    <button
+      className="sidebar-user-block"
+      onClick={() => navigate({ view: 'settings' })}
+      title={user?.email || user?.displayName}
+    >
+      {user?.photoURL
+        ? <img src={user.photoURL} alt="" className="sidebar-user-avatar" />
+        : <div className="sidebar-user-avatar fallback">{(user?.displayName || user?.email || '?')[0].toUpperCase()}</div>}
+      <div className="sidebar-user-text">
+        <div className="sidebar-user-name">{user?.displayName || user?.email}</div>
+        <div className="sidebar-user-sub">Signed in</div>
+      </div>
+    </button>
   );
 }
 

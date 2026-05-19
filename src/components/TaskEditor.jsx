@@ -1,11 +1,12 @@
 // src/components/TaskEditor.jsx — edit modal with subtasks, tags, dependencies.
 
 import { useState, useMemo } from 'react';
-import { updateTask, softDeleteTask, uid } from '../services/firebase';
-import { useTasks } from '../hooks/useTasks';
+import { updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload } from '../services/firebase';
+import { useTasks, useAuth } from '../hooks/useTasks';
 
 export default function TaskEditor({ task, projects, onClose }) {
   const { tasks: allTasks } = useTasks();
+  const { userId } = useAuth();
 
   const [title, setTitle]             = useState(task.title || '');
   const [description, setDescription] = useState(task.description || '');
@@ -20,6 +21,8 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [tags, setTags]               = useState(task.tags || []);
   const [subtasks, setSubtasks]       = useState(task.subtasks || []);
   const [dependsOn, setDependsOn]     = useState(task.dependsOn || []);
+
+  const [recurrence, setRecurrence]   = useState(task.recurrence || null);
 
   const [tagInput, setTagInput]       = useState('');
   const [subtaskInput, setSubtaskInput] = useState('');
@@ -92,6 +95,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         tags,
         subtasks,
         dependsOn,
+        recurrence,
         'plan.startDate':   planStart   || null,
         'plan.endDate':     planEnd     || null,
         'actual.startDate': actualStart || null,
@@ -111,6 +115,29 @@ export default function TaskEditor({ task, projects, onClose }) {
     if (!confirm('Delete this task? This is a soft delete and can be restored.')) return;
     await softDeleteTask(task.id);
     onClose();
+  };
+
+  const saveAsTemplate = async () => {
+    const name = prompt('Template name:', title.trim() || 'New template');
+    if (!name) return;
+    try {
+      const payload = taskAsTemplatePayload({
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        requestedBy: requestedBy.trim(),
+        projectId: projectId || null,
+        phaseId: phaseId || null,
+        tags,
+        subtasks,
+        recurrence,
+      });
+      await addTemplate(userId, { name: name.trim(), kind: 'task', payload });
+      alert(`Saved template "${name.trim()}".`);
+    } catch (err) {
+      console.error(err);
+      alert('Could not save template. Check console.');
+    }
   };
 
   return (
@@ -220,6 +247,8 @@ export default function TaskEditor({ task, projects, onClose }) {
                 </div>
               )}
             </div>
+
+            <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
           </>
         )}
 
@@ -296,6 +325,7 @@ export default function TaskEditor({ task, projects, onClose }) {
 
         <div className="modal-actions">
           <button className="btn btn-danger" onClick={remove} disabled={saving}>Delete</button>
+          <button className="btn" onClick={saveAsTemplate} disabled={saving || !title.trim()}>Save as template</button>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving || !title.trim()}>
@@ -303,6 +333,89 @@ export default function TaskEditor({ task, projects, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RecurrenceEditor({ value, onChange }) {
+  const enabled = !!value;
+  const rule    = value?.rule || 'weekly';
+  const interval = value?.interval || 1;
+  const dayOfWeek = value?.dayOfWeek ?? 0;
+  const dayOfMonth = value?.dayOfMonth ?? 1;
+  const until = value?.until || '';
+
+  const toggle = (on) => {
+    if (!on) { onChange(null); return; }
+    onChange({ rule: 'weekly', interval: 1, dayOfWeek: new Date().getDay(), until: '' });
+  };
+  const patch = (delta) => onChange({ rule, interval, dayOfWeek, dayOfMonth, until, ...delta });
+
+  return (
+    <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
+      <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" checked={enabled} onChange={(e) => toggle(e.target.checked)} style={{ accentColor: 'var(--c-accent)' }} />
+        <span>Recurring task</span>
+      </label>
+      {enabled && (
+        <div className="recurrence-grid">
+          <select className="select select-sm" value={rule} onChange={(e) => patch({ rule: e.target.value })}>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <span className="muted small">every</span>
+          <input
+            type="number" min="1" max="99"
+            className="input input-sm"
+            value={interval}
+            onChange={(e) => patch({ interval: Math.max(1, Number(e.target.value) || 1) })}
+            style={{ width: 60 }}
+          />
+          <span className="muted small">
+            {rule === 'daily' ? 'day(s)' : rule === 'weekly' ? 'week(s)' : 'month(s)'}
+          </span>
+          {rule === 'weekly' && (
+            <>
+              <span className="muted small" style={{ marginLeft: 8 }}>on</span>
+              <select className="select select-sm" value={dayOfWeek} onChange={(e) => patch({ dayOfWeek: Number(e.target.value) })}>
+                <option value={0}>Sun</option>
+                <option value={1}>Mon</option>
+                <option value={2}>Tue</option>
+                <option value={3}>Wed</option>
+                <option value={4}>Thu</option>
+                <option value={5}>Fri</option>
+                <option value={6}>Sat</option>
+              </select>
+            </>
+          )}
+          {rule === 'monthly' && (
+            <>
+              <span className="muted small" style={{ marginLeft: 8 }}>on day</span>
+              <input
+                type="number" min="1" max="31"
+                className="input input-sm"
+                value={dayOfMonth}
+                onChange={(e) => patch({ dayOfMonth: Math.max(1, Math.min(31, Number(e.target.value) || 1)) })}
+                style={{ width: 60 }}
+              />
+            </>
+          )}
+          <span className="muted small" style={{ marginLeft: 8 }}>until</span>
+          <input
+            type="date"
+            className="input input-sm"
+            value={until}
+            onChange={(e) => patch({ until: e.target.value || null })}
+            style={{ width: 140 }}
+          />
+        </div>
+      )}
+      {enabled && (
+        <p className="muted small" style={{ marginTop: 6 }}>
+          The next instance is auto-created when this task is marked done.
+        </p>
+      )}
     </div>
   );
 }

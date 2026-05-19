@@ -32,6 +32,12 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource);
     }
 
+    match /templates/{templateId} {
+      allow read:   if isOwner(resource);
+      allow create: if isCreatingOwn();
+      allow update, delete: if isOwner(resource);
+    }
+
     match /categories/{categoryId} {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();
