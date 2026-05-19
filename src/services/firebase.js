@@ -62,36 +62,77 @@ export function onAuthChange(callback) {
 }
 
 // Google sign-in. If the current user is anonymous, link the Google credential
-// onto the anonymous account so existing data carries over. Otherwise just sign in.
+// onto the anonymous account so existing data carries over.
+// Returns { ok: true, user, mode } on success.
+// Returns { ok: false, code, message } for known errors so callers can render
+// actionable UI (e.g. "this account is already linked — switch to it?").
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   const current = auth.currentUser;
   try {
     if (current?.isAnonymous) {
       const result = await linkWithPopup(current, provider);
-      return result.user;
+      return { ok: true, user: result.user, mode: 'linked' };
     }
     const result = await signInWithPopup(auth, provider);
-    return result.user;
+    return { ok: true, user: result.user, mode: 'signed-in' };
   } catch (err) {
-    // Common race: link fails because the Google credential is already linked
-    // to another (non-anonymous) account. In that case, sign out anonymous and
-    // sign into the existing account. Data on the anonymous account stays in
-    // Firestore but is no longer accessible; user can export first if needed.
-    if (err?.code === 'auth/credential-already-in-use' || err?.code === 'auth/email-already-in-use') {
-      await signOut(auth);
-      const result = await signInWithPopup(auth, provider);
-      return result.user;
+    // 'credential-already-in-use' / 'email-already-in-use': the Google account
+    // is already attached to a different Firebase user (typically the same
+    // user signing in from a different device). Surface this to the caller —
+    // calling signInWithPopup again here would be blocked because the user
+    // gesture (the click) has already been consumed by the first popup.
+    if (err?.code === 'auth/credential-already-in-use' ||
+        err?.code === 'auth/email-already-in-use') {
+      return {
+        ok: false,
+        code: 'account-already-exists',
+        message: 'This Google account is already registered elsewhere. Click "Switch to this account" to sign out anonymous and switch (anonymous data on this device will no longer be visible — export it first if you need it).',
+      };
     }
-    throw err;
+    if (err?.code === 'auth/popup-closed-by-user') {
+      return { ok: false, code: 'popup-closed', message: 'Sign-in popup was closed.' };
+    }
+    if (err?.code === 'auth/popup-blocked') {
+      return { ok: false, code: 'popup-blocked', message: 'Your browser blocked the popup. Allow popups for this site and try again.' };
+    }
+    if (err?.code === 'auth/unauthorized-domain') {
+      return { ok: false, code: 'unauthorized-domain', message: 'This domain isn’t authorized for sign-in. Add it in Firebase → Auth → Settings → Authorized domains.' };
+    }
+    if (err?.code === 'auth/cancelled-popup-request') {
+      return { ok: false, code: 'cancelled', message: 'Another sign-in popup is already open. Close it and try again.' };
+    }
+    console.error('signInWithGoogle failed:', err);
+    return {
+      ok: false,
+      code: err?.code || 'unknown',
+      message: err?.message || 'Unknown error during sign-in.',
+    };
+  }
+}
+
+// Used after signInWithGoogle returned account-already-exists. Must be invoked
+// from a fresh user gesture (e.g. a button click). Signs out anonymous, then
+// opens a popup to sign in to the existing account.
+export async function switchToGoogle() {
+  await signOut(auth);
+  const provider = new GoogleAuthProvider();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return { ok: true, user: result.user, mode: 'switched' };
+  } catch (err) {
+    // Sign out already happened — if the popup is blocked or closed here, the
+    // app will end up in a signed-out state. The auth bootstrap below will
+    // re-create an anonymous user shortly via onAuthStateChanged.
+    return { ok: false, code: err?.code || 'unknown', message: err?.message || 'Sign-in failed.' };
   }
 }
 
 export async function signOutUser() {
   await signOut(auth);
   // After sign-out, the onAuthStateChanged listener will fire with null and
-  // _authBootstrapped is still true, so we need to manually kick off anonymous
-  // again so the app stays usable.
+  // _authBootstrapped is still true, so manually kick off anonymous again so
+  // the app stays usable.
   try { await signInAnonymously(auth); }
   catch (err) { console.error('Re-anonymous sign-in after sign-out failed:', err); }
 }

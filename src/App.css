@@ -1782,6 +1782,26 @@ a:hover { text-decoration: underline; }
 .account-info { display: flex; flex-direction: column; }
 .account-name { font-weight: 500; font-size: 14px; }
 
+.auth-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--c-danger-bg);
+  border-left: 3px solid var(--c-danger);
+  border-radius: var(--r-sm);
+}
+.auth-error-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.auth-error-msg {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--c-text);
+}
+
 /* ─── Sidebar user block ──────────────────────────────────── */
 .sidebar-user-block,
 .sidebar-user-anon {

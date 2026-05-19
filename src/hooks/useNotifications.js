@@ -23,11 +23,18 @@ export async function requestNotificationPermission() {
 export function registerServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
   // import.meta.env.BASE_URL = '/task-monitor/' in prod, '/' in dev.
-  const swUrl = `${import.meta.env.BASE_URL}sw.js`;
-  return navigator.serviceWorker.register(swUrl).catch((err) => {
-    console.warn('Service worker registration failed:', err);
-    return null;
-  });
+  const swUrl   = `${import.meta.env.BASE_URL}sw.js`;
+  const swScope = import.meta.env.BASE_URL;
+  return navigator.serviceWorker
+    .register(swUrl, { scope: swScope })
+    .then((reg) => {
+      console.info('[sw] registered at scope:', reg.scope);
+      return reg;
+    })
+    .catch((err) => {
+      console.warn('[sw] registration failed:', err);
+      return null;
+    });
 }
 
 function loadShown() {

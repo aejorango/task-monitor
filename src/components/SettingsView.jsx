@@ -6,6 +6,7 @@ import { useProjects, useTasks, useAllActivities, useAuth } from '../hooks/useTa
 import {
   auth,
   signInWithGoogle,
+  switchToGoogle,
   signOutUser,
 } from '../services/firebase';
 import {
@@ -20,6 +21,8 @@ export default function SettingsView() {
   const { activities } = useAllActivities();
   const { userId } = useAuth();
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
+  const [signInError, setSignInError] = useState(null);  // { code, message } or null
+  const [signingIn, setSigningIn] = useState(false);
   const currentUser = auth.currentUser;
   const isAnonymous = !!currentUser?.isAnonymous;
   const displayName = currentUser?.displayName || currentUser?.email || (isAnonymous ? 'Anonymous' : 'Signed out');
@@ -32,31 +35,81 @@ export default function SettingsView() {
   }, []);
 
   const handleSignIn = async () => {
-    try { await signInWithGoogle(); }
-    catch (err) {
-      console.error(err);
-      alert(`Sign-in failed: ${err.message || err.code || err}`);
+    setSignInError(null);
+    setSigningIn(true);
+    const result = await signInWithGoogle();
+    setSigningIn(false);
+    if (!result.ok) {
+      // Don't alert for the most common, harmless case (user closed popup)
+      if (result.code !== 'popup-closed') {
+        setSignInError({ code: result.code, message: result.message });
+      }
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    setSignInError(null);
+    setSigningIn(true);
+    const result = await switchToGoogle();
+    setSigningIn(false);
+    if (!result.ok) {
+      setSignInError({ code: result.code, message: result.message || 'Sign-in failed.' });
     }
   };
 
   const handleSignOut = async () => {
     if (!confirm('Sign out? You’ll be put back in anonymous mode (new device session).')) return;
+    setSignInError(null);
     await signOutUser();
   };
 
   const handleTestNotification = async () => {
     const p = await requestNotificationPermission();
     setNotifPerm(p);
-    if (p === 'granted') {
-      try {
-        const reg = await navigator.serviceWorker?.getRegistration?.();
-        const title = '✓ Notifications enabled';
-        const body  = 'You’ll be pinged when a task becomes overdue.';
-        if (reg && reg.showNotification) reg.showNotification(title, { body });
-        else if (typeof Notification !== 'undefined') new Notification(title, { body });
-      } catch (e) { console.error(e); }
-    } else if (p === 'denied') {
-      alert('Notifications were blocked. Re-enable them in your browser’s site settings.');
+
+    if (p === 'denied') {
+      alert('Notifications were blocked. Re-enable them in your browser’s site settings (click the lock icon next to the URL).');
+      return;
+    }
+    if (p !== 'granted') {
+      alert('Notification permission was not granted.');
+      return;
+    }
+
+    try {
+      // Wait for the service worker to be active. .ready awaits activation;
+      // .getRegistration() can return undefined if called too early.
+      let reg = null;
+      if ('serviceWorker' in navigator) {
+        try {
+          reg = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, rej) => setTimeout(() => rej(new Error('SW timeout')), 3000)),
+          ]);
+        } catch (e) {
+          console.warn('Service worker not ready:', e.message);
+        }
+      }
+
+      const title   = '✓ Task Monitor notifications enabled';
+      const options = {
+        body: 'You’ll be pinged when a task becomes overdue.',
+        tag: 'test-notification',
+        icon: `${import.meta.env.BASE_URL}favicon.svg`,
+        badge: `${import.meta.env.BASE_URL}favicon.svg`,
+      };
+
+      if (reg && typeof reg.showNotification === 'function') {
+        await reg.showNotification(title, options);
+      } else if (typeof Notification !== 'undefined') {
+        // Fallback to non-SW notification (only works while page is open)
+        new Notification(title, options);
+      } else {
+        throw new Error('Notifications API is not available in this browser.');
+      }
+    } catch (e) {
+      console.error('Could not show notification:', e);
+      alert(`Could not show notification: ${e.message || e}\n\nThis can happen if the browser is blocking notifications at the OS level (macOS: System Settings → Notifications → Chrome).`);
     }
   };
 
@@ -89,8 +142,8 @@ export default function SettingsView() {
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {isAnonymous ? (
-              <button className="btn btn-primary" onClick={handleSignIn}>
-                Sign in with Google
+              <button className="btn btn-primary" onClick={handleSignIn} disabled={signingIn}>
+                {signingIn ? 'Signing in…' : 'Sign in with Google'}
               </button>
             ) : (
               <button className="btn" onClick={handleSignOut}>Sign out</button>
@@ -102,6 +155,37 @@ export default function SettingsView() {
             ? 'Signing in with Google links this anonymous session to your Google account, so the same data appears on all your devices.'
             : 'Your data syncs across any device where you sign in with this Google account.'}
         </p>
+
+        {signInError && (
+          <div className="auth-error">
+            <div className="auth-error-head">
+              <span className="badge badge-soft-danger">Sign-in error</span>
+              <span className="mono small">{signInError.code}</span>
+              <button
+                type="button"
+                className="link-danger"
+                onClick={() => setSignInError(null)}
+                style={{ marginLeft: 'auto' }}
+              >✕</button>
+            </div>
+            <p className="auth-error-msg">{signInError.message}</p>
+            {signInError.code === 'account-already-exists' && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button className="btn btn-primary" onClick={handleSwitchAccount} disabled={signingIn}>
+                  {signingIn ? 'Switching…' : 'Switch to this account'}
+                </button>
+                <span className="muted small" style={{ alignSelf: 'center' }}>
+                  Tip: export your anonymous data first (button below) if you want a backup.
+                </span>
+              </div>
+            )}
+            {signInError.code === 'popup-blocked' && (
+              <p className="muted small" style={{ marginTop: 6 }}>
+                In Chrome: click the popup-blocked icon in the URL bar → Always allow popups from this site.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="review-section">
