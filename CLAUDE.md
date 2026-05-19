@@ -57,10 +57,11 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 
 ## Views
 
-1. **Board** — Kanban (To Do / In Progress / Done) with drag-and-drop between columns. Cards have inline log/edit actions and expand to show activity history.
-2. **Table** — Flat activity log. Columns: Project | Phase | Task | Activity details | Date | Completion | Output link | Bottlenecks | Requested by | Hours. Sortable. CSV export.
-3. **Gantt** — CSS-grid timeline with plan bars (faded) overlaid by actual bars (solid). Today line. Day/Week/Month zoom. Color-coded by project.
-4. **Projects** — Create, edit, archive, delete projects. Manage phase list per project.
+1. **Board** — Kanban (To Do / In Progress / Done) with drag-and-drop between columns. Cards have inline log/edit actions and expand to show activity history. **Optional "Group by phase" mode** subdivides each status column into phase swim-lanes (only available when a single project is selected).
+2. **Table** — Flat activity log. Columns: Project | Phase | Task | Activity details | Date | Completion | Output link | Bottlenecks | Requested by | Hours. Sortable. CSV export. **Bulk actions:** row selection + bulk delete / set completion / export selected.
+3. **Gantt** — CSS-grid timeline with plan bars (faded) overlaid by actual bars (solid). Today line. Day/Week/Month zoom. Color-coded by project. **Plan bars are draggable**: edges resize, middle moves the whole bar. Snaps to whole days, writes back via `updateTask`.
+4. **Review** — Period-scoped summary (7/14/30/90 days). KPI cards (hours logged, tasks completed/created, overdue, activities, completed/blocked entries). Horizontal bar chart of hours-by-project. Daily-hours strip with today highlighted. Lists: overdue tasks, completed in period, bottlenecks.
+5. **Projects** — Create, edit, archive, delete projects. Manage phase list per project.
 
 ## Conventions
 
@@ -77,12 +78,14 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 src/
 ├── components/
 │   ├── AppShell.jsx          ← sidebar + topbar + view router (useRoute)
-│   ├── Board.jsx             ← kanban with drag-and-drop
+│   ├── Board.jsx             ← kanban with drag-and-drop + swim-lanes
 │   ├── TaskForm.jsx          ← quick-add (top of Board)
 │   ├── TaskEditor.jsx        ← modal: edit any task field
-│   ├── ActivityLogger.jsx    ← modal: log activity (PM fields)
-│   ├── TableView.jsx         ← activity table + CSV export
-│   ├── GanttView.jsx         ← timeline (CSS grid + absolute bars)
+│   ├── ActivityLogger.jsx    ← modal: log new activity (PM fields)
+│   ├── ActivityEditor.jsx    ← modal: edit existing activity (atomic counter sync)
+│   ├── TableView.jsx         ← activity table + bulk actions + CSV export
+│   ├── GanttView.jsx         ← timeline with draggable plan bars
+│   ├── ReviewView.jsx        ← KPIs, charts, lists
 │   └── ProjectsView.jsx      ← project & phase CRUD
 ├── hooks/
 │   └── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
@@ -115,7 +118,9 @@ src/
 ## Key Firebase Functions
 
 - `addTask`, `updateTask`, `setTaskStatus(task, nextStatus)`, `moveTaskStatus(task)` (cycle), `archiveTask`, `softDeleteTask`, `subscribeToTasks`
-- `addActivity`, `updateActivity`, `deleteActivity`, `subscribeToActivities`, `subscribeToAllActivities`, `subscribeToRecentActivities`
+- `addActivity`, `editActivity(oldActivity, updates)` ← **syncs task counters atomically**, `updateActivity` (raw, no counter sync), `deleteActivity`
+- `bulkDeleteActivities(activities)`, `bulkUpdateActivityCompletion(activities, status)` ← used by Table bulk bar
+- `subscribeToActivities`, `subscribeToAllActivities`, `subscribeToRecentActivities`
 - `addProject`, `updateProject`, `archiveProject`, `softDeleteProject`, `subscribeToProjects`
 - `migrateLegacyCategories(userId)` — idempotent
 - `todayLocal()` — YYYY-MM-DD in local timezone
@@ -147,3 +152,6 @@ npm run deploy       # builds + pushes to gh-pages branch
 - ❌ Adding new collections without adding security rules
 - ❌ Hardcoding colors instead of using CSS variables — breaks dark mode
 - ❌ Drag-and-drop: if a card click triggers a drag, wrap inner buttons with `onPointerDown={(e) => e.stopPropagation()}` and `onClick={(e) => e.stopPropagation()}` so dnd-kit doesn't capture the gesture
+- ❌ Editing an activity's hoursSpent or attachments with `updateActivity` directly — that won't sync the parent task's denormalized counters. Use `editActivity(oldActivity, updates)` instead.
+- ❌ Swim-lanes when projectFilter is "all" — phase IDs differ across projects so the toggle is hidden in that case. The page header chip only shows when a single project is selected.
+- ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.

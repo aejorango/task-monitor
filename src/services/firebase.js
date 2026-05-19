@@ -311,6 +311,33 @@ export async function updateActivity(activityId, updates) {
   return await updateDoc(doc(db, 'activities', activityId), updates);
 }
 
+// Atomic edit: writes the activity update AND syncs the task's denormalized
+// counters when hours or attachment count changed. Pass the OLD activity
+// object so we can compute deltas.
+export async function editActivity(oldActivity, updates) {
+  const batch = writeBatch(db);
+
+  batch.update(doc(db, 'activities', oldActivity.id), updates);
+
+  const newHours = updates.hoursSpent !== undefined ? Number(updates.hoursSpent) || 0 : (oldActivity.hoursSpent || 0);
+  const oldHours = oldActivity.hoursSpent || 0;
+  const hoursDelta = newHours - oldHours;
+
+  const newAttachCount = updates.attachments !== undefined ? updates.attachments.length : (oldActivity.attachments?.length || 0);
+  const oldAttachCount = oldActivity.attachments?.length || 0;
+  const attachDelta = newAttachCount - oldAttachCount;
+
+  if (hoursDelta !== 0 || attachDelta !== 0) {
+    batch.update(doc(db, 'tasks', oldActivity.taskId), {
+      totalHoursLogged: increment(hoursDelta),
+      attachmentCount:  increment(attachDelta),
+      updatedAt:        serverTimestamp(),
+    });
+  }
+
+  return await batch.commit();
+}
+
 export async function deleteActivity(activity) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'activities', activity.id));
@@ -319,6 +346,37 @@ export async function deleteActivity(activity) {
     totalHoursLogged: increment(-(activity.hoursSpent || 0)),
     attachmentCount:  increment(-(activity.attachments?.length || 0)),
     updatedAt:        serverTimestamp(),
+  });
+  return await batch.commit();
+}
+
+// Bulk delete — used by Table bulk actions. Groups counter updates per-task.
+export async function bulkDeleteActivities(activities) {
+  const batch = writeBatch(db);
+  const taskDeltas = {};
+  activities.forEach((a) => {
+    batch.delete(doc(db, 'activities', a.id));
+    if (!taskDeltas[a.taskId]) taskDeltas[a.taskId] = { count: 0, hours: 0, attach: 0 };
+    taskDeltas[a.taskId].count += 1;
+    taskDeltas[a.taskId].hours += a.hoursSpent || 0;
+    taskDeltas[a.taskId].attach += a.attachments?.length || 0;
+  });
+  Object.entries(taskDeltas).forEach(([taskId, d]) => {
+    batch.update(doc(db, 'tasks', taskId), {
+      activityCount:    increment(-d.count),
+      totalHoursLogged: increment(-d.hours),
+      attachmentCount:  increment(-d.attach),
+      updatedAt:        serverTimestamp(),
+    });
+  });
+  return await batch.commit();
+}
+
+// Bulk update completionStatus on multiple activities (no counter changes).
+export async function bulkUpdateActivityCompletion(activities, completionStatus) {
+  const batch = writeBatch(db);
+  activities.forEach((a) => {
+    batch.update(doc(db, 'activities', a.id), { completionStatus });
   });
   return await batch.commit();
 }

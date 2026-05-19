@@ -1,4 +1,4 @@
-// src/components/Board.jsx — Kanban with drag-and-drop between columns.
+// src/components/Board.jsx — Kanban with drag-and-drop and optional phase swim-lanes.
 
 import { useState } from 'react';
 import {
@@ -14,14 +14,14 @@ import {
 import { useTasks, useProjects, useActivities } from '../hooks/useTasks';
 import {
   setTaskStatus,
-  softDeleteTask,
-  addActivity,
+  updateTask,
   deleteActivity,
   todayLocal,
 } from '../services/firebase';
 import TaskForm from './TaskForm';
 import TaskEditor from './TaskEditor';
 import ActivityLogger from './ActivityLogger';
+import ActivityEditor from './ActivityEditor';
 
 const COLUMNS = [
   { id: 'todo',  label: 'To Do' },
@@ -29,13 +29,17 @@ const COLUMNS = [
   { id: 'done',  label: 'Done' },
 ];
 
+const NO_PHASE_ID = '__nophase__';
+
 export default function Board({ projectFilter }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
-  const [editingTask, setEditingTask] = useState(null);
+  const [editingTask, setEditingTask]   = useState(null);
+  const [editingActivity, setEditingActivity] = useState(null);
   const [loggingTask, setLoggingTask]   = useState(null);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
-  const [activeDrag, setActiveDrag] = useState(null);
+  const [activeDrag, setActiveDrag]     = useState(null);
+  const [groupByPhase, setGroupByPhase] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -49,21 +53,40 @@ export default function Board({ projectFilter }) {
   if (loading) return <p className="muted">Loading tasks…</p>;
   if (!userId) return <p className="muted">Signing you in…</p>;
 
+  const selectedProject = projectFilter !== 'all' ? projectById[projectFilter] : null;
+  const phases = selectedProject?.phases || [];
+  const canGroupByPhase = !!selectedProject && phases.length > 0;
+  const showSwimLanes = groupByPhase && canGroupByPhase;
+
   const handleDragStart = (e) => {
     const task = filtered.find((t) => t.id === e.active.id);
     setActiveDrag(task);
   };
 
-  const handleDragEnd = (e) => {
+  const handleDragEnd = async (e) => {
     setActiveDrag(null);
     const taskId = e.active.id;
     const overId = e.over?.id;
     if (!overId) return;
     const task = filtered.find((t) => t.id === taskId);
     if (!task) return;
-    const targetStatus = COLUMNS.find((c) => c.id === overId)?.id;
-    if (targetStatus && targetStatus !== task.status) {
-      setTaskStatus(task, targetStatus);
+
+    // Drop target ids:
+    //  - "todo" / "doing" / "done"               (no swim lanes)
+    //  - "todo::<phaseId>" / etc.                (swim lanes; phaseId or NO_PHASE_ID)
+    const [targetStatus, targetPhase] = String(overId).split('::');
+    if (!COLUMNS.find((c) => c.id === targetStatus)) return;
+
+    const statusChanged = targetStatus !== task.status;
+    const phaseChanged  = targetPhase !== undefined &&
+      ((targetPhase === NO_PHASE_ID && task.phaseId) ||
+       (targetPhase !== NO_PHASE_ID && task.phaseId !== targetPhase));
+
+    if (statusChanged) {
+      await setTaskStatus(task, targetStatus);
+    }
+    if (phaseChanged) {
+      await updateTask(task.id, { phaseId: targetPhase === NO_PHASE_ID ? null : targetPhase });
     }
   };
 
@@ -74,37 +97,66 @@ export default function Board({ projectFilter }) {
           <h1 className="page-title">Board</h1>
           <p className="page-subtitle">
             Drag cards across columns to update status.
-            {projectFilter !== 'all' && projectById[projectFilter] && (
+            {showSwimLanes && <> Drop into a phase row to also set the phase.</>}
+            {projectFilter !== 'all' && projectById[projectFilter] && !showSwimLanes && (
               <> Filtered to <strong>{projectById[projectFilter].name}</strong>.</>
             )}
           </p>
+        </div>
+        <div className="page-actions">
+          {canGroupByPhase && (
+            <button
+              className={`chip ${groupByPhase ? 'active' : ''}`}
+              onClick={() => setGroupByPhase(!groupByPhase)}
+              title="Show phase swim-lanes within each status column"
+            >
+              {groupByPhase ? '✓ ' : ''}Group by phase
+            </button>
+          )}
         </div>
       </div>
 
       <TaskForm projects={projects} projectFilter={projectFilter} />
 
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="board">
           {COLUMNS.map((col) => (
-            <Column key={col.id} column={col}>
-              {filtered
-                .filter((t) => t.status === col.id)
-                .map((task) => (
-                  <DraggableCard
-                    key={task.id}
-                    task={task}
-                    project={projectById[task.projectId]}
-                    expanded={expandedTaskId === task.id}
-                    onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
-                    onLog={() => setLoggingTask(task)}
-                    onEdit={() => setEditingTask(task)}
-                  />
-                ))}
-            </Column>
+            <ColumnShell
+              key={col.id}
+              column={col}
+              count={filtered.filter((t) => t.status === col.id).length}
+            >
+              {showSwimLanes ? (
+                <SwimLanes
+                  column={col}
+                  phases={phases}
+                  filtered={filtered}
+                  projectById={projectById}
+                  expandedTaskId={expandedTaskId}
+                  setExpandedTaskId={setExpandedTaskId}
+                  setLoggingTask={setLoggingTask}
+                  setEditingTask={setEditingTask}
+                  setEditingActivity={setEditingActivity}
+                />
+              ) : (
+                <DroppableArea id={col.id}>
+                  {filtered
+                    .filter((t) => t.status === col.id)
+                    .map((task) => (
+                      <DraggableCard
+                        key={task.id}
+                        task={task}
+                        project={projectById[task.projectId]}
+                        expanded={expandedTaskId === task.id}
+                        onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                        onLog={() => setLoggingTask(task)}
+                        onEdit={() => setEditingTask(task)}
+                        onEditActivity={(a) => setEditingActivity(a)}
+                      />
+                    ))}
+                </DroppableArea>
+              )}
+            </ColumnShell>
           ))}
         </div>
 
@@ -114,35 +166,39 @@ export default function Board({ projectFilter }) {
       </DndContext>
 
       {loggingTask && (
-        <ActivityLogger
-          task={loggingTask}
-          userId={userId}
-          onClose={() => setLoggingTask(null)}
-        />
+        <ActivityLogger task={loggingTask} userId={userId} onClose={() => setLoggingTask(null)} />
       )}
-
       {editingTask && (
-        <TaskEditor
-          task={editingTask}
-          projects={projects}
-          onClose={() => setEditingTask(null)}
-        />
+        <TaskEditor task={editingTask} projects={projects} onClose={() => setEditingTask(null)} />
+      )}
+      {editingActivity && (
+        <ActivityEditor activity={editingActivity} onClose={() => setEditingActivity(null)} />
       )}
     </>
   );
 }
 
-// ─── Column (droppable) ───────────────────────────────────────────────────
+// ─── Column shell (header only) ───────────────────────────────────────────
 
-function Column({ column, children }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
-  const count = Array.isArray(children) ? children.length : (children ? 1 : 0);
+function ColumnShell({ column, count, children }) {
   return (
-    <div ref={setNodeRef} className={`column ${isOver ? 'drag-over' : ''}`}>
+    <div className="column">
       <div className="column-head">
         <span>{column.label}</span>
         <span className="count">{count}</span>
       </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Droppable area (no phase grouping) ───────────────────────────────────
+
+function DroppableArea({ id, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  const count = Array.isArray(children) ? children.filter(Boolean).length : (children ? 1 : 0);
+  return (
+    <div ref={setNodeRef} className={`droppable ${isOver ? 'drag-over' : ''}`} style={{ minHeight: 80 }}>
       {children}
       {count === 0 && (
         <div style={{ padding: '20px 8px', fontSize: 12, color: 'var(--c-text-muted)', textAlign: 'center' }}>
@@ -153,17 +209,70 @@ function Column({ column, children }) {
   );
 }
 
-// ─── Draggable card ───────────────────────────────────────────────────────
+// ─── Swim-lanes: a status column subdivided by phase ──────────────────────
 
-function DraggableCard({ task, project, expanded, onToggleExpand, onLog, onEdit }) {
+function SwimLanes({ column, phases, filtered, projectById, expandedTaskId, setExpandedTaskId, setLoggingTask, setEditingTask, setEditingActivity }) {
+  const lanes = [
+    ...phases.map((p) => ({ id: p.id, name: p.name })),
+    { id: NO_PHASE_ID, name: 'No phase' },
+  ];
+
+  return (
+    <div className="swim-lanes">
+      {lanes.map((lane) => {
+        const laneTasks = filtered.filter((t) =>
+          t.status === column.id &&
+          (lane.id === NO_PHASE_ID ? !t.phaseId : t.phaseId === lane.id)
+        );
+        return (
+          <SwimLane key={lane.id} columnId={column.id} lane={lane}>
+            {laneTasks.map((task) => (
+              <DraggableCard
+                key={task.id}
+                task={task}
+                project={projectById[task.projectId]}
+                expanded={expandedTaskId === task.id}
+                onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                onLog={() => setLoggingTask(task)}
+                onEdit={() => setEditingTask(task)}
+                onEditActivity={(a) => setEditingActivity(a)}
+              />
+            ))}
+          </SwimLane>
+        );
+      })}
+    </div>
+  );
+}
+
+function SwimLane({ columnId, lane, children }) {
+  const dropId = `${columnId}::${lane.id}`;
+  const { setNodeRef, isOver } = useDroppable({ id: dropId });
+  const count = Array.isArray(children) ? children.filter(Boolean).length : (children ? 1 : 0);
+  return (
+    <div ref={setNodeRef} className={`swim-lane ${isOver ? 'drag-over' : ''}`}>
+      <div className="swim-lane-head">
+        <span>{lane.name}</span>
+        <span className="count">{count}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 40 }}>
+        {children}
+        {count === 0 && (
+          <div style={{ padding: '8px', fontSize: 11, color: 'var(--c-text-muted)', textAlign: 'center' }}>
+            Drop here
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Draggable card ────────────────────────────────────────────────────────
+
+function DraggableCard({ task, project, expanded, onToggleExpand, onLog, onEdit, onEditActivity }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
   return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      style={{ touchAction: 'none' }}
-    >
+    <div ref={setNodeRef} {...listeners} {...attributes} style={{ touchAction: 'none' }}>
       <CardBody
         task={task}
         project={project}
@@ -171,25 +280,24 @@ function DraggableCard({ task, project, expanded, onToggleExpand, onLog, onEdit 
         onToggleExpand={onToggleExpand}
         onLog={onLog}
         onEdit={onEdit}
+        onEditActivity={onEditActivity}
         dragging={isDragging}
       />
     </div>
   );
 }
 
-// ─── Card body (used by both real card + drag overlay) ────────────────────
+// ─── Card body ────────────────────────────────────────────────────────────
 
-function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, dragging }) {
+function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEditActivity, dragging }) {
   const today = todayLocal();
   const isOverdue =
     task.status !== 'done' && task.plan?.endDate && task.plan.endDate < today;
   const finishedEarly =
-    task.status === 'done' &&
-    task.actual?.endDate && task.plan?.endDate &&
+    task.status === 'done' && task.actual?.endDate && task.plan?.endDate &&
     task.actual.endDate < task.plan.endDate;
   const finishedLate =
-    task.status === 'done' &&
-    task.actual?.endDate && task.plan?.endDate &&
+    task.status === 'done' && task.actual?.endDate && task.plan?.endDate &&
     task.actual.endDate > task.plan.endDate;
 
   return (
@@ -248,12 +356,12 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, drag
         </div>
       </div>
 
-      {expanded && <ActivityListInline taskId={task.id} />}
+      {expanded && <ActivityListInline taskId={task.id} onEditActivity={onEditActivity} />}
     </div>
   );
 }
 
-function ActivityListInline({ taskId }) {
+function ActivityListInline({ taskId, onEditActivity }) {
   const { activities, loading } = useActivities(taskId);
   if (loading) return <p className="muted small">Loading log…</p>;
   if (activities.length === 0)
@@ -274,6 +382,13 @@ function ActivityListInline({ taskId }) {
             )}
             <button
               className="link-danger"
+              title="Edit entry"
+              style={{ color: 'var(--c-text-3)', marginLeft: 'auto' }}
+              onClick={() => onEditActivity && onEditActivity(a)}
+            >✎</button>
+            <button
+              className="link-danger"
+              title="Delete entry"
               onClick={() => { if (confirm('Delete this log entry?')) deleteActivity(a); }}
             >✕</button>
           </div>

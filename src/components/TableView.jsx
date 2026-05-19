@@ -1,8 +1,13 @@
-// src/components/TableView.jsx — flat table of all activities with full PM-suite columns.
+// src/components/TableView.jsx — activity table with sorting, bulk actions, edit + CSV.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAllActivities, useProjects, useTasks } from '../hooks/useTasks';
-import { deleteActivity } from '../services/firebase';
+import {
+  deleteActivity,
+  bulkDeleteActivities,
+  bulkUpdateActivityCompletion,
+} from '../services/firebase';
+import ActivityEditor from './ActivityEditor';
 
 const COLUMNS = [
   { key: 'project',     label: 'Project' },
@@ -17,22 +22,28 @@ const COLUMNS = [
   { key: 'hours',       label: 'Hours' },
 ];
 
+const COMPLETION_OPTIONS = [
+  { value: 'not-started', label: 'Not started' },
+  { value: 'in-progress', label: 'In progress' },
+  { value: 'blocked',     label: 'Blocked' },
+  { value: 'completed',   label: 'Completed' },
+];
+
 export default function TableView({ projectFilter }) {
   const { activities, loading } = useAllActivities();
-  const { projects, byId: projectById } = useProjects();
+  const { byId: projectById } = useProjects();
   const { tasks } = useTasks();
   const taskById = useMemo(() => {
     const m = {}; tasks.forEach((t) => { m[t.id] = t; }); return m;
   }, [tasks]);
 
-  const [sortBy, setSortBy] = useState('date');
+  const [sortBy, setSortBy]   = useState('date');
   const [sortDir, setSortDir] = useState('desc');
+  const [selected, setSelected] = useState(new Set());
+  const [editing, setEditing]   = useState(null);
 
   const filtered = useMemo(() => {
-    return activities.filter((a) => {
-      if (projectFilter === 'all') return true;
-      return a.projectId === projectFilter;
-    });
+    return activities.filter((a) => projectFilter === 'all' || a.projectId === projectFilter);
   }, [activities, projectFilter]);
 
   const sorted = useMemo(() => {
@@ -50,7 +61,6 @@ export default function TableView({ projectFilter }) {
         _output_count: a.attachments?.length || 0,
       };
     });
-
     rows.sort((a, b) => {
       const av = a[`_${sortBy}`] ?? a[sortBy] ?? '';
       const bv = b[`_${sortBy}`] ?? b[sortBy] ?? '';
@@ -60,10 +70,43 @@ export default function TableView({ projectFilter }) {
     return rows;
   }, [filtered, projectById, taskById, sortBy, sortDir]);
 
+  // Prune selections when underlying data changes (filtered rows can drop)
+  useEffect(() => {
+    const ids = new Set(sorted.map((r) => r.id));
+    const next = new Set([...selected].filter((id) => ids.has(id)));
+    if (next.size !== selected.size) setSelected(next);
+  }, [sorted, selected]);
+
   const sortHandler = (key) => () => {
     if (sortBy === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else { setSortBy(key); setSortDir('asc'); }
   };
+
+  const allSelected = sorted.length > 0 && sorted.every((r) => selected.has(r.id));
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(sorted.map((r) => r.id)));
+  };
+  const toggleOne = (id) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+
+  const selectedRows = sorted.filter((r) => selected.has(r.id));
+
+  const bulkDelete = async () => {
+    if (!confirm(`Delete ${selectedRows.length} activity entr${selectedRows.length === 1 ? 'y' : 'ies'}?`)) return;
+    await bulkDeleteActivities(selectedRows);
+    setSelected(new Set());
+  };
+
+  const bulkComplete = async (status) => {
+    await bulkUpdateActivityCompletion(selectedRows, status);
+    setSelected(new Set());
+  };
+
+  const bulkExport = () => exportCsv(selectedRows);
 
   if (loading) return <p className="muted">Loading activity log…</p>;
 
@@ -72,12 +115,22 @@ export default function TableView({ projectFilter }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Activity table</h1>
-          <p className="page-subtitle">All logged activities across your tasks and projects. Click a column to sort.</p>
+          <p className="page-subtitle">All logged activities across your tasks and projects. Click a column to sort. Select rows for bulk actions.</p>
         </div>
         <div className="page-actions">
-          <button className="btn" onClick={() => exportCsv(sorted)}>Export CSV</button>
+          <button className="btn" onClick={() => exportCsv(sorted)}>Export all CSV</button>
         </div>
       </div>
+
+      {selected.size > 0 && (
+        <BulkBar
+          count={selected.size}
+          onClear={() => setSelected(new Set())}
+          onDelete={bulkDelete}
+          onComplete={bulkComplete}
+          onExport={bulkExport}
+        />
+      )}
 
       {sorted.length === 0 ? (
         <div className="empty-state">
@@ -90,6 +143,15 @@ export default function TableView({ projectFilter }) {
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 32 }} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    aria-label="Select all"
+                    style={{ accentColor: 'var(--c-accent)', cursor: 'pointer' }}
+                  />
+                </th>
                 {COLUMNS.map((c) => (
                   <th
                     key={c.key}
@@ -97,67 +159,118 @@ export default function TableView({ projectFilter }) {
                     onClick={sortHandler(c.key)}
                   >
                     {c.label}
-                    <span className="sort-icon">
-                      {sortBy === c.key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
-                    </span>
+                    <span className="sort-icon">{sortBy === c.key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
                   </th>
                 ))}
-                <th aria-label="actions" />
+                <th aria-label="actions" style={{ width: 70 }} />
               </tr>
             </thead>
             <tbody>
-              {sorted.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <span className="proj-tag">
-                      <span className="proj-dot" style={{ background: r._color }} />
-                      {r._project}
-                    </span>
-                  </td>
-                  <td>{r._phase}</td>
-                  <td className="table-cell-wrap"><strong>{r._task}</strong></td>
-                  <td className="table-cell-wrap">{r.comment || <span className="muted">—</span>}</td>
-                  <td className="mono small">{r.date}</td>
-                  <td>
-                    {r.completionStatus ? (
-                      <span className={`badge badge-soft-${
-                        r.completionStatus === 'completed' ? 'success' :
-                        r.completionStatus === 'blocked'   ? 'danger'  :
-                        r.completionStatus === 'in-progress' ? 'info'  : 'muted'
-                      }`}>{r.completionStatus}</span>
-                    ) : <span className="muted">—</span>}
-                  </td>
-                  <td>
-                    {r._output ? (
-                      <a className="table-link" href={r._output.url} target="_blank" rel="noreferrer">
-                        📎 {r._output.name?.slice(0, 30) || 'link'}
-                        {r._output_count > 1 && <span className="muted"> +{r._output_count - 1}</span>}
-                      </a>
-                    ) : <span className="muted">—</span>}
-                  </td>
-                  <td className="table-cell-wrap">
-                    {r.bottleneckRemarks
-                      ? <span style={{ color: 'var(--c-warn)' }}>⚠ {r.bottleneckRemarks}</span>
-                      : <span className="muted">—</span>}
-                  </td>
-                  <td>{r.requestedBy || <span className="muted">—</span>}</td>
-                  <td className="mono small">{(r.hoursSpent || 0).toFixed(1)}h</td>
-                  <td>
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      title="Delete entry"
-                      onClick={() => {
-                        if (confirm('Delete this activity entry?')) deleteActivity(r);
-                      }}
-                    >✕</button>
-                  </td>
-                </tr>
-              ))}
+              {sorted.map((r) => {
+                const isSelected = selected.has(r.id);
+                return (
+                  <tr key={r.id} style={isSelected ? { background: 'var(--c-accent-soft)' } : {}}>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleOne(r.id)}
+                        aria-label="Select row"
+                        style={{ accentColor: 'var(--c-accent)', cursor: 'pointer' }}
+                      />
+                    </td>
+                    <td>
+                      <span className="proj-tag">
+                        <span className="proj-dot" style={{ background: r._color }} />
+                        {r._project}
+                      </span>
+                    </td>
+                    <td>{r._phase}</td>
+                    <td className="table-cell-wrap"><strong>{r._task}</strong></td>
+                    <td className="table-cell-wrap">{r.comment || <span className="muted">—</span>}</td>
+                    <td className="mono small">{r.date}</td>
+                    <td>
+                      {r.completionStatus ? (
+                        <span className={`badge badge-soft-${
+                          r.completionStatus === 'completed' ? 'success' :
+                          r.completionStatus === 'blocked'   ? 'danger'  :
+                          r.completionStatus === 'in-progress' ? 'info'  : 'muted'
+                        }`}>{r.completionStatus}</span>
+                      ) : <span className="muted">—</span>}
+                    </td>
+                    <td>
+                      {r._output ? (
+                        <a className="table-link" href={r._output.url} target="_blank" rel="noreferrer">
+                          📎 {(r._output.name || 'link').slice(0, 30)}
+                          {r._output_count > 1 && <span className="muted"> +{r._output_count - 1}</span>}
+                        </a>
+                      ) : <span className="muted">—</span>}
+                    </td>
+                    <td className="table-cell-wrap">
+                      {r.bottleneckRemarks
+                        ? <span style={{ color: 'var(--c-warn)' }}>⚠ {r.bottleneckRemarks}</span>
+                        : <span className="muted">—</span>}
+                    </td>
+                    <td>{r.requestedBy || <span className="muted">—</span>}</td>
+                    <td className="mono small">{(r.hoursSpent || 0).toFixed(1)}h</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        title="Edit entry"
+                        onClick={() => setEditing(r)}
+                      >✎</button>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        title="Delete entry"
+                        onClick={() => { if (confirm('Delete this activity entry?')) deleteActivity(r); }}
+                      >✕</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {editing && (
+        <ActivityEditor
+          activity={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
+  );
+}
+
+function BulkBar({ count, onClear, onDelete, onComplete, onExport }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bulk-bar">
+      <span className="bulk-bar-count">
+        <strong>{count}</strong> selected
+      </span>
+      <button className="btn btn-sm btn-ghost" onClick={onClear}>Clear</button>
+      <div style={{ flex: 1 }} />
+      <div className="dropdown">
+        <button className="btn btn-sm" onClick={() => setOpen(!open)}>
+          Set completion ▾
+        </button>
+        {open && (
+          <div className="dropdown-menu">
+            {COMPLETION_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                className="dropdown-item"
+                onClick={() => { onComplete(o.value); setOpen(false); }}
+              >{o.label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <button className="btn btn-sm" onClick={onExport}>Export CSV</button>
+      <button className="btn btn-sm btn-danger" onClick={onDelete}>Delete</button>
+    </div>
   );
 }
 

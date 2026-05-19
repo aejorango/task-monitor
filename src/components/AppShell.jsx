@@ -6,6 +6,7 @@ const VIEWS = [
   { id: 'board',    label: 'Board',    icon: '▦' },
   { id: 'table',    label: 'Table',    icon: '☰' },
   { id: 'gantt',    label: 'Gantt',    icon: '▭' },
+  { id: 'review',   label: 'Review',   icon: '◇' },
   { id: 'projects', label: 'Projects', icon: '◉' },
 ];
 
