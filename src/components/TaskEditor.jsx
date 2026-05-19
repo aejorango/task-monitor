@@ -1,7 +1,7 @@
 // src/components/TaskEditor.jsx — edit modal with subtasks, tags, dependencies.
 
 import { useState, useMemo } from 'react';
-import { updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload } from '../services/firebase';
+import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload } from '../services/firebase';
 import { useTasks, useAuth, useTaskComments } from '../hooks/useTasks';
 import { MarkdownEditor } from './Markdown';
 import Markdown from './Markdown';
@@ -29,6 +29,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [tags, setTags]               = useState(task.tags || []);
   const [subtasks, setSubtasks]       = useState(task.subtasks || []);
   const [dependsOn, setDependsOn]     = useState(task.dependsOn || []);
+  const [links, setLinks]             = useState(task.links || []);
 
   const [recurrence, setRecurrence]   = useState(task.recurrence || null);
 
@@ -78,6 +79,26 @@ export default function TaskEditor({ task, projects, onClose }) {
   };
   const toggleSubtask = (id) => setSubtasks(subtasks.map((s) => s.id === id ? { ...s, done: !s.done } : s));
   const removeSubtask = (id) => setSubtasks(subtasks.filter((s) => s.id !== id));
+  const promoteSubtask = async (s) => {
+    if (!confirm(`Promote "${s.text}" to a full task?\n\nIt will inherit this task's project and phase. The subtask will be removed from this list.`)) return;
+    try {
+      await addTask(userId, {
+        title: s.text,
+        description: `Promoted from subtask of "${task.title}".`,
+        category: selectedProject?.name || task.category,
+        projectId: projectId || null,
+        phaseId:   phaseId   || null,
+        priority,
+        requestedBy: requestedBy.trim(),
+        tags: [...new Set([...(tags || []), 'promoted'])],
+        links: [{ targetId: task.id, type: 'related-to' }],
+      });
+      setSubtasks(subtasks.filter((x) => x.id !== s.id));
+    } catch (err) {
+      console.error(err);
+      alert('Could not promote subtask. Check console.');
+    }
+  };
   const moveSubtask = (idx, dir) => {
     const target = idx + dir;
     if (target < 0 || target >= subtasks.length) return;
@@ -103,6 +124,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         tags,
         subtasks,
         dependsOn,
+        links,
         recurrence,
         'plan.startDate':   planStart   || null,
         'plan.endDate':     planEnd     || null,
@@ -287,6 +309,12 @@ export default function TaskEditor({ task, projects, onClose }) {
                       style={{ accentColor: 'var(--c-accent)', cursor: 'pointer' }}
                     />
                     <span className="subtask-text">{s.text}</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      title="Promote to its own task"
+                      onClick={() => promoteSubtask(s)}
+                    >↗</button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, -1)} disabled={i === 0}>↑</button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, 1)} disabled={i === subtasks.length - 1}>↓</button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeSubtask(s.id)}>✕</button>
@@ -334,6 +362,12 @@ export default function TaskEditor({ task, projects, onClose }) {
                 ⚠ This task is blocked by {dependsOnTasks.filter((d) => d.status !== 'done').length} incomplete dependenc{dependsOnTasks.filter((d) => d.status !== 'done').length === 1 ? 'y' : 'ies'}.
               </p>
             )}
+
+            <LinksEditor
+              links={links}
+              onChange={setLinks}
+              candidates={allTasks.filter((t) => t.id !== task.id)}
+            />
           </div>
         )}
 
@@ -363,6 +397,90 @@ export default function TaskEditor({ task, projects, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const LINK_TYPES = [
+  { value: 'blocks',       label: 'blocks',       badge: 'danger',  icon: '⛔' },
+  { value: 'related-to',   label: 'related to',   badge: 'info',    icon: '↔' },
+  { value: 'duplicate-of', label: 'duplicate of', badge: 'muted',   icon: '⎘' },
+];
+
+function LinksEditor({ links, onChange, candidates }) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState('related-to');
+  const [q, setQ]       = useState('');
+
+  const candidateById = {};
+  candidates.forEach((c) => { candidateById[c.id] = c; });
+
+  const filtered = q
+    ? candidates.filter((t) => t.title.toLowerCase().includes(q.toLowerCase())
+                            && !links.some((l) => l.targetId === t.id))
+    : candidates.filter((l) => !links.some((x) => x.targetId === l.id));
+
+  const remove = (idx) => onChange(links.filter((_, i) => i !== idx));
+  const add = (targetId) => {
+    onChange([...links, { targetId, type }]);
+    setQ('');
+    setOpen(false);
+  };
+
+  return (
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--c-border)' }}>
+      <label className="label">Related tasks</label>
+      {links.length === 0 ? (
+        <p className="muted small">No relations. Use these for "blocks", "related to", or "duplicate of" — distinct from a hard dependency.</p>
+      ) : (
+        <ul className="dep-list">
+          {links.map((l, i) => {
+            const target = candidateById[l.targetId];
+            const def    = LINK_TYPES.find((t) => t.value === l.type) || LINK_TYPES[1];
+            return (
+              <li key={i} className="dep-item">
+                <span className={`badge badge-soft-${def.badge}`}>{def.icon} {def.label}</span>
+                <span className="dep-title">{target?.title || '(deleted task)'}</span>
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => remove(i)}>✕</button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {!open ? (
+        <button type="button" className="btn btn-sm" onClick={() => setOpen(true)} style={{ marginTop: 6 }}>
+          + Add relation
+        </button>
+      ) : (
+        <div className="dep-picker" style={{ marginTop: 6 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+            <span className="muted small">Type:</span>
+            <select className="select select-sm" value={type} onChange={(e) => setType(e.target.value)}>
+              {LINK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <input
+            className="input input-sm"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find a task to link to…"
+            autoFocus
+          />
+          <ul className="dep-picker-list">
+            {filtered.length === 0 && <li className="muted small" style={{ padding: 8 }}>No matching tasks.</li>}
+            {filtered.slice(0, 8).map((t) => (
+              <li key={t.id}>
+                <button type="button" className="dep-picker-item" onClick={() => add(t.id)}>
+                  <span className={`badge badge-soft-${t.status === 'done' ? 'success' : 'muted'}`}>{t.status}</span>
+                  <span>{t.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOpen(false)}>Close</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // src/components/Board.jsx — Kanban with drag-and-drop and optional phase swim-lanes.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -32,7 +32,7 @@ const COLUMNS = [
 
 const NO_PHASE_ID = '__nophase__';
 
-export default function Board({ projectFilter }) {
+export default function Board({ projectFilter, initialTagFilter, initialStatusFilter }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const [editingTask, setEditingTask]   = useState(null);
@@ -41,7 +41,10 @@ export default function Board({ projectFilter }) {
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [activeDrag, setActiveDrag]     = useState(null);
   const [groupByPhase, setGroupByPhase] = useState(false);
-  const [tagFilter, setTagFilter] = useState(null);  // null = no tag filter
+  const [tagFilter, setTagFilter] = useState(initialTagFilter || null);
+
+  // Sync local tag filter when URL-level filter changes (e.g. saved view loaded)
+  useEffect(() => { setTagFilter(initialTagFilter || null); }, [initialTagFilter]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -52,9 +55,12 @@ export default function Board({ projectFilter }) {
     ? tasks
     : tasks.filter((t) => t.projectId === projectFilter);
 
-  const filtered = tagFilter
+  const tagFiltered = tagFilter
     ? projectFiltered.filter((t) => (t.tags || []).includes(tagFilter))
     : projectFiltered;
+  const filtered = initialStatusFilter
+    ? tagFiltered.filter((t) => t.status === initialStatusFilter)
+    : tagFiltered;
 
   // All tags available across the (project-filtered) tasks, for the chip strip
   const availableTags = (() => {
@@ -365,6 +371,11 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
         {depsCount > 0 && (
           <span className="badge badge-soft-muted" title={`${depsCount} dependenc${depsCount === 1 ? 'y' : 'ies'}`}>
             🔗 {depsCount}
+          </span>
+        )}
+        {task.links?.length > 0 && (
+          <span className="badge badge-soft-info" title={`${task.links.length} related task${task.links.length === 1 ? '' : 's'}`}>
+            ↔ {task.links.length}
           </span>
         )}
         {isRecurring && (

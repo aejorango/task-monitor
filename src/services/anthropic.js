@@ -178,3 +178,73 @@ Now write the prompt I'll paste into Claude. The prompt should make it unambiguo
   const text = await callClaude({ system, user, maxTokens: 1024 });
   return text.trim();
 }
+
+// "Summarize my week" — given a list of activities, produce a Markdown summary.
+export async function summarizeWeek({ activities, tasks, projects }) {
+  const projectByName = {};
+  projects.forEach((p) => { projectByName[p.id] = p.name; });
+  const lines = activities.map((a) => {
+    const proj = projectByName[a.projectId] || a.taskCategory || '—';
+    return `- ${a.date} · ${proj} · ${a.taskTitle || ''}${a.comment ? `: ${a.comment.slice(0, 120)}` : ''}${a.hoursSpent ? ` (${a.hoursSpent}h)` : ''}${a.bottleneckRemarks ? ` [⚠ ${a.bottleneckRemarks.slice(0, 60)}]` : ''}`;
+  });
+
+  const system = `You write concise, accurate weekly summaries for a single operator. You are NOT a hype-machine — you describe what happened and what the next focus should be.
+
+Respond in Markdown with these sections in this order:
+## Highlights
+3-6 bullets — the most consequential things that moved.
+## Hours by project
+A short bullet list (project: total hours).
+## Blockers & risks
+Pull from bottleneck remarks. If none, say "None recorded."
+## Next focus
+2-4 bullets — what deserves attention next week, with reasoning.
+
+Stay under 350 words. No emojis. No celebratory framing.`;
+
+  const user = `Activities this period (${activities.length} entries):\n${lines.join('\n')}\n\nWrite the summary.`;
+  const text = await callClaude({ system, user, maxTokens: 1200 });
+  return text.trim();
+}
+
+// "What should I tackle today?"
+export async function suggestNextTask({ tasks, projects, today }) {
+  const projById = {};
+  projects.forEach((p) => { projById[p.id] = p; });
+  const open = tasks.filter((t) => t.status !== 'done').slice(0, 40);
+  const lines = open.map((t) => {
+    const p = projById[t.projectId];
+    return `- ${t.title} [${t.status}/${t.priority || 'medium'}] ${p ? `· ${p.name}` : ''} ${t.plan?.endDate ? `· due ${t.plan.endDate}` : ''}${t.dependsOn?.length ? ` · blocked by ${t.dependsOn.length}` : ''}`;
+  });
+
+  const system = `You help an operator prioritize. Given a list of open tasks, recommend what to tackle TODAY in order. Consider: due dates, priority, dependencies (a task blocked by an incomplete dep should rank lower), and whether it unblocks others.
+
+Respond in Markdown. Top of response: a "Today's focus" header listing 3 specific tasks in order with one-line rationale each. Below: "Stretch" with 1-2 secondary picks. Below: "Skip for now" with 1-2 picks and why. Be specific — quote the task title.
+
+Under 200 words total. No emojis.`;
+
+  const user = `Today is ${today}.\nOpen tasks:\n${lines.join('\n')}\n\nWhat should I tackle today?`;
+  const text = await callClaude({ system, user, maxTokens: 800 });
+  return text.trim();
+}
+
+// "Draft a status update from these activities"
+export async function draftStatusUpdate({ activities, audience = 'a teammate' }) {
+  const lines = activities.map((a) => `- ${a.date} · ${a.taskTitle || ''}${a.comment ? `: ${a.comment}` : ''}`);
+
+  const system = `You draft brief, factual status updates. The audience is ${audience}.
+
+Output Markdown with three sections:
+## Progress
+3-5 bullets, plain factual past-tense.
+## Open items
+What's in flight or awaiting input.
+## Asks
+Anything the recipient needs to act on. If none, say "Nothing right now."
+
+Under 250 words. Plain professional voice. No emojis. No celebratory framing.`;
+
+  const user = `Activities to summarize:\n${lines.join('\n')}\n\nWrite the status update.`;
+  const text = await callClaude({ system, user, maxTokens: 800 });
+  return text.trim();
+}

@@ -1,9 +1,9 @@
 // src/components/AppShell.jsx — sidebar nav + topbar + content area
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useTasks, useAllActivities, useProjects } from '../hooks/useTasks';
+import { useTasks, useAllActivities, useProjects, useSavedViews } from '../hooks/useTasks';
 import { useOnline } from '../hooks/useOnline';
-import { auth } from '../services/firebase';
+import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
 
 const VIEWS = [
   { id: 'board',    label: 'Board',    icon: '▦' },
@@ -17,15 +17,25 @@ const VIEWS = [
 
 function parseHash() {
   const h = window.location.hash.replace(/^#\/?/, '');
-  const parts = h.split('/').filter(Boolean);
+  const [path = '', qs = ''] = h.split('?');
+  const parts = path.split('/').filter(Boolean);
+  const params = new URLSearchParams(qs);
   return {
     view: parts[0] || 'board',
     projectFilter: parts[1] || 'all',
+    tagFilter:    params.get('tag')    || null,
+    statusFilter: params.get('status') || null,
+    savedViewId:  params.get('saved')  || null,
   };
 }
 
-function setHash({ view, projectFilter }) {
-  window.location.hash = `#/${view}/${projectFilter || 'all'}`;
+function setHash(next) {
+  const params = new URLSearchParams();
+  if (next.tagFilter)    params.set('tag',    next.tagFilter);
+  if (next.statusFilter) params.set('status', next.statusFilter);
+  if (next.savedViewId)  params.set('saved',  next.savedViewId);
+  const qs = params.toString();
+  window.location.hash = `#/${next.view}/${next.projectFilter || 'all'}${qs ? `?${qs}` : ''}`;
 }
 
 export function useRoute() {
@@ -56,13 +66,15 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           {VIEWS.map((v) => (
             <button
               key={v.id}
-              className={`sidebar-link ${v.id === route.view ? 'active' : ''}`}
-              onClick={() => navigate({ view: v.id })}
+              className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
+              onClick={() => navigate({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
             >
               <span className="sidebar-link-icon">{v.icon}</span>
               {v.label}
             </button>
           ))}
+
+          <SidebarSavedViews route={route} navigate={navigate} />
         </nav>
 
         <div className="sidebar-footer">
@@ -77,6 +89,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           value={route.projectFilter}
           onChange={(projectFilter) => navigate({ projectFilter })}
         />
+        <SaveViewButton route={route} userId={userId} />
         <div className="topbar-spacer" />
         {!online && (
           <span className="badge badge-soft-warn" title="You're offline. Changes will sync when you reconnect.">
@@ -89,6 +102,86 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
 
       <main className="content">{children}</main>
     </div>
+  );
+}
+
+// ─── Save current view ────────────────────────────────────
+
+function SaveViewButton({ route, userId }) {
+  const hasFilter = route.projectFilter !== 'all' || route.tagFilter || route.statusFilter;
+  if (!userId || !hasFilter) return null;
+  // Already loaded as a saved view → hide
+  if (route.savedViewId) return null;
+  const save = async () => {
+    const name = prompt('Save this filter as…', '');
+    if (!name) return;
+    try {
+      await addSavedView(userId, {
+        name: name.trim(),
+        view: route.view,
+        projectFilter: route.projectFilter,
+        tagFilter:    route.tagFilter,
+        statusFilter: route.statusFilter,
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Could not save view. Check console.');
+    }
+  };
+  return (
+    <button className="btn btn-sm btn-ghost" onClick={save} title="Save the current filter combo as a sidebar shortcut">
+      ★ Save view
+    </button>
+  );
+}
+
+// ─── Sidebar: saved views ─────────────────────────────────
+
+function SidebarSavedViews({ route, navigate }) {
+  const { views } = useSavedViews();
+  if (views.length === 0) return null;
+  return (
+    <>
+      <div className="sidebar-section-label">Saved views</div>
+      {views.map((v) => {
+        const isActive = route.savedViewId === v.id;
+        return (
+          <button
+            key={v.id}
+            className={`sidebar-link saved-view-link ${isActive ? 'active' : ''}`}
+            onClick={() => navigate({
+              view: v.view,
+              projectFilter: v.projectFilter || 'all',
+              tagFilter:    v.tagFilter || null,
+              statusFilter: v.statusFilter || null,
+              savedViewId:  v.id,
+            })}
+            title={`${v.view}${v.tagFilter ? ` · #${v.tagFilter}` : ''}${v.statusFilter ? ` · ${v.statusFilter}` : ''}`}
+          >
+            <span className="sidebar-link-icon">{v.icon || '★'}</span>
+            <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {v.name}
+            </span>
+            <span
+              className="saved-view-delete"
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(`Remove saved view "${v.name}"?`)) softDeleteSavedView(v.id);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  if (confirm(`Remove saved view "${v.name}"?`)) softDeleteSavedView(v.id);
+                }
+              }}
+              title="Remove saved view"
+            >✕</span>
+          </button>
+        );
+      })}
+    </>
   );
 }
 

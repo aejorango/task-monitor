@@ -2203,3 +2203,15 @@ a:hover { text-decoration: underline; }
   align-items: center;
 }
 .ai-subtask-item.off .input { opacity: 0.55; text-decoration: line-through; }
+
+/* ─── Saved views ─────────────────────────────────────────── */
+.saved-view-link .saved-view-delete {
+  opacity: 0;
+  font-size: 13px;
+  padding: 0 4px;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  transition: opacity 0.15s, color 0.15s;
+}
+.saved-view-link:hover .saved-view-delete { opacity: 1; }
+.saved-view-link .saved-view-delete:hover { color: var(--c-danger); }

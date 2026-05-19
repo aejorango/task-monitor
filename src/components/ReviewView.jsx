@@ -3,6 +3,13 @@
 import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { todayLocal } from '../services/firebase';
+import {
+  summarizeWeek,
+  suggestNextTask,
+  draftStatusUpdate,
+  getApiKey,
+} from '../services/anthropic';
+import Markdown from './Markdown';
 
 const RANGES = [
   { id: '7',  label: 'This week (7d)',  days: 7 },
@@ -22,7 +29,7 @@ function daysAgo(n) {
 
 export default function ReviewView() {
   const { tasks, loading: tasksLoading } = useTasks();
-  const { byId: projectById } = useProjects();
+  const { projects, byId: projectById } = useProjects();
   const { activities, loading: activitiesLoading } = useAllActivities();
   const [rangeId, setRangeId] = useState('7');
   const range = RANGES.find((r) => r.id === rangeId);
@@ -238,6 +245,12 @@ export default function ReviewView() {
           </ul>
         )}
       </section>
+
+      <ReviewAiPanel
+        activities={periodActivities}
+        tasks={tasks}
+        projects={projects}
+      />
     </>
   );
 }
@@ -248,5 +261,101 @@ function KpiCard({ label, value, suffix, accent }) {
       <div className="kpi-label">{label}</div>
       <div className="kpi-value">{value}{suffix && <span className="kpi-suffix">{suffix}</span>}</div>
     </div>
+  );
+}
+
+function ReviewAiPanel({ activities, tasks, projects }) {
+  const apiKey = getApiKey();
+  const [busy, setBusy] = useState(null);
+  const [output, setOutput] = useState('');
+  const [audience, setAudience] = useState('a teammate');
+  const [error, setError] = useState(null);
+  const [copyOk, setCopyOk] = useState(false);
+
+  if (!apiKey) {
+    return (
+      <section className="review-section">
+        <h2 className="review-h2">✨ AI assist</h2>
+        <p className="muted small">
+          Set your Anthropic API key in <strong>Settings → AI</strong> to enable:
+          summarize this period, suggest what to tackle today, or draft a status
+          update for a teammate.
+        </p>
+      </section>
+    );
+  }
+
+  const run = async (kind) => {
+    setBusy(kind);
+    setError(null);
+    setOutput('');
+    try {
+      let text = '';
+      if (kind === 'summary') {
+        text = await summarizeWeek({ activities, tasks, projects });
+      } else if (kind === 'today') {
+        text = await suggestNextTask({ tasks, projects, today: todayLocal() });
+      } else if (kind === 'status') {
+        text = await draftStatusUpdate({ activities, audience });
+      }
+      setOutput(text);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || String(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(output);
+      setCopyOk(true);
+      setTimeout(() => setCopyOk(false), 1500);
+    } catch (err) { console.error(err); }
+  };
+
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">✨ AI assist</h2>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+        <button className="btn btn-sm" onClick={() => run('summary')} disabled={busy === 'summary'}>
+          {busy === 'summary' ? 'Thinking…' : 'Summarize this period'}
+        </button>
+        <button className="btn btn-sm" onClick={() => run('today')} disabled={busy === 'today'}>
+          {busy === 'today' ? 'Thinking…' : 'What should I tackle today?'}
+        </button>
+        <span style={{ width: 1, height: 16, background: 'var(--c-border)' }} />
+        <span className="muted small">Status update for</span>
+        <input
+          className="input input-sm"
+          value={audience}
+          onChange={(e) => setAudience(e.target.value)}
+          placeholder="e.g. Mark"
+          style={{ width: 140 }}
+        />
+        <button className="btn btn-sm" onClick={() => run('status')} disabled={busy === 'status' || !audience.trim()}>
+          {busy === 'status' ? 'Thinking…' : 'Draft update'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="auth-error">
+          <div className="auth-error-head"><span className="badge badge-soft-danger">AI error</span></div>
+          <p className="auth-error-msg">{error}</p>
+        </div>
+      )}
+
+      {output && (
+        <div className="ai-output">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+            <button className="btn btn-sm" onClick={copy}>{copyOk ? '✓ Copied' : '⎘ Copy'}</button>
+          </div>
+          <div className="markdown-preview" style={{ background: 'var(--c-surface-2)', borderRadius: 6, padding: 12 }}>
+            <Markdown src={output} />
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

@@ -39,10 +39,10 @@ export default function App() {
       timerWidget={<TimerWidget />}
     >
       <Suspense fallback={<ViewSpinner />}>
-        {route.view === 'board'    && <Board    projectFilter={route.projectFilter} />}
-        {route.view === 'table'    && <TableView projectFilter={route.projectFilter} />}
-        {route.view === 'gantt'    && <GanttView projectFilter={route.projectFilter} />}
-        {route.view === 'calendar' && <CalendarView projectFilter={route.projectFilter} />}
+        {route.view === 'board'    && <Board    projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} initialStatusFilter={route.statusFilter} />}
+        {route.view === 'table'    && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
+        {route.view === 'gantt'    && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
+        {route.view === 'calendar' && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'review'   && <ReviewView />}
         {route.view === 'projects' && <ProjectsView />}
         {route.view === 'settings' && <SettingsView />}

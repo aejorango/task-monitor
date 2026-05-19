@@ -44,6 +44,12 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource);
     }
 
+    match /savedViews/{viewId} {
+      allow read:   if isOwner(resource);
+      allow create: if isCreatingOwn();
+      allow update, delete: if isOwner(resource);
+    }
+
     match /categories/{categoryId} {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();

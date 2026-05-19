@@ -170,6 +170,7 @@ const activitiesRef = collection(db, 'activities');
 const projectsRef = collection(db, 'projects');
 const templatesRef = collection(db, 'templates');
 const taskCommentsRef = collection(db, 'taskComments');
+const savedViewsRef = collection(db, 'savedViews');
 
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
@@ -322,6 +323,10 @@ export async function addTask(userId, task) {
     // v5: recurrence rule. null means non-recurring.
     recurrence: task.recurrence || null,  // { rule: 'daily'|'weekly'|'monthly', interval, dayOfWeek?, dayOfMonth?, until? }
     recurrenceParentId: task.recurrenceParentId || null,  // points to the original recurring task
+
+    // v7: typed task-to-task links (in addition to dependsOn).
+    //   [{ targetId, type: 'blocks' | 'related-to' | 'duplicate-of' }]
+    links: task.links || [],
 
     activityCount:    0,
     totalHoursLogged: 0,
@@ -842,6 +847,55 @@ export function subscribeToTaskComments(taskId, callback) {
       const at = a.createdAt?.toMillis?.() ?? 0;
       const bt = b.createdAt?.toMillis?.() ?? 0;
       return at - bt;  // chronological
+    });
+    callback(data);
+  });
+}
+
+// ─── SAVED VIEWS ────────────────────────────────────────────────────────────
+// A reusable filter combo (view + project + tag + status + sort) the user
+// can pin in the sidebar.
+
+export async function addSavedView(userId, view) {
+  return await addDoc(savedViewsRef, {
+    userId,
+    name:          view.name,
+    icon:          view.icon || '',
+    view:          view.view,                 // 'board' | 'table' | 'gantt' | 'calendar'
+    projectFilter: view.projectFilter || 'all',
+    tagFilter:     view.tagFilter || null,
+    statusFilter:  view.statusFilter || null, // 'todo' | 'doing' | 'done' | null
+    sortBy:        view.sortBy || null,
+    sortDir:       view.sortDir || 'desc',
+    deleted:       false,
+    createdAt:     serverTimestamp(),
+    updatedAt:     serverTimestamp(),
+  });
+}
+
+export async function updateSavedView(viewId, updates) {
+  return await updateDoc(doc(db, 'savedViews', viewId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function softDeleteSavedView(viewId) {
+  return await updateSavedView(viewId, { deleted: true });
+}
+
+export function subscribeToSavedViews(userId, callback) {
+  const q = query(
+    savedViewsRef,
+    where('userId', '==', userId),
+    where('deleted', '==', false),
+  );
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => {
+      const at = a.createdAt?.toMillis?.() ?? 0;
+      const bt = b.createdAt?.toMillis?.() ?? 0;
+      return at - bt;
     });
     callback(data);
   });

@@ -11,6 +11,7 @@ import {
   subscribeToProjects,
   subscribeToTemplates,
   subscribeToTaskComments,
+  subscribeToSavedViews,
   migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
@@ -148,6 +149,25 @@ export function useAllActivities() {
 }
 
 // ─── useRecentActivities ────────────────────────────────────────────────────
+
+// ─── useSavedViews ──────────────────────────────────────────────────────────
+
+export function useSavedViews() {
+  const { userId, ready } = useAuth();
+  const [views, setViews] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId) return;
+    const unsub = subscribeToSavedViews(userId, (data) => {
+      setViews(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId, ready]);
+
+  return { views, loading, userId };
+}
 
 // ─── useTaskComments ────────────────────────────────────────────────────────
 
