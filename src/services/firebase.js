@@ -1,5 +1,5 @@
 // src/services/firebase.js
-// Firestore service layer for the scalable task monitor schema.
+// Firestore service layer for the task monitor + PM suite.
 
 import { initializeApp } from 'firebase/app';
 import {
@@ -14,6 +14,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  getDocs,
   query,
   where,
   orderBy,
@@ -39,20 +40,16 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// Kick off anonymous auth on load so userId is available without a login screen.
-// Enable Anonymous sign-in: Firebase console → Authentication → Sign-in method.
 signInAnonymously(auth).catch((err) => {
   console.error('Anonymous sign-in failed:', err);
 });
 
-// Subscribe helper for auth state — used by the useAuth hook.
 export function onAuthChange(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// YYYY-MM-DD in the user's LOCAL timezone (avoids UTC rollover at 8am Manila).
 export function todayLocal() {
   const d = new Date();
   const y = d.getFullYear();
@@ -61,8 +58,122 @@ export function todayLocal() {
   return `${y}-${m}-${day}`;
 }
 
+export function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 const tasksRef = collection(db, 'tasks');
 const activitiesRef = collection(db, 'activities');
+const projectsRef = collection(db, 'projects');
+
+// ─── PROJECTS ───────────────────────────────────────────────────────────────
+// A project is the top-level grouping. It contains an array of phases:
+//   phases: [{ id, name, order }]
+// Tasks reference projectId + phaseId.
+
+const PROJECT_COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444'];
+
+export async function addProject(userId, project) {
+  const phases = (project.phases || []).map((p, i) => ({
+    id: p.id || uid(),
+    name: p.name,
+    order: i,
+  }));
+  return await addDoc(projectsRef, {
+    userId,
+    name: project.name,
+    description: project.description || '',
+    color: project.color || PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
+    phases,
+    archived: false,
+    deleted: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateProject(projectId, updates) {
+  return await updateDoc(doc(db, 'projects', projectId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function archiveProject(projectId) {
+  return await updateProject(projectId, { archived: true });
+}
+
+export async function softDeleteProject(projectId) {
+  return await updateProject(projectId, { deleted: true });
+}
+
+export function subscribeToProjects(userId, callback) {
+  const q = query(
+    projectsRef,
+    where('userId', '==', userId),
+    where('deleted', '==', false),
+  );
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Sort client-side to avoid composite index requirement.
+    data.sort((a, b) => {
+      const at = a.createdAt?.toMillis?.() ?? 0;
+      const bt = b.createdAt?.toMillis?.() ?? 0;
+      return bt - at;
+    });
+    callback(data);
+  });
+}
+
+// One-time migration: seed default projects from the legacy categories
+// and link existing tasks. Idempotent — safe to call on every sign-in.
+export async function migrateLegacyCategories(userId) {
+  const existing = await getDocs(query(projectsRef, where('userId', '==', userId), limit(1)));
+  if (!existing.empty) return { migrated: false, reason: 'projects already exist' };
+
+  const legacyCategories = ['BRIDGED', 'AIM', 'Personal'];
+  const colorByCategory = { BRIDGED: '#6366f1', AIM: '#10b981', Personal: '#f59e0b' };
+  const batch = writeBatch(db);
+  const projectIdByCategory = {};
+
+  legacyCategories.forEach((cat) => {
+    const ref = doc(projectsRef);
+    projectIdByCategory[cat] = ref.id;
+    batch.set(ref, {
+      userId,
+      name: cat,
+      description: `Migrated from legacy category "${cat}"`,
+      color: colorByCategory[cat],
+      phases: [
+        { id: uid(), name: 'Planning',  order: 0 },
+        { id: uid(), name: 'Execution', order: 1 },
+        { id: uid(), name: 'Review',    order: 2 },
+      ],
+      archived: false,
+      deleted: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
+
+  // Link existing tasks to their migrated project
+  const tasksSnap = await getDocs(query(tasksRef, where('userId', '==', userId)));
+  const linkBatch = writeBatch(db);
+  let linked = 0;
+  tasksSnap.forEach((d) => {
+    const t = d.data();
+    if (t.projectId) return;
+    const projectId = projectIdByCategory[t.category];
+    if (!projectId) return;
+    linkBatch.update(d.ref, { projectId, updatedAt: serverTimestamp() });
+    linked++;
+  });
+  if (linked > 0) await linkBatch.commit();
+
+  return { migrated: true, projectsCreated: legacyCategories.length, tasksLinked: linked };
+}
 
 // ─── TASKS ──────────────────────────────────────────────────────────────────
 
@@ -71,13 +182,16 @@ export async function addTask(userId, task) {
     userId,
     title: task.title,
     description: task.description || '',
-    category: task.category || 'Personal',
+    category: task.category || 'Personal',     // legacy back-compat
+    projectId: task.projectId || null,
+    phaseId: task.phaseId || null,
     priority: task.priority || 'medium',
     status: 'todo',
     progress: 0,
+    requestedBy: task.requestedBy || '',
 
     plan: {
-      startDate: task.plan?.startDate || null,   // 'YYYY-MM-DD' string
+      startDate: task.plan?.startDate || null,
       endDate:   task.plan?.endDate   || null,
     },
     actual: {
@@ -85,7 +199,6 @@ export async function addTask(userId, task) {
       endDate:   null,
     },
 
-    // Denormalized counters (kept in sync via batched writes below)
     activityCount:    0,
     totalHoursLogged: 0,
     attachmentCount:  0,
@@ -105,30 +218,33 @@ export async function updateTask(taskId, updates) {
   });
 }
 
-// Move task between todo → doing → done; auto-stamps actual dates.
-export async function moveTaskStatus(task) {
-  const next =
-    task.status === 'todo'  ? 'doing' :
-    task.status === 'doing' ? 'done'  : 'todo';
+// Set status directly (used by drag-and-drop).
+export async function setTaskStatus(task, nextStatus) {
+  if (task.status === nextStatus) return;
+  const updates = { status: nextStatus, updatedAt: serverTimestamp() };
 
-  const updates = { status: next, updatedAt: serverTimestamp() };
-
-  if (next === 'doing' && !task.actual?.startDate) {
+  if (nextStatus === 'doing' && !task.actual?.startDate) {
     updates['actual.startDate'] = todayLocal();
   }
-  if (next === 'done') {
+  if (nextStatus === 'done') {
     updates['actual.endDate'] = todayLocal();
     updates.progress = 100;
     if (!task.actual?.startDate) updates['actual.startDate'] = todayLocal();
   }
-  if (next === 'todo') {
-    // Reverting — clear actual dates
+  if (nextStatus === 'todo') {
     updates['actual.startDate'] = null;
     updates['actual.endDate']   = null;
     updates.progress = 0;
   }
-
   return await updateDoc(doc(db, 'tasks', task.id), updates);
+}
+
+// Cycle-only API — kept for back-compat with TaskList's Move button.
+export async function moveTaskStatus(task) {
+  const next =
+    task.status === 'todo'  ? 'doing' :
+    task.status === 'doing' ? 'done'  : 'todo';
+  return setTaskStatus(task, next);
 }
 
 export async function archiveTask(taskId) {
@@ -139,7 +255,6 @@ export async function softDeleteTask(taskId) {
   return await updateTask(taskId, { deleted: true });
 }
 
-// Live subscription to active (non-deleted, non-archived) tasks for a user.
 export function subscribeToTasks(userId, callback) {
   const q = query(
     tasksRef,
@@ -155,7 +270,6 @@ export function subscribeToTasks(userId, callback) {
 
 // ─── ACTIVITIES ─────────────────────────────────────────────────────────────
 
-// Adds an activity AND atomically updates counters on the parent task.
 export async function addActivity(userId, task, activity) {
   const batch = writeBatch(db);
 
@@ -163,16 +277,21 @@ export async function addActivity(userId, task, activity) {
   batch.set(newActivity, {
     taskId:       task.id,
     userId,
-
-    // Denormalized snapshots for fast journal views
     taskTitle:    task.title,
     taskCategory: task.category,
+    projectId:    task.projectId || null,
+    phaseId:      task.phaseId   || null,
 
     date:         activity.date || todayLocal(),
     comment:      activity.comment || '',
     hoursSpent:   Number(activity.hoursSpent) || 0,
     statusAtTime: task.status,
     attachments:  activity.attachments || [],
+
+    // PM suite fields
+    completionStatus:  activity.completionStatus  || 'in-progress',
+    bottleneckRemarks: activity.bottleneckRemarks || '',
+    requestedBy:       activity.requestedBy       || '',
 
     loggedAt: serverTimestamp(),
   });
@@ -188,7 +307,10 @@ export async function addActivity(userId, task, activity) {
   return await batch.commit();
 }
 
-// Deletes an activity AND decrements counters atomically.
+export async function updateActivity(activityId, updates) {
+  return await updateDoc(doc(db, 'activities', activityId), updates);
+}
+
 export async function deleteActivity(activity) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'activities', activity.id));
@@ -201,7 +323,6 @@ export async function deleteActivity(activity) {
   return await batch.commit();
 }
 
-// All activities for one task, newest day first.
 export function subscribeToActivities(taskId, callback) {
   const q = query(
     activitiesRef,
@@ -213,12 +334,23 @@ export function subscribeToActivities(taskId, callback) {
   });
 }
 
-// Cross-task activity feed — useful for daily/weekly journals.
+export function subscribeToAllActivities(userId, callback) {
+  const q = query(
+    activitiesRef,
+    where('userId', '==', userId),
+    orderBy('date', 'desc'),
+    limit(500),
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
 export function subscribeToRecentActivities(userId, sinceDate, callback) {
   const q = query(
     activitiesRef,
     where('userId', '==', userId),
-    where('date',   '>=', sinceDate),       // 'YYYY-MM-DD'
+    where('date',   '>=', sinceDate),
     orderBy('date', 'desc'),
     limit(200),
   );

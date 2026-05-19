@@ -1,23 +1,35 @@
-// src/components/TaskForm.jsx
-// Compact-by-default form with an expandable "More details" section
-// for description, priority, and plan dates.
+// src/components/TaskForm.jsx — quick-add card with expandable details.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { addTask } from '../services/firebase';
 import { useAuth } from '../hooks/useTasks';
 
-export default function TaskForm() {
+export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const { userId, ready } = useAuth();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('BRIDGED');
+  const [projectId, setProjectId] = useState('');
+  const [phaseId, setPhaseId] = useState('');
   const [priority, setPriority] = useState('medium');
   const [planStart, setPlanStart] = useState('');
   const [planEnd, setPlanEnd] = useState('');
+  const [requestedBy, setRequestedBy] = useState('');
 
   const [expanded, setExpanded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // When projectFilter narrows to a specific project, prefill projectId
+  useEffect(() => {
+    if (projectFilter !== 'all' && !projectId) setProjectId(projectFilter);
+  }, [projectFilter, projectId]);
+
+  // Default to first project if available and none selected
+  useEffect(() => {
+    if (!projectId && projects.length > 0) setProjectId(projects[0].id);
+  }, [projects, projectId]);
+
+  const selectedProject = projects.find((p) => p.id === projectId);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,18 +40,22 @@ export default function TaskForm() {
       await addTask(userId, {
         title: title.trim(),
         description: description.trim(),
-        category,
+        // Keep legacy `category` so older queries still work.
+        category: selectedProject?.name || 'Personal',
+        projectId: projectId || null,
+        phaseId: phaseId || null,
         priority,
+        requestedBy: requestedBy.trim(),
         plan: {
           startDate: planStart || null,
           endDate:   planEnd   || null,
         },
       });
-      // Reset on success
       setTitle('');
       setDescription('');
       setPlanStart('');
       setPlanEnd('');
+      setRequestedBy('');
     } catch (err) {
       console.error('Failed to add task:', err);
       alert('Could not save task. Check console.');
@@ -49,68 +65,74 @@ export default function TaskForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="task-form">
-      <div className="task-form-row primary">
+    <form onSubmit={handleSubmit} className="quick-add">
+      <div className="quick-add-row">
         <input
           type="text"
+          className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="What needs doing?"
           required
           disabled={!ready}
         />
-        <select value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option value="BRIDGED">BRIDGED</option>
-          <option value="AIM">AIM</option>
-          <option value="Personal">Personal</option>
+        <select className="select" value={projectId} onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }} style={{ width: 180 }}>
+          {projects.length === 0 && <option value="">No projects</option>}
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
         </select>
+        <button type="submit" className="btn btn-primary" disabled={submitting || !ready || !title.trim()}>
+          {submitting ? 'Saving…' : 'Add task'}
+        </button>
       </div>
 
       {expanded && (
         <>
           <textarea
+            className="textarea"
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description / context (optional)"
           />
-
-          <div className="task-form-row">
-            <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-              <option value="low">Low priority</option>
-              <option value="medium">Medium priority</option>
-              <option value="high">High priority</option>
-            </select>
-            <label className="date-input">
-              <span className="muted small">Plan start</span>
-              <input
-                type="date"
-                value={planStart}
-                onChange={(e) => setPlanStart(e.target.value)}
-              />
-            </label>
-            <label className="date-input">
-              <span className="muted small">Plan end</span>
-              <input
-                type="date"
-                value={planEnd}
-                onChange={(e) => setPlanEnd(e.target.value)}
-              />
-            </label>
+          <div className="quick-add-detail">
+            <div>
+              <label className="label">Phase</label>
+              <select className="select" value={phaseId} onChange={(e) => setPhaseId(e.target.value)} disabled={!selectedProject}>
+                <option value="">— None —</option>
+                {selectedProject?.phases?.map((ph) => (
+                  <option key={ph.id} value={ph.id}>{ph.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Priority</label>
+              <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Requested by</label>
+              <input className="input" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="e.g. Mark" />
+            </div>
+            <div>
+              <label className="label">Plan start</label>
+              <input type="date" className="input" value={planStart} onChange={(e) => setPlanStart(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Plan end</label>
+              <input type="date" className="input" value={planEnd} onChange={(e) => setPlanEnd(e.target.value)} />
+            </div>
           </div>
         </>
       )}
 
-      <div className="form-actions">
-        <button
-          type="button"
-          className="link-btn"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? '− Less' : '+ More details'}
-        </button>
-        <button type="submit" disabled={submitting || !ready}>
-          {submitting ? 'Saving…' : 'Add Task'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpanded(!expanded)}>
+          {expanded ? '− Hide details' : '+ More details'}
         </button>
       </div>
     </form>

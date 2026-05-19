@@ -1,18 +1,19 @@
 // src/hooks/useTasks.js
 // React hooks wrapping the Firestore subscriptions.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   onAuthChange,
   subscribeToTasks,
   subscribeToActivities,
   subscribeToRecentActivities,
+  subscribeToAllActivities,
+  subscribeToProjects,
+  migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
 
 // ─── useAuth ────────────────────────────────────────────────────────────────
-// Tracks the anonymous user session. `ready` flips true once Firebase responds,
-// even if userId is still null (lets you show a loading state vs failed auth).
 
 export function useAuth() {
   const [userId, setUserId] = useState(null);
@@ -29,8 +30,47 @@ export function useAuth() {
   return { userId, ready };
 }
 
+// ─── useProjects ────────────────────────────────────────────────────────────
+// Live list of the user's projects. Runs a one-time migration on first sign-in
+// to seed default projects from the legacy categories.
+
+export function useProjects() {
+  const { userId, ready } = useAuth();
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId) return;
+
+    let cancelled = false;
+    migrateLegacyCategories(userId)
+      .then((result) => {
+        if (!cancelled && result.migrated) {
+          console.info('[migration]', result);
+        }
+      })
+      .catch((err) => console.error('[migration] failed:', err));
+
+    const unsub = subscribeToProjects(userId, (data) => {
+      setProjects(data);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [userId, ready]);
+
+  const byId = useMemo(() => {
+    const map = {};
+    projects.forEach((p) => { map[p.id] = p; });
+    return map;
+  }, [projects]);
+
+  return { projects, byId, loading, userId };
+}
+
 // ─── useTasks ───────────────────────────────────────────────────────────────
-// Live list of the user's active tasks plus convenience filters.
 
 export function useTasks() {
   const { userId, ready } = useAuth();
@@ -47,10 +87,7 @@ export function useTasks() {
   }, [userId, ready]);
 
   const byStatus = (status) => tasks.filter((t) => t.status === status);
-  const byCategory = (cat) =>
-    cat === 'All' ? tasks : tasks.filter((t) => t.category === cat);
 
-  // Overdue: plan.endDate is past AND status isn't done
   const today = todayLocal();
   const overdue = tasks.filter(
     (t) => t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today
@@ -63,13 +100,11 @@ export function useTasks() {
     doing: byStatus('doing'),
     done:  byStatus('done'),
     overdue,
-    byCategory,
     userId,
   };
 }
 
-// ─── useActivities ──────────────────────────────────────────────────────────
-// Live activity log for ONE task.
+// ─── useActivities (one task) ───────────────────────────────────────────────
 
 export function useActivities(taskId) {
   const [activities, setActivities] = useState([]);
@@ -91,8 +126,26 @@ export function useActivities(taskId) {
   return { activities, loading };
 }
 
+// ─── useAllActivities (cross-task, Table view) ──────────────────────────────
+
+export function useAllActivities() {
+  const { userId, ready } = useAuth();
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId) return;
+    const unsub = subscribeToAllActivities(userId, (data) => {
+      setActivities(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId, ready]);
+
+  return { activities, loading };
+}
+
 // ─── useRecentActivities ────────────────────────────────────────────────────
-// Cross-task daily/weekly journal — accepts a lookback in days.
 
 export function useRecentActivities(days = 7) {
   const { userId, ready } = useAuth();
@@ -102,7 +155,6 @@ export function useRecentActivities(days = 7) {
   useEffect(() => {
     if (!ready || !userId) return;
 
-    // Compute "since" date in local TZ
     const since = new Date();
     since.setDate(since.getDate() - days);
     const y = since.getFullYear();
@@ -117,7 +169,6 @@ export function useRecentActivities(days = 7) {
     return () => unsub();
   }, [userId, ready, days]);
 
-  // Group by date for journal-style rendering
   const byDay = activities.reduce((acc, a) => {
     (acc[a.date] = acc[a.date] || []).push(a);
     return acc;

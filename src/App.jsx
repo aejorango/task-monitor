@@ -1,30 +1,30 @@
-// src/App.jsx
-import TaskForm from './components/TaskForm';
-import TaskList from './components/TaskList';
-import { useAuth } from './hooks/useTasks';
+// src/App.jsx — root shell + view router.
+
+import { useAuth, useProjects } from './hooks/useTasks';
+import AppShell, { useRoute } from './components/AppShell';
+import Board from './components/Board';
+import TableView from './components/TableView';
+import GanttView from './components/GanttView';
+import ProjectsView from './components/ProjectsView';
 import './App.css';
 
 export default function App() {
   const { userId, ready } = useAuth();
+  const { projects } = useProjects();
+  const { route, navigate } = useRoute();
 
   return (
-    <div className="app">
-      <header>
-        <h1>Task Monitor</h1>
-        <p className="muted">
-          Personal tracker · synced via Firestore
-          {ready && userId && (
-            <span className="session-pill"> · session {userId.slice(0, 6)}</span>
-          )}
-          {ready && !userId && (
-            <span className="session-pill warn"> · auth not connected</span>
-          )}
-        </p>
-      </header>
-      <main>
-        <TaskForm />
-        <TaskList />
-      </main>
-    </div>
+    <AppShell
+      userId={userId}
+      ready={ready}
+      projects={projects}
+      route={route}
+      navigate={navigate}
+    >
+      {route.view === 'board'    && <Board    projectFilter={route.projectFilter} />}
+      {route.view === 'table'    && <TableView projectFilter={route.projectFilter} />}
+      {route.view === 'gantt'    && <GanttView projectFilter={route.projectFilter} />}
+      {route.view === 'projects' && <ProjectsView />}
+    </AppShell>
   );
 }
