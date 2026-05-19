@@ -11,6 +11,7 @@ import {
   softDeleteTaskComment,
 } from '../services/firebase';
 import TaskAiPanel from './TaskAiPanel';
+import { usePresence } from '../hooks/usePresence';
 
 export default function TaskEditor({ task, projects, onClose }) {
   const { tasks: allTasks } = useTasks();
@@ -173,7 +174,10 @@ export default function TaskEditor({ task, projects, onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Edit task</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <h3 className="modal-title">Edit task</h3>
+          <PresenceStack taskId={task.id} />
+        </div>
 
         <div className="tabbar">
           <button className={`tab ${tab === 'details' ? 'active' : ''}`} onClick={() => setTab('details')}>Details</button>
@@ -397,6 +401,25 @@ export default function TaskEditor({ task, projects, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PresenceStack({ taskId }) {
+  const others = usePresence(taskId);
+  if (!others.length) return null;
+  return (
+    <div className="presence-stack" title={`Also viewing: ${others.map((p) => p.displayName || p.userId).join(', ')}`}>
+      {others.slice(0, 4).map((p, i) => (
+        p.photoURL
+          ? <img key={p.id} src={p.photoURL} alt="" className="presence-avatar" style={{ zIndex: 10 - i }} />
+          : <div key={p.id} className="presence-avatar fallback" style={{ zIndex: 10 - i }}>
+              {(p.displayName || p.userId)[0]?.toUpperCase() || '?'}
+            </div>
+      ))}
+      {others.length > 4 && (
+        <div className="presence-avatar fallback presence-more">+{others.length - 4}</div>
+      )}
     </div>
   );
 }

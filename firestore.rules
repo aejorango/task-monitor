@@ -14,22 +14,52 @@ service cloud.firestore {
           && request.auth.uid == request.resource.data.userId;
     }
 
+    // True if the requester appears in the project's members array. Used for
+    // ACL-aware reads on projects + cascading to tasks/activities/comments
+    // that reference projectId.
+    function isProjectMember(projectId) {
+      return request.auth != null
+          && projectId is string
+          && exists(/databases/$(database)/documents/projects/$(projectId))
+          && request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.members;
+    }
+    function hasProjectRole(projectId, role) {
+      return request.auth != null
+          && projectId is string
+          && exists(/databases/$(database)/documents/projects/$(projectId))
+          && get(/databases/$(database)/documents/projects/$(projectId)).data.acl[request.auth.uid] == role;
+    }
+    function canEditProject(projectId) {
+      return hasProjectRole(projectId, 'admin') || hasProjectRole(projectId, 'editor');
+    }
+
     match /tasks/{taskId} {
-      allow read:   if isOwner(resource);
+      allow read:   if isOwner(resource) || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
       allow create: if isCreatingOwn();
-      allow update, delete: if isOwner(resource);
+      allow update: if isOwner(resource) || (resource.data.projectId is string && canEditProject(resource.data.projectId));
+      allow delete: if isOwner(resource) || (resource.data.projectId is string && hasProjectRole(resource.data.projectId, 'admin'));
     }
 
     match /activities/{activityId} {
-      allow read:   if isOwner(resource);
+      allow read:   if isOwner(resource) || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
       allow create: if isCreatingOwn();
-      allow update, delete: if isOwner(resource);
+      allow update: if isOwner(resource) || (resource.data.projectId is string && canEditProject(resource.data.projectId));
+      allow delete: if isOwner(resource) || (resource.data.projectId is string && hasProjectRole(resource.data.projectId, 'admin'));
     }
 
     match /projects/{projectId} {
-      allow read:   if isOwner(resource);
+      // Owners always have full access. Shared members read it via membership.
+      allow read:   if isOwner(resource) || (request.auth != null && request.auth.uid in resource.data.members);
       allow create: if isCreatingOwn();
-      allow update, delete: if isOwner(resource);
+      // Updates: owner, admins, or editors (but only admins can modify acl/members)
+      allow update: if isOwner(resource) ||
+                       (request.auth != null
+                        && request.auth.uid in resource.data.acl
+                        && (resource.data.acl[request.auth.uid] == 'admin'
+                            || (resource.data.acl[request.auth.uid] == 'editor'
+                                && request.resource.data.acl == resource.data.acl
+                                && request.resource.data.members == resource.data.members)));
+      allow delete: if isOwner(resource);
     }
 
     match /templates/{templateId} {
@@ -48,6 +78,15 @@ service cloud.firestore {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();
       allow update, delete: if isOwner(resource);
+    }
+
+    match /presence/{docId} {
+      // Anyone authenticated can read presence — used by collaborators to see
+      // who else is viewing a task. Writes restricted to the owner.
+      allow read:   if request.auth != null;
+      allow create: if isCreatingOwn();
+      allow update: if isOwner(resource);
+      allow delete: if isOwner(resource);
     }
 
     match /categories/{categoryId} {

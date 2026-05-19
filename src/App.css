@@ -2044,6 +2044,14 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--c-border);
   margin: 12px 0;
 }
+.markdown .mention {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-ink);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-size: 0.92em;
+}
 
 /* ─── File upload ─────────────────────────────────────────── */
 .file-upload {
@@ -2215,3 +2223,32 @@ a:hover { text-decoration: underline; }
 }
 .saved-view-link:hover .saved-view-delete { opacity: 1; }
 .saved-view-link .saved-view-delete:hover { color: var(--c-danger); }
+
+/* ─── Presence avatar stack ───────────────────────────────── */
+.presence-stack {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+}
+.presence-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--c-surface);
+  object-fit: cover;
+  margin-left: -8px;
+  background: var(--c-surface-2);
+  position: relative;
+}
+.presence-avatar.fallback {
+  display: grid;
+  place-items: center;
+  background: var(--c-accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+.presence-avatar.presence-more {
+  background: var(--c-surface-3);
+  color: var(--c-text-2);
+}

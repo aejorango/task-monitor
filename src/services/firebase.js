@@ -18,6 +18,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -171,6 +172,7 @@ const projectsRef = collection(db, 'projects');
 const templatesRef = collection(db, 'templates');
 const taskCommentsRef = collection(db, 'taskComments');
 const savedViewsRef = collection(db, 'savedViews');
+const presenceRef   = collection(db, 'presence');
 
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
@@ -191,11 +193,38 @@ export async function addProject(userId, project) {
     description: project.description || '',
     color: project.color || PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
     phases,
+    // v8 ACL — owner gets admin by default. Used to share projects later.
+    acl: { [userId]: 'admin' },
+    // Memberships, denormalized for query efficiency:
+    //   members: [uid, ...]  // anyone with any role
+    members: [userId],
     archived: false,
     deleted: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+// Add or update a member's role on a project. role: 'viewer' | 'editor' | 'admin'.
+// Caller (UI) is responsible for resolving uid from email — done via a future
+// Cloud Function. For now the UI accepts a raw UID input.
+export async function setProjectMember(projectId, targetUid, role) {
+  const projRef = doc(db, 'projects', projectId);
+  // Read current doc to merge ACL safely. updateDoc dot-paths into a map
+  // would also work but reading + setting is clearer here.
+  const snap = await getDocs(query(projectsRef, where('__name__', '==', projectId)));
+  const cur = snap.docs[0]?.data();
+  if (!cur) throw new Error('Project not found');
+  const acl = { ...(cur.acl || {}) };
+  const members = new Set(cur.members || []);
+  if (role) {
+    acl[targetUid] = role;
+    members.add(targetUid);
+  } else {
+    delete acl[targetUid];
+    members.delete(targetUid);
+  }
+  await updateDoc(projRef, { acl, members: [...members], updatedAt: serverTimestamp() });
 }
 
 export async function updateProject(projectId, updates) {
@@ -213,22 +242,40 @@ export async function softDeleteProject(projectId) {
   return await updateProject(projectId, { deleted: true });
 }
 
+// Subscribes to both owned projects AND shared projects (where the current
+// user appears in the `members` array). Two listeners are merged into a
+// single callback. Older projects without a `members` field are picked up
+// by the owner query.
 export function subscribeToProjects(userId, callback) {
-  const q = query(
+  const ownedQ = query(
     projectsRef,
     where('userId', '==', userId),
     where('deleted', '==', false),
   );
-  return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    // Sort client-side to avoid composite index requirement.
-    data.sort((a, b) => {
+  const sharedQ = query(
+    projectsRef,
+    where('members', 'array-contains', userId),
+    where('deleted', '==', false),
+  );
+
+  let owned  = [];
+  let shared = [];
+  const emit = () => {
+    // Merge by id, then sort by createdAt desc
+    const map = {};
+    [...owned, ...shared].forEach((p) => { map[p.id] = p; });
+    const merged = Object.values(map);
+    merged.sort((a, b) => {
       const at = a.createdAt?.toMillis?.() ?? 0;
       const bt = b.createdAt?.toMillis?.() ?? 0;
       return bt - at;
     });
-    callback(data);
-  });
+    callback(merged);
+  };
+
+  const unsub1 = onSnapshot(ownedQ,  (snap) => { owned  = snap.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); });
+  const unsub2 = onSnapshot(sharedQ, (snap) => { shared = snap.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); });
+  return () => { unsub1(); unsub2(); };
 }
 
 // One-time migration: seed default projects from the legacy categories
@@ -898,5 +945,41 @@ export function subscribeToSavedViews(userId, callback) {
       return at - bt;
     });
     callback(data);
+  });
+}
+
+// ─── PRESENCE ───────────────────────────────────────────────────────────────
+// Lightweight presence: while a user is viewing a task, ping presence/{taskId}/{uid}
+// every ~20s. Listeners filter heartbeats older than 60s.
+// Doc shape:
+//   presence/{compositeId} = { taskId, userId, displayName, photoURL, lastSeen }
+
+export async function pingPresence({ taskId, userId, displayName, photoURL }) {
+  const docId = `${taskId}__${userId}`;
+  return setDoc(doc(db, 'presence', docId), {
+    taskId,
+    userId,
+    displayName: displayName || '',
+    photoURL:    photoURL    || '',
+    lastSeen:    serverTimestamp(),
+  });
+}
+
+export async function clearPresence({ taskId, userId }) {
+  const docId = `${taskId}__${userId}`;
+  return deleteDoc(doc(db, 'presence', docId));
+}
+
+export function subscribeToPresence(taskId, callback) {
+  const q = query(presenceRef, where('taskId', '==', taskId));
+  return onSnapshot(q, (snap) => {
+    const now = Date.now();
+    const fresh = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((p) => {
+        const ts = p.lastSeen?.toMillis?.() ?? 0;
+        return now - ts < 60_000;  // 60s freshness window
+      });
+    callback(fresh);
   });
 }

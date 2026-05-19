@@ -36,6 +36,11 @@ function renderInline(s) {
       ? `<a href="${url}" target="_blank" rel="noreferrer noopener">${text}</a>`
       : escapeHtml(text);
   });
+  // @-mentions: render the token as a pill. Matches @ followed by 4+ word
+  // characters (sufficient to avoid colliding with email addresses, which
+  // would be matched by escapeHtml-preserved & here is irrelevant since
+  // the @ would be preceded by alphanum, not whitespace/start-of-string).
+  out = out.replace(/(^|[\s(])@([\w.\-]{3,40})/g, '$1<span class="mention">@$2</span>');
   // bold
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   // italic (single asterisks, not preceded/followed by another *)

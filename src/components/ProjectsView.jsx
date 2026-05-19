@@ -11,6 +11,7 @@ import {
   addTemplate,
   softDeleteTemplate,
   projectAsTemplatePayload,
+  setProjectMember,
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
@@ -155,6 +156,97 @@ export default function ProjectsView() {
         />
       )}
     </>
+  );
+}
+
+function ProjectSharing({ project }) {
+  const [uid, setUid]   = useState('');
+  const [role, setRole] = useState('viewer');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const acl     = project.acl || {};
+  const ownerId = project.userId;
+  const members = Object.keys(acl);
+
+  const invite = async () => {
+    if (!uid.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await setProjectMember(project.id, uid.trim(), role);
+      setUid('');
+    } catch (err) {
+      console.error(err);
+      setError(err.message || String(err));
+    } finally { setBusy(false); }
+  };
+
+  const removeMember = async (memberUid) => {
+    if (memberUid === ownerId) { alert('Cannot remove the project owner.'); return; }
+    if (!confirm('Remove this member from the project?')) return;
+    try { await setProjectMember(project.id, memberUid, null); }
+    catch (err) { console.error(err); alert(err.message); }
+  };
+
+  const changeRole = async (memberUid, nextRole) => {
+    if (memberUid === ownerId) return;
+    try { await setProjectMember(project.id, memberUid, nextRole); }
+    catch (err) { console.error(err); alert(err.message); }
+  };
+
+  return (
+    <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
+      <label className="label">Sharing</label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Add a member by their Firebase UID. (Email-based invites need a Cloud Function — see roadmap; for now you can find a teammate's UID in their Settings → Account → session ID.)
+      </p>
+
+      <ul className="dep-list" style={{ marginBottom: 8 }}>
+        {members.map((memberUid) => (
+          <li key={memberUid} className="dep-item">
+            <span className={`badge badge-soft-${memberUid === ownerId ? 'info' : 'muted'}`}>
+              {memberUid === ownerId ? 'owner' : acl[memberUid]}
+            </span>
+            <span className="dep-title mono small">{memberUid}</span>
+            {memberUid !== ownerId && (
+              <>
+                <select
+                  className="select select-sm"
+                  value={acl[memberUid]}
+                  onChange={(e) => changeRole(memberUid, e.target.value)}
+                  style={{ width: 90 }}
+                >
+                  <option value="viewer">viewer</option>
+                  <option value="editor">editor</option>
+                  <option value="admin">admin</option>
+                </select>
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeMember(memberUid)}>✕</button>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
+        <input
+          className="input input-sm"
+          value={uid}
+          onChange={(e) => setUid(e.target.value)}
+          placeholder="Firebase UID"
+        />
+        <select className="select select-sm" value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="viewer">viewer</option>
+          <option value="editor">editor</option>
+          <option value="admin">admin</option>
+        </select>
+        <button type="button" className="btn btn-primary btn-sm" onClick={invite} disabled={busy || !uid.trim()}>
+          {busy ? 'Adding…' : 'Add'}
+        </button>
+      </div>
+      {error && (
+        <p className="auth-error-msg" style={{ marginTop: 6 }}>{error}</p>
+      )}
+    </div>
   );
 }
 
@@ -309,6 +401,10 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
             <button type="button" className="btn btn-sm" onClick={addPhase} style={{ alignSelf: 'flex-start', marginTop: 4 }}>+ Add phase</button>
           </div>
         </div>
+
+        {!isNew && (
+          <ProjectSharing project={project} />
+        )}
 
         <div className="modal-actions">
           {!isNew && (
