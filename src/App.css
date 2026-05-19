@@ -1,0 +1,397 @@
+/* src/App.css */
+:root {
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --ink: #1a1a1a;
+  --muted: #6b6b6b;
+  --border: #e5e5e0;
+  --accent: #2d3a4a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  letter-spacing: -0.02em;
+}
+
+.muted { color: var(--muted); }
+
+/* Form */
+.task-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.task-form input, .task-form select {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--bg);
+}
+
+.task-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.task-form button {
+  padding: 0.7rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.task-form button:disabled { opacity: 0.5; }
+
+/* Filters */
+.filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.chip.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Board */
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 720px) {
+  .board { grid-template-columns: 1fr; }
+  .task-form-row { grid-template-columns: 1fr; }
+}
+
+.column {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  min-height: 200px;
+}
+
+.column h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.count {
+  background: var(--bg);
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  margin-left: 0.3rem;
+}
+
+/* Task card */
+.task-card {
+  display: flex;
+  background: var(--bg);
+  border-radius: 8px;
+  margin-bottom: 0.6rem;
+  overflow: hidden;
+}
+
+.priority-bar {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.task-content { padding: 0.7rem 0.9rem; flex: 1; }
+
+.task-title {
+  margin: 0 0 0.4rem;
+  font-weight: 500;
+}
+
+.task-meta {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.tag {
+  background: var(--surface);
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.task-actions { display: flex; gap: 0.4rem; }
+
+.task-actions button {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.task-actions .danger { color: #c0392b; }
+/* Append to src/App.css — adds styles for the new schema features */
+
+/* Overdue + status badges */
+.task-card.overdue {
+  border-left: 3px solid #e63946;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.badge.overdue { background: #ffebee; color: #c62828; }
+.badge.good    { background: #e8f5e9; color: #2e7d32; }
+.badge.warn    { background: #fff8e1; color: #f57f17; }
+
+/* Plan/Actual date display */
+.dates {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+.date-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Counters strip */
+.counters {
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.small { font-size: 0.8rem; }
+
+/* Activity log inside task card */
+.activity-log {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+.activity-item {
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.8rem;
+}
+.activity-head strong { color: var(--ink); }
+.activity-comment {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.attachments {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+}
+.attachments a { color: var(--accent); text-decoration: none; }
+.attachments a:hover { text-decoration: underline; }
+
+.link-danger {
+  background: none;
+  border: none;
+  color: #c0392b;
+  cursor: pointer;
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+.modal {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal h3 { margin: 0 0 0.25rem; }
+.modal label {
+  display: block;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.modal input,
+.modal textarea {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--bg);
+}
+.modal textarea { resize: vertical; }
+
+.attach-block { margin: 0.75rem 0; }
+.attach-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.attach-row input,
+.attach-row button {
+  padding: 0.5rem;
+  font-size: 0.85rem;
+}
+.attach-row button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.modal-actions button {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.modal-actions .primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── New additions for plan dates form + session pill ── */
+.task-form-row.primary {
+  grid-template-columns: 2fr 1fr;
+}
+
+.date-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.date-input input {
+  margin: 0;
+}
+
+.task-form textarea {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--bg);
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+
+.link-btn:hover {
+  color: var(--ink);
+}
+
+.session-pill {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  margin-left: 0.5rem;
+  font-family: ui-monospace, monospace;
+}
+
+.session-pill.warn {
+  background: #fff8e1;
+  color: #f57f17;
+}

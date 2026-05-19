@@ -1,0 +1,47 @@
+// Firestore Security Rules
+// Paste this entire file into: Firebase Console → Firestore Database → Rules tab → Publish
+//
+// What it does:
+// - Locks every document to its owner (matched by userId field)
+// - Requires anonymous (or any) authentication for all reads and writes
+// - Allows creating only documents you own
+// - Supports the three root collections: tasks, activities, categories
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(resource) {
+      return request.auth != null
+          && request.auth.uid == resource.data.userId;
+    }
+
+    function isCreatingOwn() {
+      return request.auth != null
+          && request.auth.uid == request.resource.data.userId;
+    }
+
+    match /tasks/{taskId} {
+      allow read:   if isOwner(resource);
+      allow create: if isCreatingOwn();
+      allow update, delete: if isOwner(resource);
+    }
+
+    match /activities/{activityId} {
+      allow read:   if isOwner(resource);
+      allow create: if isCreatingOwn();
+      allow update, delete: if isOwner(resource);
+    }
+
+    match /categories/{categoryId} {
+      allow read:   if isOwner(resource);
+      allow create: if isCreatingOwn();
+      allow update, delete: if isOwner(resource);
+    }
+
+    // Future-proofing: explicit denial for anything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
