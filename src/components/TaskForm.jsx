@@ -1,8 +1,9 @@
 // src/components/TaskForm.jsx — quick-add card with expandable details.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { addTask } from '../services/firebase';
 import { useAuth, useTemplates } from '../hooks/useTasks';
+import { parseQuickAdd } from '../services/nlpQuickAdd';
 
 export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const { userId, ready } = useAuth();
@@ -52,26 +53,36 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
 
   const selectedProject = projects.find((p) => p.id === projectId);
 
+  // Live-parse the title field. The structured tokens (date, priority, tag,
+  // requestedBy) are shown as chips and applied on submit.
+  const parsed = useMemo(() => parseQuickAdd(title), [title]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !userId) return;
 
     setSubmitting(true);
     try {
+      // Merge parsed NL tokens with form values. Explicit form values win.
+      const mergedTags = [...new Set([...(tags || []), ...(parsed.tags || [])])];
+      const mergedRequestedBy = requestedBy.trim() || parsed.requestedBy || '';
+      const mergedPriority = priority || parsed.priority || 'medium';
+      const mergedPlanEnd  = planEnd   || parsed.plan?.endDate || null;
+
       await addTask(userId, {
-        title: title.trim(),
+        title: (parsed.title || title).trim(),
         description: description.trim(),
         category: selectedProject?.name || 'Personal',
         projectId: projectId || null,
         phaseId: phaseId || null,
-        priority,
-        requestedBy: requestedBy.trim(),
-        tags,
+        priority: mergedPriority,
+        requestedBy: mergedRequestedBy,
+        tags: mergedTags,
         subtasks,
         recurrence,
         plan: {
           startDate: planStart || null,
-          endDate:   planEnd   || null,
+          endDate:   mergedPlanEnd,
         },
       });
       setTitle('');
@@ -98,7 +109,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
           className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="What needs doing?"
+          placeholder="What needs doing?  (try: draft proposal next Friday !urgent #client @mark)"
           required
           disabled={!ready}
         />
@@ -112,6 +123,28 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
           {submitting ? 'Saving…' : 'Add task'}
         </button>
       </div>
+
+      {parsed.tokens?.length > 0 && (
+        <div className="nlp-preview">
+          <span className="muted small">Detected:</span>
+          {parsed.tokens.map((t, i) => (
+            <span key={i} className={`badge badge-soft-${
+              t.kind === 'priority' ? (t.value === 'high' ? 'danger' : t.value === 'low' ? 'success' : 'warn') :
+              t.kind === 'date'        ? 'info'    :
+              t.kind === 'tag'         ? 'info'    :
+              t.kind === 'requestedBy' ? 'success' : 'muted'
+            }`}>
+              {t.kind === 'priority'    && `!${t.value}`}
+              {t.kind === 'date'        && `📅 ${t.value}`}
+              {t.kind === 'tag'         && `#${t.value}`}
+              {t.kind === 'requestedBy' && `@${t.value}`}
+            </span>
+          ))}
+          <span className="muted small" style={{ marginLeft: 4 }}>
+            → title will be: <strong>{parsed.title || '(empty)'}</strong>
+          </span>
+        </div>
+      )}
 
       {expanded && (
         <>

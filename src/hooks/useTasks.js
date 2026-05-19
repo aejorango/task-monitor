@@ -10,6 +10,7 @@ import {
   subscribeToAllActivities,
   subscribeToProjects,
   subscribeToTemplates,
+  subscribeToTaskComments,
   migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
@@ -147,6 +148,28 @@ export function useAllActivities() {
 }
 
 // ─── useRecentActivities ────────────────────────────────────────────────────
+
+// ─── useTaskComments ────────────────────────────────────────────────────────
+
+export function useTaskComments(taskId) {
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!taskId) {
+      setComments([]);
+      setLoading(false);
+      return;
+    }
+    const unsub = subscribeToTaskComments(taskId, (data) => {
+      setComments(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [taskId]);
+
+  return { comments, loading };
+}
 
 // ─── useTemplates ───────────────────────────────────────────────────────────
 

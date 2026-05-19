@@ -114,3 +114,67 @@ Generate ${count} tasks that, together, would deliver this project. Order them l
     phase: t.phase ? String(t.phase).trim() : '',
   }));
 }
+
+// Generate subtask suggestions for a single task. Returns array of {id, text}.
+export async function generateSubtasks({ task, projectName, count = 6 }) {
+  const system = `You are a project-management assistant. You decompose a task into 4-10 concrete subtasks (checklist items).
+Respond ONLY with a JSON array of strings. Each string is one subtask, 4-80 characters, written in imperative voice (verb-first).
+No markdown, no commentary, no numbering. The response must start with [ and end with ].`;
+
+  const user = `Project: ${projectName || '(none)'}
+Task title: ${task.title}
+Task description: ${task.description || '(none)'}
+Priority: ${task.priority || 'medium'}
+${task.requestedBy ? `Requested by: ${task.requestedBy}` : ''}
+${task.tags?.length ? `Tags: ${task.tags.join(', ')}` : ''}
+
+Suggest ${count} subtasks that, completed in order, would deliver this task.`;
+
+  const text = await callClaude({ system, user, maxTokens: 800 });
+  const first = text.indexOf('[');
+  const last  = text.lastIndexOf(']');
+  if (first === -1 || last === -1) throw new Error(`No JSON array in response:\n${text.slice(0, 300)}`);
+  const arr = JSON.parse(text.slice(first, last + 1));
+  if (!Array.isArray(arr)) throw new Error('Model did not return an array.');
+  // Use a simple stable-enough id so React keys are unique.
+  return arr.map((s, i) => ({
+    id: `${Date.now()}-${i}`,
+    text: String(s).slice(0, 200).trim(),
+    done: false,
+  })).filter((s) => s.text);
+}
+
+// Generate a Claude-ready prompt that the user can paste into a fresh Claude
+// chat (or claude.ai project) to actually produce the deliverable for this
+// task. Returns plain text — NOT JSON — so the user can copy it directly.
+export async function generateClaudePrompt({ task, projectName, projectDescription, subtasks = [] }) {
+  const system = `You write prompts for someone else to give to Claude. Your job is to produce a single, well-structured prompt that, when pasted into Claude, will produce the actual deliverable described.
+
+Output ONLY the prompt itself (no preamble like "Here is the prompt:" and no markdown code fences). The prompt should:
+- Start with a one-sentence role assignment for Claude ("You are…")
+- State the deliverable clearly with concrete output requirements (format, length, sections)
+- Include all the context Claude needs from the task metadata
+- End with a brief checklist Claude can use to self-verify
+
+Keep the prompt under 400 words. Use plain text with light Markdown headings (## only). Do not include any wrapper or commentary outside the prompt.`;
+
+  const subtaskBlock = subtasks.length
+    ? `\nKnown subtasks (the steps to deliver this):\n${subtasks.map((s, i) => `${i + 1}. ${s.text}${s.done ? ' (done)' : ''}`).join('\n')}`
+    : '';
+
+  const user = `I need a prompt that I can paste into Claude to get the deliverable for this task.
+
+Task: ${task.title}
+${task.description ? `Description: ${task.description}` : ''}
+Project: ${projectName || '(no project)'}
+${projectDescription ? `Project context: ${projectDescription}` : ''}
+${task.requestedBy ? `Requested by: ${task.requestedBy}` : ''}
+${task.tags?.length ? `Tags: ${task.tags.join(', ')}` : ''}
+${task.plan?.endDate ? `Due: ${task.plan.endDate}` : ''}
+${subtaskBlock}
+
+Now write the prompt I'll paste into Claude. The prompt should make it unambiguous what deliverable Claude must produce.`;
+
+  const text = await callClaude({ system, user, maxTokens: 1024 });
+  return text.trim();
+}

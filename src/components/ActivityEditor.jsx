@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { editActivity } from '../services/firebase';
+import FileUpload from './FileUpload';
 
 const COMPLETION_OPTIONS = [
   { value: 'not-started', label: 'Not started' },
@@ -100,22 +101,13 @@ export default function ActivityEditor({ activity, onClose }) {
         </div>
 
         <div className="field">
-          <label className="label">Attachments</label>
-          <div className="attach-row">
+          <label className="label">Files & links</label>
+          <FileUpload taskId={activity.taskId} attachments={attachments} onChange={setAttachments} />
+          <div className="attach-row" style={{ marginTop: 8 }}>
             <input className="input input-sm" value={attachName} onChange={(e) => setAttachName(e.target.value)} placeholder="Label" />
-            <input type="url" className="input input-sm" value={attachUrl} onChange={(e) => setAttachUrl(e.target.value)} placeholder="https://…" />
-            <button type="button" className="btn btn-sm" onClick={addAttachment}>Add</button>
+            <input type="url" className="input input-sm" value={attachUrl} onChange={(e) => setAttachUrl(e.target.value)} placeholder="…or paste a link" />
+            <button type="button" className="btn btn-sm" onClick={addAttachment}>+ Link</button>
           </div>
-          {attachments.length > 0 && (
-            <ul className="attachments" style={{ marginTop: 8 }}>
-              {attachments.map((a, i) => (
-                <li key={i}>
-                  📎 <a href={a.url} target="_blank" rel="noreferrer">{a.name}</a>{' '}
-                  <button className="link-danger" onClick={() => setAttachments(attachments.filter((_, idx) => idx !== i))}>✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
 
         <div className="modal-actions">

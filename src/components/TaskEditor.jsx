@@ -2,7 +2,15 @@
 
 import { useState, useMemo } from 'react';
 import { updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload } from '../services/firebase';
-import { useTasks, useAuth } from '../hooks/useTasks';
+import { useTasks, useAuth, useTaskComments } from '../hooks/useTasks';
+import { MarkdownEditor } from './Markdown';
+import Markdown from './Markdown';
+import {
+  addTaskComment,
+  updateTaskComment,
+  softDeleteTaskComment,
+} from '../services/firebase';
+import TaskAiPanel from './TaskAiPanel';
 
 export default function TaskEditor({ task, projects, onClose }) {
   const { tasks: allTasks } = useTasks();
@@ -153,6 +161,12 @@ export default function TaskEditor({ task, projects, onClose }) {
           <button className={`tab ${tab === 'deps' ? 'active' : ''}`} onClick={() => setTab('deps')}>
             Dependencies {dependsOn.length > 0 && <span className="tab-count">{dependsOn.length}</span>}
           </button>
+          <button className={`tab ${tab === 'comments' ? 'active' : ''}`} onClick={() => setTab('comments')}>
+            Comments
+          </button>
+          <button className={`tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>
+            ✨ AI
+          </button>
         </div>
 
         {tab === 'details' && (
@@ -163,7 +177,7 @@ export default function TaskEditor({ task, projects, onClose }) {
             </div>
             <div className="field">
               <label className="label">Description</label>
-              <textarea className="textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+              <MarkdownEditor value={description} onChange={setDescription} rows={4} placeholder="What is this task about?" />
             </div>
             <div className="field-row">
               <div className="field">
@@ -323,6 +337,22 @@ export default function TaskEditor({ task, projects, onClose }) {
           </div>
         )}
 
+        {tab === 'comments' && (
+          <CommentsThread taskId={task.id} userId={userId} />
+        )}
+
+        {tab === 'ai' && (
+          <TaskAiPanel
+            task={{ ...task, title, description, priority, tags, requestedBy }}
+            project={selectedProject}
+            subtasks={subtasks}
+            onAddSubtasks={(newSubs) => {
+              setSubtasks([...subtasks, ...newSubs]);
+              setTab('subtasks');
+            }}
+          />
+        )}
+
         <div className="modal-actions">
           <button className="btn btn-danger" onClick={remove} disabled={saving}>Delete</button>
           <button className="btn" onClick={saveAsTemplate} disabled={saving || !title.trim()}>Save as template</button>
@@ -330,6 +360,91 @@ export default function TaskEditor({ task, projects, onClose }) {
           <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving || !title.trim()}>
             {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommentsThread({ taskId, userId }) {
+  const { comments, loading } = useTaskComments(taskId);
+  const [body, setBody] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editingBody, setEditingBody] = useState('');
+
+  const post = async () => {
+    const text = body.trim();
+    if (!text) return;
+    setPosting(true);
+    try {
+      await addTaskComment(userId, taskId, text);
+      setBody('');
+    } catch (err) {
+      console.error(err);
+      alert('Could not post comment. Check console.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const saveEdit = async (commentId) => {
+    const text = editingBody.trim();
+    if (!text) { setEditingId(null); return; }
+    try { await updateTaskComment(commentId, text); }
+    catch (err) { console.error(err); alert('Could not save edit.'); }
+    setEditingId(null);
+  };
+
+  return (
+    <div className="comments-thread">
+      {loading ? (
+        <p className="muted small">Loading comments…</p>
+      ) : comments.length === 0 ? (
+        <p className="muted small">No comments yet. Add the first one below — leave breadcrumbs for your future self.</p>
+      ) : (
+        <ul className="comments-list">
+          {comments.map((c) => {
+            const isEditing = editingId === c.id;
+            return (
+              <li key={c.id} className="comment-item">
+                <div className="comment-head">
+                  <span className="mono small muted">
+                    {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleString() : 'pending'}
+                  </span>
+                  {c.editedAt && <span className="muted small">(edited)</span>}
+                  <div style={{ flex: 1 }} />
+                  {!isEditing && (
+                    <>
+                      <button className="btn btn-sm btn-ghost" onClick={() => { setEditingId(c.id); setEditingBody(c.body); }}>✎</button>
+                      <button className="btn btn-sm btn-ghost link-danger"
+                        onClick={() => { if (confirm('Delete this comment?')) softDeleteTaskComment(c.id); }}>✕</button>
+                    </>
+                  )}
+                </div>
+                {isEditing ? (
+                  <>
+                    <MarkdownEditor value={editingBody} onChange={setEditingBody} rows={2} />
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
+                      <button className="btn btn-sm btn-primary" onClick={() => saveEdit(c.id)}>Save</button>
+                    </div>
+                  </>
+                ) : (
+                  <Markdown src={c.body} />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="comment-composer">
+        <MarkdownEditor value={body} onChange={setBody} rows={3} placeholder="Leave a note… Markdown supported." />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <button className="btn btn-primary" onClick={post} disabled={posting || !body.trim()}>
+            {posting ? 'Posting…' : 'Comment'}
           </button>
         </div>
       </div>

@@ -1,0 +1,19 @@
+// Firebase Storage rules — paste into Firebase Console → Storage → Rules.
+// Same model as Firestore: only the owner (matched by path prefix) can read/write.
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Per-user files: users/{uid}/...
+    // The first path segment must match the requester's auth uid.
+    match /users/{uid}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Nothing else is accessible.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

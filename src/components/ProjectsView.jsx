@@ -13,6 +13,7 @@ import {
   projectAsTemplatePayload,
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
+import { MarkdownEditor } from './Markdown';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -272,7 +273,7 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
 
         <div className="field">
           <label className="label">Description</label>
-          <textarea className="textarea" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional context for this project" />
+          <MarkdownEditor value={description} onChange={setDescription} rows={3} placeholder="What is this project about? Markdown supported." />
         </div>
 
         <div className="field">

@@ -12,7 +12,9 @@ import {
   onAuthStateChanged,
 } from 'firebase/auth';
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
   addDoc,
@@ -28,6 +30,13 @@ import {
   writeBatch,
   increment,
 } from 'firebase/firestore';
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from 'firebase/storage';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -41,8 +50,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Enable IndexedDB-backed offline persistence with multi-tab sync. Falls back
+// to memory if IndexedDB is unavailable (Safari private mode, etc.).
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 // Bootstrap auth: if no user is signed in after Firebase initializes, kick off
 // anonymous auth. If a real user is signed in (Google), don't touch it.
@@ -155,6 +169,7 @@ const tasksRef = collection(db, 'tasks');
 const activitiesRef = collection(db, 'activities');
 const projectsRef = collection(db, 'projects');
 const templatesRef = collection(db, 'templates');
+const taskCommentsRef = collection(db, 'taskComments');
 
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
@@ -708,3 +723,126 @@ export function projectAsTemplatePayload(project) {
   };
 }
 
+// ─── STORAGE (file uploads) ─────────────────────────────────────────────────
+
+// Compress an image File via canvas. Returns a new Blob if compression helps,
+// or the original file. Non-image files are returned unchanged.
+export async function maybeCompressImage(file, { maxEdge = 1600, quality = 0.85 } = {}) {
+  if (!file.type?.startsWith('image/')) return file;
+  // Skip SVG (already vector) and GIFs (animation would be flattened)
+  if (file.type === 'image/svg+xml' || file.type === 'image/gif') return file;
+
+  const img = await new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const i = new Image();
+    i.onload  = () => { URL.revokeObjectURL(url); res(i); };
+    i.onerror = (e) => { URL.revokeObjectURL(url); rej(e); };
+    i.src = url;
+  });
+
+  const { width, height } = img;
+  if (Math.max(width, height) <= maxEdge && file.size < 500_000) return file;
+
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  const w = Math.round(width * scale);
+  const h = Math.round(height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+  if (!blob) return file;
+  // Only swap if compression actually saved bytes
+  return blob.size < file.size ? blob : file;
+}
+
+// Upload a file to Firebase Storage under users/{uid}/{taskId}/{filename}.
+// Returns { name, url, type, size, path } shaped to fit our `attachments` array.
+// `onProgress(fraction)` is called as the upload progresses.
+export async function uploadFile({ userId, taskId, file, filename, onProgress }) {
+  const base = `users/${userId}/${taskId || 'general'}`;
+  const safeName = (filename || file.name || 'file').replace(/[^\w.\-]/g, '_');
+  const finalName = `${Date.now()}-${safeName}`;
+  const path = `${base}/${finalName}`;
+
+  const compressed = await maybeCompressImage(file);
+  const ref = storageRef(storage, path);
+  const task = uploadBytesResumable(ref, compressed, {
+    contentType: file.type || 'application/octet-stream',
+  });
+
+  return new Promise((resolve, reject) => {
+    task.on('state_changed',
+      (snap) => {
+        if (onProgress) onProgress(snap.bytesTransferred / snap.totalBytes);
+      },
+      (err) => reject(err),
+      async () => {
+        try {
+          const url = await getDownloadURL(task.snapshot.ref);
+          resolve({
+            name: file.name || safeName,
+            url,
+            type: file.type?.startsWith('image/') ? 'image' : 'file',
+            size: compressed.size ?? file.size,
+            path,
+          });
+        } catch (e) { reject(e); }
+      });
+  });
+}
+
+// Best-effort delete of a stored file. Won't throw if the object is missing.
+export async function deleteUpload(path) {
+  if (!path) return;
+  try { await deleteObject(storageRef(storage, path)); }
+  catch (err) {
+    // object-not-found is fine; warn for anything else
+    if (err?.code !== 'storage/object-not-found') console.warn('deleteUpload failed:', err);
+  }
+}
+
+
+// ─── TASK COMMENTS ──────────────────────────────────────────────────────────
+// Discussion thread per task, separate from activity log.
+
+export async function addTaskComment(userId, taskId, body) {
+  return await addDoc(taskCommentsRef, {
+    userId,
+    taskId,
+    body: String(body || ''),
+    createdAt: serverTimestamp(),
+    deleted: false,
+  });
+}
+
+export async function updateTaskComment(commentId, body) {
+  return await updateDoc(doc(db, 'taskComments', commentId), {
+    body: String(body || ''),
+    editedAt: serverTimestamp(),
+  });
+}
+
+export async function softDeleteTaskComment(commentId) {
+  return await updateDoc(doc(db, 'taskComments', commentId), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+  });
+}
+
+export function subscribeToTaskComments(taskId, callback) {
+  const q = query(
+    taskCommentsRef,
+    where('taskId', '==', taskId),
+    where('deleted', '==', false),
+  );
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => {
+      const at = a.createdAt?.toMillis?.() ?? 0;
+      const bt = b.createdAt?.toMillis?.() ?? 0;
+      return at - bt;  // chronological
+    });
+    callback(data);
+  });
+}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTasks, useAllActivities, useProjects } from '../hooks/useTasks';
+import { useOnline } from '../hooks/useOnline';
 import { auth } from '../services/firebase';
 
 const VIEWS = [
@@ -39,6 +40,7 @@ export function useRoute() {
 }
 
 export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget }) {
+  const online = useOnline();
   const current = VIEWS.find((v) => v.id === route.view) || VIEWS[0];
 
   return (
@@ -76,6 +78,11 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           onChange={(projectFilter) => navigate({ projectFilter })}
         />
         <div className="topbar-spacer" />
+        {!online && (
+          <span className="badge badge-soft-warn" title="You're offline. Changes will sync when you reconnect.">
+            ⚡ Offline
+          </span>
+        )}
         {timerWidget}
         <GlobalSearch projects={projects} navigate={navigate} />
       </header>
