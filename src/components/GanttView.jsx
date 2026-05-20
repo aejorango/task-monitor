@@ -7,6 +7,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
 import { todayLocal, updateTask, addTask } from '../services/firebase';
+import TaskActivitiesModal from './TaskActivitiesModal';
+import TaskEditor from './TaskEditor';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -39,10 +41,12 @@ function fmtShort(d, zoomId) {
 }
 
 export default function GanttView({ projectFilter }) {
-  const { tasks, loading } = useTasks();
+  const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const [zoom, setZoom] = useState('day');
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [viewingTask, setViewingTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
 
   const rows = useMemo(() => {
@@ -103,37 +107,70 @@ export default function GanttView({ projectFilter }) {
     );
   }
 
-  const totalWidth = range.total * zoomConf.dayWidth;
-  const phaseWidth = 120;
-  const taskWidth  = 240;
-  const labelWidth = phaseWidth + taskWidth;
-  const rowHeight  = 40;
-  const headerHeight = 33;
+  const totalWidth   = range.total * zoomConf.dayWidth;
+  const phaseWidth   = 120;
+  const taskWidth    = 240;
+  const labelWidth   = phaseWidth + taskWidth;
+  const rowHeight    = 40;       // CSS .gantt-row height
+  const groupHeight  = 32;       // CSS .gantt-row.group-header height
+  const headerHeight = 33;       // CSS .gantt-row.header height
 
-  // Index rows for arrow computation
-  const rowIndex = new Map();
-  rows.forEach((t, i) => rowIndex.set(t.id, i));
+  // Build a flat layout array: group headers + task rows, interleaved in
+  // render order. Each entry has { kind, top, height, projectId?, task? }.
+  // `top` is the Y offset from the start of the body (after the column header
+  // row). The SVG overlay starts at the body's top — i.e. headerHeight below
+  // the .gantt container — so arrow math just uses entry.top + height / 2.
+  const layout = [];
+  let cursorY = 0;
+  let lastProjectKey = '__none__';
+  rows.forEach((t) => {
+    const projKey = t.projectId || '__none__';
+    if (projKey !== lastProjectKey) {
+      layout.push({
+        kind: 'group',
+        top: cursorY,
+        height: groupHeight,
+        projectId: t.projectId || null,
+      });
+      cursorY += groupHeight;
+      lastProjectKey = projKey;
+    }
+    layout.push({
+      kind: 'task',
+      top: cursorY,
+      height: rowHeight,
+      task: t,
+    });
+    cursorY += rowHeight;
+  });
+  const bodyHeight = cursorY;
 
-  // Compute dependency arrows: from end of dep's plan bar to start of this task's plan bar.
-  // Coordinates are relative to the SVG which sits over the track area only (so x is in the
-  // task time-range coordinate space; y indexes rows including the header row).
+  // Index task rows for arrow Y computation.
+  const taskRowByTaskId = new Map();
+  layout.forEach((entry) => {
+    if (entry.kind === 'task') taskRowByTaskId.set(entry.task.id, entry);
+  });
+
+  // Compute dependency arrows: from end of dep's plan bar to start of this
+  // task's plan bar. Coordinates are relative to the SVG, which sits inside
+  // the .gantt container at top: headerHeight, left: labelWidth.
   const arrows = [];
   rows.forEach((t) => {
     const depIds = t.dependsOn || [];
     const myPlanStart = parseDate(t.plan?.startDate);
     if (!myPlanStart) return;
-    const myIdx = rowIndex.get(t.id);
-    const toX = diffDays(range.min, myPlanStart) * zoomConf.dayWidth;
-    const toY = headerHeight + myIdx * rowHeight + rowHeight / 2;
+    const myEntry = taskRowByTaskId.get(t.id);
+    if (!myEntry) return;
+    const toX = Math.round(diffDays(range.min, myPlanStart) * zoomConf.dayWidth);
+    const toY = Math.round(myEntry.top + myEntry.height / 2);
 
     depIds.forEach((depId) => {
-      const dep = rows.find((r) => r.id === depId);
-      if (!dep) return;  // dep not in current filter/view
-      const depPlanEnd = parseDate(dep.plan?.endDate);
+      const depEntry = taskRowByTaskId.get(depId);
+      if (!depEntry) return;
+      const depPlanEnd = parseDate(depEntry.task.plan?.endDate);
       if (!depPlanEnd) return;
-      const depIdx = rowIndex.get(depId);
-      const fromX = (diffDays(range.min, depPlanEnd) + 1) * zoomConf.dayWidth;
-      const fromY = headerHeight + depIdx * rowHeight + rowHeight / 2;
+      const fromX = Math.round((diffDays(range.min, depPlanEnd) + 1) * zoomConf.dayWidth);
+      const fromY = Math.round(depEntry.top + depEntry.height / 2);
       arrows.push({ id: `${depId}->${t.id}`, fromX, fromY, toX, toY });
     });
   });
@@ -164,31 +201,49 @@ export default function GanttView({ projectFilter }) {
           </div>
         </div>
 
-        {/* Dependency arrows overlay (positioned over the track area only) */}
+        {/* Dependency arrows overlay. Origin sits at (left: labelWidth, top:
+            headerHeight) inside the .gantt container, so arrow coordinates
+            are in the body's local space. */}
         {arrows.length > 0 && (
           <svg
             className="gantt-arrows"
             width={totalWidth}
-            height={headerHeight + rows.length * rowHeight}
+            height={bodyHeight}
             style={{
               position: 'absolute',
-              top: 0,
-              left: phaseWidth + taskWidth,
+              top: headerHeight,
+              left: labelWidth,
               pointerEvents: 'none',
             }}
           >
             <defs>
-              <marker id="dep-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker
+                id="dep-arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--c-text-3)" />
               </marker>
             </defs>
             {arrows.map((a) => {
-              // Elbow path: from end of dep bar, jog down/up halfway, jog right to start of this bar.
-              const midX = (a.fromX + a.toX) / 2;
+              // Elbow: short horizontal from dep end, then vertical to target row,
+              // then horizontal to the target bar start. Use a small gap before
+              // the target X so the arrowhead doesn't overlap the bar.
+              const gap = 4;
+              const endX = a.toX - gap;
+              const midX = (a.fromX + endX) / 2;
+              const d = `M ${a.fromX} ${a.fromY}
+                         L ${midX} ${a.fromY}
+                         L ${midX} ${a.toY}
+                         L ${endX} ${a.toY}`;
               return (
                 <path
                   key={a.id}
-                  d={`M ${a.fromX} ${a.fromY} L ${midX} ${a.fromY} L ${midX} ${a.toY} L ${a.toX - 4} ${a.toY}`}
+                  d={d}
                   fill="none"
                   stroke="var(--c-text-3)"
                   strokeWidth="1.5"
@@ -200,7 +255,31 @@ export default function GanttView({ projectFilter }) {
           </svg>
         )}
 
-        {rows.map((t) => {
+        {layout.map((entry, i) => {
+          if (entry.kind === 'group') {
+            const proj = projectById[entry.projectId];
+            return (
+              <div
+                key={`g-${i}`}
+                className="gantt-row group-header"
+                style={{ gridTemplateColumns: `${phaseWidth + taskWidth}px ${totalWidth}px` }}
+              >
+                <div className="gantt-label">
+                  {proj ? (
+                    <span className="proj-tag">
+                      <span className="proj-dot" style={{ background: proj.color }} />
+                      {proj.name}
+                    </span>
+                  ) : (
+                    <span className="muted small">No project</span>
+                  )}
+                </div>
+                {/* Empty track cell so the row spans the timeline area too */}
+                <div />
+              </div>
+            );
+          }
+          const t = entry.task;
           const proj = projectById[t.projectId];
           const phase = proj?.phases?.find((p) => p.id === t.phaseId);
           return (
@@ -215,6 +294,7 @@ export default function GanttView({ projectFilter }) {
               phaseWidth={phaseWidth}
               taskWidth={taskWidth}
               today={today}
+              onClick={() => setViewingTask(t)}
             />
           );
         })}
@@ -232,13 +312,30 @@ export default function GanttView({ projectFilter }) {
       {quickAddOpen && (
         <GanttQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
       )}
+
+      {viewingTask && !editingTask && (
+        <TaskActivitiesModal
+          task={viewingTask}
+          userId={userId}
+          onClose={() => setViewingTask(null)}
+          onEditTask={(t) => { setEditingTask(t); }}
+        />
+      )}
+
+      {editingTask && (
+        <TaskEditor
+          task={editingTask}
+          projects={projects}
+          onClose={() => { setEditingTask(null); setViewingTask(null); }}
+        />
+      )}
     </>
   );
 }
 
 // ─── Individual row with draggable plan bar ────────────────────────────────
 
-function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, today }) {
+function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, today, onClick }) {
   const planStart = parseDate(task.plan?.startDate);
   const planEnd   = parseDate(task.plan?.endDate);
   const actStart  = parseDate(task.actual?.startDate);
@@ -323,20 +420,29 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
     });
   };
 
+  // Clicking the row's label area opens the activities modal. Bar drags are
+  // not affected because drag handlers stopPropagation on the bar elements.
+  const handleLabelClick = (e) => {
+    // Only fire on direct label clicks, not on bubbling from interactive children.
+    if (!onClick) return;
+    onClick();
+  };
+
   return (
-    <div className="gantt-row" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}>
-      <div className="gantt-label gantt-label-phase">
+    <div
+      className="gantt-row task-row"
+      style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}
+    >
+      <div className="gantt-label gantt-label-phase" onClick={handleLabelClick}>
         {phaseName ? (
           <span className="phase-tag" title={phaseName}>{phaseName}</span>
         ) : (
           <span className="muted small">—</span>
         )}
       </div>
-      <div className="gantt-label">
-        {project && <span className="proj-dot" style={{ background: project.color }} />}
+      <div className="gantt-label" onClick={handleLabelClick}>
         <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <span style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</span>
-          {project && <span className="muted small" style={{ fontSize: 11 }}>{project.name}</span>}
         </div>
       </div>
       <div ref={trackRef} className="gantt-track" style={{ height: 40, position: 'relative', userSelect: drag ? 'none' : 'auto' }}>

@@ -5,10 +5,11 @@ import {
   DndContext, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, DragOverlay,
 } from '@dnd-kit/core';
-import { useTasks, useProjects } from '../hooks/useTasks';
+import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
 import { useSettings } from '../hooks/useSettings';
 import { updateTask } from '../services/firebase';
 import TaskEditor from './TaskEditor';
+import TaskActivitiesModal from './TaskActivitiesModal';
 
 function parseISO(str) {
   if (!str) return null;
@@ -29,7 +30,9 @@ export default function CalendarView({ projectFilter }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date(); d.setDate(1); return d;
   });
+  const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null);
+  const { userId } = useAuth();
   const [activeDrag, setActiveDrag] = useState(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -143,7 +146,7 @@ export default function CalendarView({ projectFilter }) {
                   dayNum={d.getDate()}
                   dayTasks={dayTasks}
                   projectById={projectById}
-                  onTaskClick={setEditing}
+                  onTaskClick={setViewing}
                 />
               );
             })}
@@ -163,8 +166,21 @@ export default function CalendarView({ projectFilter }) {
         </DragOverlay>
       </DndContext>
 
+      {viewing && !editing && (
+        <TaskActivitiesModal
+          task={viewing}
+          userId={userId}
+          onClose={() => setViewing(null)}
+          onEditTask={(t) => setEditing(t)}
+        />
+      )}
+
       {editing && (
-        <TaskEditor task={editing} projects={projects} onClose={() => setEditing(null)} />
+        <TaskEditor
+          task={editing}
+          projects={projects}
+          onClose={() => { setEditing(null); setViewing(null); }}
+        />
       )}
     </>
   );

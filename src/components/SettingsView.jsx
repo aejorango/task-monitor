@@ -77,53 +77,118 @@ export default function SettingsView() {
     await signOutUser();
   };
 
+  // Send a test notification. This both diagnoses each failure mode
+  // explicitly and surfaces a confirmation toast so the user knows the
+  // click was handled even if the OS suppresses the actual notification
+  // (a common macOS Chrome scenario).
   const handleTestNotification = async () => {
-    const p = await requestNotificationPermission();
-    setNotifPerm(p);
+    const log = [];
+    const tellUser = (msg) => alert(msg + '\n\n— Diagnostic trail —\n' + log.join('\n'));
 
-    if (p === 'denied') {
-      alert('Notifications were blocked. Re-enable them in your browser’s site settings (click the lock icon next to the URL).');
+    if (typeof Notification === 'undefined') {
+      tellUser('This browser does not support the Notifications API.');
       return;
     }
-    if (p !== 'granted') {
-      alert('Notification permission was not granted.');
+    log.push(`Initial permission: ${Notification.permission}`);
+
+    // Step 1: ensure permission
+    let perm = Notification.permission;
+    if (perm === 'default') {
+      try {
+        perm = await Notification.requestPermission();
+        log.push(`After requestPermission: ${perm}`);
+      } catch (e) {
+        log.push(`requestPermission threw: ${e.message || e}`);
+      }
+    }
+    setNotifPerm(perm);
+
+    if (perm === 'denied') {
+      tellUser('Notifications are blocked. Re-enable them in the browser\'s site settings (click the lock icon next to the URL → Site settings → Notifications → Allow).');
+      return;
+    }
+    if (perm !== 'granted') {
+      tellUser('Notification permission was not granted.');
       return;
     }
 
-    try {
-      // Wait for the service worker to be active. .ready awaits activation;
-      // .getRegistration() can return undefined if called too early.
-      let reg = null;
-      if ('serviceWorker' in navigator) {
+    // Step 2: ensure a service worker is registered. Try .ready, then
+    // fall back to .getRegistration(), then to a fresh registration call.
+    let reg = null;
+    if ('serviceWorker' in navigator) {
+      try {
+        reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((_, rej) => setTimeout(() => rej(new Error('SW ready timed out')), 2500)),
+        ]);
+        log.push(`SW ready: scope=${reg?.scope || '?'}`);
+      } catch (e) {
+        log.push(`SW ready failed: ${e.message}`);
         try {
-          reg = await Promise.race([
-            navigator.serviceWorker.ready,
-            new Promise((_, rej) => setTimeout(() => rej(new Error('SW timeout')), 3000)),
-          ]);
-        } catch (e) {
-          console.warn('Service worker not ready:', e.message);
+          reg = await navigator.serviceWorker.getRegistration();
+          log.push(`getRegistration: ${reg ? 'found' : 'null'}`);
+        } catch (e2) {
+          log.push(`getRegistration threw: ${e2.message}`);
+        }
+        if (!reg) {
+          try {
+            const swUrl   = `${import.meta.env.BASE_URL}sw.js`;
+            const swScope = import.meta.env.BASE_URL;
+            reg = await navigator.serviceWorker.register(swUrl, { scope: swScope });
+            log.push(`Registered SW on demand at ${reg.scope}`);
+          } catch (e3) {
+            log.push(`On-demand register failed: ${e3.message}`);
+          }
         }
       }
+    } else {
+      log.push('Service workers unavailable in this browser.');
+    }
 
-      const title   = '✓ Task Monitor notifications enabled';
-      const options = {
-        body: 'You’ll be pinged when a task becomes overdue.',
-        tag: 'test-notification',
-        icon: `${import.meta.env.BASE_URL}favicon.svg`,
-        badge: `${import.meta.env.BASE_URL}favicon.svg`,
-      };
+    // Step 3: dispatch
+    const title   = '✓ Task Monitor — test notification';
+    const options = {
+      body: 'If you see this banner, notifications are working.',
+      tag: `test-${Date.now()}`,        // unique tag avoids being coalesced
+      icon: `${import.meta.env.BASE_URL}favicon.svg`,
+      requireInteraction: false,
+      silent: false,
+    };
 
-      if (reg && typeof reg.showNotification === 'function') {
+    let sent = false;
+    if (reg && typeof reg.showNotification === 'function') {
+      try {
         await reg.showNotification(title, options);
-      } else if (typeof Notification !== 'undefined') {
-        // Fallback to non-SW notification (only works while page is open)
-        new Notification(title, options);
-      } else {
-        throw new Error('Notifications API is not available in this browser.');
+        log.push('reg.showNotification() resolved');
+        sent = true;
+      } catch (e) {
+        log.push(`reg.showNotification threw: ${e.message}`);
       }
-    } catch (e) {
-      console.error('Could not show notification:', e);
-      alert(`Could not show notification: ${e.message || e}\n\nThis can happen if the browser is blocking notifications at the OS level (macOS: System Settings → Notifications → Chrome).`);
+    }
+    if (!sent) {
+      try {
+        const n = new Notification(title, options);
+        n.onerror = (ev) => log.push(`Notification onerror: ${ev?.message || ''}`);
+        log.push('new Notification() constructed');
+        sent = true;
+      } catch (e) {
+        log.push(`new Notification threw: ${e.message}`);
+      }
+    }
+
+    if (sent) {
+      // Always surface a visible "Sent" message — on macOS, system Focus /
+      // DND settings often suppress the actual banner without surfacing an
+      // error, so the user thinks the button did nothing.
+      tellUser(
+        'Test notification dispatched.\n\n' +
+        'If you didn\'t see it, your OS is probably suppressing it:\n' +
+        '• macOS: System Settings → Notifications → find Chrome (or your browser) → set "Allow notifications" and "Banner" style.\n' +
+        '• Check Focus / Do Not Disturb is off.\n' +
+        '• Some browsers only show notifications when the app is in the background.'
+      );
+    } else {
+      tellUser('Could not dispatch the notification — see diagnostic trail above.');
     }
   };
 
