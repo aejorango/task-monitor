@@ -51,11 +51,21 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-// Enable IndexedDB-backed offline persistence with multi-tab sync. Falls back
-// to memory if IndexedDB is unavailable (Safari private mode, etc.).
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+// Try IndexedDB-backed offline persistence with multi-tab sync. Fall back
+// to default (memory) cache if initialization throws — e.g. when an older
+// stale IndexedDB schema is present, or in Safari private mode. Without the
+// try/catch, an init failure here would leave Firestore unusable and the
+// app would render with no data even though the docs still exist remotely.
+let _db;
+try {
+  _db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+} catch (err) {
+  console.warn('[firestore] persistent cache unavailable, falling back:', err);
+  _db = initializeFirestore(app, {});
+}
+export const db = _db;
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
