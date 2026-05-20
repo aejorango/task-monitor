@@ -790,6 +790,26 @@ a:hover { text-decoration: underline; }
 }
 .gantt-track {
   position: relative;
+  /* Row tracks stay transparent so the weekend overlay underneath shows
+     through. The day-grid background-image still draws the vertical
+     gridlines inside each row. */
+  background: transparent;
+}
+
+/* Weekend column tint — paints under all task rows in the Gantt body */
+.gantt-weekend-col {
+  background: var(--c-surface-3);
+  opacity: 0.55;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gantt-weekend-col {
+    background: var(--c-surface-2);
+    opacity: 0.7;
+  }
+}
+:root[data-theme="dark"] .gantt-weekend-col {
+  background: var(--c-surface-2);
+  opacity: 0.7;
 }
 
 .gantt-day-header {
@@ -1535,7 +1555,9 @@ a:hover { text-decoration: underline; }
 }
 .cal-header {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* minmax(0, 1fr) keeps every column the same width regardless of content
+     (without it, an overly-long task label could stretch its cell). */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   background: var(--c-surface-2);
   border-bottom: 1px solid var(--c-border);
 }
@@ -1547,10 +1569,15 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.05em;
   color: var(--c-text-3);
   text-align: center;
+  min-width: 0;
+}
+.cal-day-label.weekend {
+  color: var(--c-text-2);
+  background: var(--c-surface-3);
 }
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   grid-auto-rows: minmax(100px, auto);
 }
 .cal-cell {
@@ -1559,14 +1586,23 @@ a:hover { text-decoration: underline; }
   padding: 6px 6px;
   background: var(--c-surface);
   min-height: 100px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow: hidden;
 }
 .cal-cell:nth-child(7n) { border-right: none; }
 .cal-cell.out {
   background: var(--c-bg);
   color: var(--c-text-muted);
+}
+.cal-cell.weekend {
+  background: var(--c-surface-2);
+}
+.cal-cell.weekend.out {
+  /* Out-of-month weekend cells stay subdued, just slightly darker than .out */
+  background: var(--c-surface-3);
 }
 .cal-cell.today {
   background: var(--c-accent-soft);

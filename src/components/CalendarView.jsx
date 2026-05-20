@@ -74,7 +74,12 @@ export default function CalendarView({ projectFilter }) {
 
   const monthLabel = cursor.toLocaleString('en', { month: 'long', year: 'numeric' });
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const orderedDayLabels = [...dayLabels.slice(weekStart), ...dayLabels.slice(0, weekStart)];
+  // dayIndex: 0=Sun..6=Sat. Build labels in week-start order, each tagged
+  // with whether it falls on a weekend.
+  const orderedDayInfo = Array.from({ length: 7 }, (_, i) => {
+    const idx = (weekStart + i) % 7;
+    return { label: dayLabels[idx], idx, isWeekend: idx === 0 || idx === 6 };
+  });
 
   const onDragStart = (e) => {
     const t = filtered.find((x) => x.id === e.active.id);
@@ -127,8 +132,8 @@ export default function CalendarView({ projectFilter }) {
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="calendar">
           <div className="cal-header">
-            {orderedDayLabels.map((d) => (
-              <div key={d} className="cal-day-label">{d}</div>
+            {orderedDayInfo.map((d) => (
+              <div key={d.label} className={`cal-day-label ${d.isWeekend ? 'weekend' : ''}`}>{d.label}</div>
             ))}
           </div>
           <div className="cal-grid">
@@ -136,6 +141,8 @@ export default function CalendarView({ projectFilter }) {
               const dateStr = iso(d);
               const inMonth = d.getMonth() === cursorMonth;
               const isToday = dateStr === today;
+              const dayOfWeek = d.getDay();
+              const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
               const dayTasks = tasksByDate[dateStr] || [];
               return (
                 <CalCell
@@ -143,6 +150,7 @@ export default function CalendarView({ projectFilter }) {
                   dateStr={dateStr}
                   inMonth={inMonth}
                   isToday={isToday}
+                  isWeekend={isWeekend}
                   dayNum={d.getDate()}
                   dayTasks={dayTasks}
                   projectById={projectById}
@@ -186,12 +194,12 @@ export default function CalendarView({ projectFilter }) {
   );
 }
 
-function CalCell({ dateStr, inMonth, isToday, dayNum, dayTasks, projectById, onTaskClick }) {
+function CalCell({ dateStr, inMonth, isToday, isWeekend, dayNum, dayTasks, projectById, onTaskClick }) {
   const { setNodeRef, isOver } = useDroppable({ id: dateStr });
   return (
     <div
       ref={setNodeRef}
-      className={`cal-cell ${inMonth ? '' : 'out'} ${isToday ? 'today' : ''} ${isOver ? 'drag-over' : ''}`}
+      className={`cal-cell ${inMonth ? '' : 'out'} ${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''} ${isOver ? 'drag-over' : ''}`}
     >
       <div className="cal-cell-head">
         <span className="cal-cell-num">{dayNum}</span>

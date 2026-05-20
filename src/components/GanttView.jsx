@@ -176,11 +176,15 @@ export default function GanttView({ projectFilter }) {
   });
 
   const dayHeaders = [];
+  const weekendCols = [];   // [{ left, width }] indices for shaded weekend strips
   for (let i = 0; i < range.total; i++) {
     const d = addDays(range.min, i);
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     const isToday = fmtDate(d) === fmtDate(today);
     dayHeaders.push({ d, isWeekend, isToday, label: fmtShort(d, zoom) });
+    if (isWeekend) {
+      weekendCols.push({ left: i * zoomConf.dayWidth, width: zoomConf.dayWidth });
+    }
   }
 
   return (
@@ -200,6 +204,39 @@ export default function GanttView({ projectFilter }) {
             ))}
           </div>
         </div>
+
+        {/* Weekend column tint — paints Saturday and Sunday columns across
+            the full body height so weekends are visually distinct beneath
+            the task bars. Sits behind bars (z-index: 0) and is non-interactive. */}
+        {weekendCols.length > 0 && (
+          <div
+            className="gantt-weekend-overlay"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: headerHeight,
+              left: labelWidth,
+              width: totalWidth,
+              height: bodyHeight,
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          >
+            {weekendCols.map((w, i) => (
+              <div
+                key={i}
+                className="gantt-weekend-col"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: w.left,
+                  width: w.width,
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Dependency arrows overlay. Origin sits at (left: labelWidth, top:
             headerHeight) inside the .gantt container, so arrow coordinates
