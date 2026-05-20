@@ -29,6 +29,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [requestedBy, setRequestedBy] = useState(task.requestedBy || '');
   const [tags, setTags]               = useState(task.tags || []);
   const [customValues, setCustomValues] = useState(task.customValues || {});
+  const [assignedTo, setAssignedTo] = useState(task.assignedTo || []);
   const [subtasks, setSubtasks]       = useState(task.subtasks || []);
   const [dependsOn, setDependsOn]     = useState(task.dependsOn || []);
   const [links, setLinks]             = useState(task.links || []);
@@ -129,6 +130,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         links,
         recurrence,
         customValues,
+        assignedTo,
         'plan.startDate':   planStart   || null,
         'plan.endDate':     planEnd     || null,
         'actual.startDate': actualStart || null,
@@ -237,6 +239,14 @@ export default function TaskEditor({ task, projects, onClose }) {
                 <input className="input" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
               </div>
             </div>
+
+            <AssigneePicker
+              members={selectedProject?.acl || {}}
+              membersDetails={selectedProject?.memberDetails || {}}
+              assignedTo={assignedTo}
+              onChange={setAssignedTo}
+            />
+
             <div className="field-row">
               <div className="field">
                 <label className="label">Plan start</label>
@@ -408,6 +418,43 @@ export default function TaskEditor({ task, projects, onClose }) {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AssigneePicker({ members, assignedTo, onChange }) {
+  const uids = Object.keys(members || {});
+  const toggle = (uid) => {
+    if (assignedTo.includes(uid)) onChange(assignedTo.filter((x) => x !== uid));
+    else onChange([...assignedTo, uid]);
+  };
+  if (uids.length === 0) {
+    return null;
+  }
+  return (
+    <div className="field">
+      <label className="label">Assigned to ({assignedTo.length})</label>
+      <p className="muted small" style={{ marginTop: -4 }}>
+        Pick from project members. Use Sharing on the project page to invite teammates.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+        {uids.map((uid) => {
+          const role = members[uid];
+          const selected = assignedTo.includes(uid);
+          return (
+            <button
+              key={uid}
+              type="button"
+              className={`chip ${selected ? 'active' : ''}`}
+              title={`${uid} · ${role}`}
+              onClick={() => toggle(uid)}
+            >
+              <span className="mono small">{uid.slice(0, 6)}</span>
+              <span className="muted small" style={{ marginLeft: 4 }}>{role}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -6,14 +6,15 @@ import { useOnline } from '../hooks/useOnline';
 import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
 
 const VIEWS = [
-  { id: 'board',    label: 'Board',    icon: '▦' },
-  { id: 'table',    label: 'Table',    icon: '☰' },
-  { id: 'gantt',    label: 'Gantt',    icon: '▭' },
-  { id: 'calendar', label: 'Calendar', icon: '▤' },
-  { id: 'review',    label: 'Review',    icon: '◇' },
-  { id: 'analytics', label: 'Analytics', icon: '◢' },
-  { id: 'projects',  label: 'Projects',  icon: '◉' },
-  { id: 'settings',  label: 'Settings',  icon: '⚙' },
+  { id: 'dashboard', label: 'Dashboard',    icon: '◰' },
+  { id: 'projects',  label: 'Projects',     icon: '◉' },
+  { id: 'board',     label: 'Board',        icon: '▦' },
+  { id: 'calendar',  label: 'Calendar',     icon: '▤' },
+  { id: 'gantt',     label: 'Gantt',        icon: '▭' },
+  { id: 'table',     label: 'Activity Log', icon: '☰' },
+  { id: 'review',    label: 'Review',       icon: '◇' },
+  { id: 'analytics', label: 'Analytics',    icon: '◢' },
+  { id: 'settings',  label: 'Settings',     icon: '⚙' },
 ];
 
 function parseHash() {
@@ -22,11 +23,12 @@ function parseHash() {
   const parts = path.split('/').filter(Boolean);
   const params = new URLSearchParams(qs);
   return {
-    view: parts[0] || 'board',
+    view: parts[0] || 'dashboard',
     projectFilter: parts[1] || 'all',
     tagFilter:    params.get('tag')    || null,
     statusFilter: params.get('status') || null,
     savedViewId:  params.get('saved')  || null,
+    onlyMine:     params.get('mine')   === '1',
   };
 }
 
@@ -35,6 +37,7 @@ function setHash(next) {
   if (next.tagFilter)    params.set('tag',    next.tagFilter);
   if (next.statusFilter) params.set('status', next.statusFilter);
   if (next.savedViewId)  params.set('saved',  next.savedViewId);
+  if (next.onlyMine)     params.set('mine',   '1');
   const qs = params.toString();
   window.location.hash = `#/${next.view}/${next.projectFilter || 'all'}${qs ? `?${qs}` : ''}`;
 }
@@ -90,6 +93,15 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           value={route.projectFilter}
           onChange={(projectFilter) => navigate({ projectFilter })}
         />
+        {userId && (
+          <button
+            className={`chip ${route.onlyMine ? 'active' : ''}`}
+            onClick={() => navigate({ onlyMine: !route.onlyMine })}
+            title="Show only tasks assigned to me"
+          >
+            👤 My tasks
+          </button>
+        )}
         <SaveViewButton route={route} userId={userId} />
         <div className="topbar-spacer" />
         {!online && (

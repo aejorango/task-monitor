@@ -1,6 +1,6 @@
 // src/components/ProjectsView.jsx — list, create, edit projects + phases.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjects, useTasks, useAuth, useTemplates } from '../hooks/useTasks';
 import {
   addProject,
@@ -12,6 +12,9 @@ import {
   softDeleteTemplate,
   projectAsTemplatePayload,
   setProjectMember,
+  createInvite,
+  revokeInvite,
+  subscribeToInvitesForProject,
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
@@ -160,21 +163,35 @@ export default function ProjectsView() {
 }
 
 function ProjectSharing({ project }) {
-  const [uid, setUid]   = useState('');
-  const [role, setRole] = useState('viewer');
-  const [busy, setBusy] = useState(false);
+  const [uidInput, setUidInput] = useState('');
+  const [role, setRole]   = useState('viewer');
+  const [busy, setBusy]   = useState(false);
   const [error, setError] = useState(null);
+
+  // Invite-link generator state
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [inviteExpires, setInviteExpires] = useState(7);   // days, 0 = never
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState(null); // { id, url }
+  const [copyOk, setCopyOk] = useState(false);
+
+  // Subscribe to existing invites for this project
+  const [invites, setInvites] = useState([]);
+  useEffect(() => {
+    const unsub = subscribeToInvitesForProject(project.id, setInvites);
+    return () => unsub();
+  }, [project.id]);
 
   const acl     = project.acl || {};
   const ownerId = project.userId;
   const members = Object.keys(acl);
 
-  const invite = async () => {
-    if (!uid.trim()) return;
+  const inviteByUid = async () => {
+    if (!uidInput.trim()) return;
     setBusy(true); setError(null);
     try {
-      await setProjectMember(project.id, uid.trim(), role);
-      setUid('');
+      await setProjectMember(project.id, uidInput.trim(), role);
+      setUidInput('');
     } catch (err) {
       console.error(err);
       setError(err.message || String(err));
@@ -194,20 +211,62 @@ function ProjectSharing({ project }) {
     catch (err) { console.error(err); alert(err.message); }
   };
 
+  const createLink = async () => {
+    setCreatingInvite(true);
+    setError(null);
+    try {
+      const me = (await import('../services/firebase')).auth.currentUser;
+      const ref = await createInvite(me.uid, {
+        projectId: project.id,
+        role: inviteRole,
+        expiresInDays: inviteExpires > 0 ? inviteExpires : null,
+      });
+      // Compose link based on this app's BASE_URL
+      const base = window.location.origin + import.meta.env.BASE_URL;
+      const url = `${base}#/invite/${ref.id}`;
+      setGeneratedLink({ id: ref.id, url });
+    } catch (err) {
+      console.error(err);
+      setError(err.message || String(err));
+    } finally {
+      setCreatingInvite(false);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!generatedLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedLink.url);
+      setCopyOk(true);
+      setTimeout(() => setCopyOk(false), 1500);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRevoke = async (inviteId) => {
+    if (!confirm('Revoke this invite link? Anyone who hasn\'t claimed it yet will be unable to join.')) return;
+    try { await revokeInvite(inviteId); }
+    catch (err) { console.error(err); alert(err.message); }
+  };
+
+  const liveInvites = invites.filter((inv) => !inv.revoked);
+
   return (
     <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
       <label className="label">Sharing</label>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Add a member by their Firebase UID. (Email-based invites need a Cloud Function — see roadmap; for now you can find a teammate's UID in their Settings → Account → session ID.)
-      </p>
 
-      <ul className="dep-list" style={{ marginBottom: 8 }}>
+      {/* Current members */}
+      <p className="muted small" style={{ marginTop: 0, marginBottom: 6 }}>
+        <strong>{members.length}</strong> member{members.length === 1 ? '' : 's'} on this project.
+      </p>
+      <ul className="dep-list" style={{ marginBottom: 12 }}>
         {members.map((memberUid) => (
           <li key={memberUid} className="dep-item">
             <span className={`badge badge-soft-${memberUid === ownerId ? 'info' : 'muted'}`}>
               {memberUid === ownerId ? 'owner' : acl[memberUid]}
             </span>
-            <span className="dep-title mono small">{memberUid}</span>
+            <span className="dep-title mono small">{memberUid.slice(0, 12)}{memberUid.length > 12 ? '…' : ''}</span>
             {memberUid !== ownerId && (
               <>
                 <select
@@ -227,25 +286,93 @@ function ProjectSharing({ project }) {
         ))}
       </ul>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
-        <input
-          className="input input-sm"
-          value={uid}
-          onChange={(e) => setUid(e.target.value)}
-          placeholder="Firebase UID"
-        />
-        <select className="select select-sm" value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="viewer">viewer</option>
-          <option value="editor">editor</option>
-          <option value="admin">admin</option>
-        </select>
-        <button type="button" className="btn btn-primary btn-sm" onClick={invite} disabled={busy || !uid.trim()}>
-          {busy ? 'Adding…' : 'Add'}
+      {/* Invite link generator */}
+      <div style={{ borderTop: '1px dashed var(--c-border)', paddingTop: 10, marginBottom: 12 }}>
+        <strong style={{ fontSize: 13 }}>Generate invite link</strong>
+        <p className="muted small" style={{ marginTop: 2 }}>
+          Anyone with the link can join with the role you pick.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto 1fr', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+          <span className="muted small">Role</span>
+          <select className="select select-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+            <option value="viewer">viewer</option>
+            <option value="editor">editor</option>
+            <option value="admin">admin</option>
+          </select>
+          <span className="muted small">Expires</span>
+          <select className="select select-sm" value={inviteExpires} onChange={(e) => setInviteExpires(Number(e.target.value))}>
+            <option value={1}>1 day</option>
+            <option value={7}>7 days</option>
+            <option value={30}>30 days</option>
+            <option value={0}>Never</option>
+          </select>
+        </div>
+        <button type="button" className="btn btn-primary btn-sm" onClick={createLink} disabled={creatingInvite}>
+          {creatingInvite ? 'Generating…' : 'Generate link'}
         </button>
+
+        {generatedLink && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              className="input input-sm mono"
+              value={generatedLink.url}
+              readOnly
+              style={{ flex: 1, fontSize: 11 }}
+              onClick={(e) => e.target.select()}
+            />
+            <button type="button" className="btn btn-sm" onClick={copyLink}>
+              {copyOk ? '✓ Copied' : '⎘ Copy'}
+            </button>
+          </div>
+        )}
+
+        {liveInvites.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <p className="muted small" style={{ marginBottom: 4 }}>Active invite links:</p>
+            <ul className="dep-list">
+              {liveInvites.map((inv) => {
+                const expiresMs = inv.expiresAt?.toMillis?.() ?? Date.parse(inv.expiresAt || '');
+                const expired = inv.expiresAt && expiresMs < Date.now();
+                return (
+                  <li key={inv.id} className="dep-item">
+                    <span className={`badge badge-soft-${expired ? 'danger' : 'success'}`}>
+                      {expired ? 'expired' : inv.role}
+                    </span>
+                    <span className="dep-title mono small">{inv.id.slice(0, 10)}…</span>
+                    <span className="muted small">{(inv.claims || []).length} claim{(inv.claims || []).length === 1 ? '' : 's'}</span>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleRevoke(inv.id)}>Revoke</button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </div>
-      {error && (
-        <p className="auth-error-msg" style={{ marginTop: 6 }}>{error}</p>
-      )}
+
+      {/* Power-user: add by UID */}
+      <details>
+        <summary className="muted small" style={{ cursor: 'pointer' }}>
+          Add by Firebase UID (advanced)
+        </summary>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, marginTop: 6 }}>
+          <input
+            className="input input-sm"
+            value={uidInput}
+            onChange={(e) => setUidInput(e.target.value)}
+            placeholder="Firebase UID"
+          />
+          <select className="select select-sm" value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="viewer">viewer</option>
+            <option value="editor">editor</option>
+            <option value="admin">admin</option>
+          </select>
+          <button type="button" className="btn btn-sm" onClick={inviteByUid} disabled={busy || !uidInput.trim()}>
+            {busy ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+      </details>
+
+      {error && <p className="auth-error-msg" style={{ marginTop: 6 }}>{error}</p>}
     </div>
   );
 }

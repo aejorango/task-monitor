@@ -32,7 +32,7 @@ const COLUMNS = [
 
 const NO_PHASE_ID = '__nophase__';
 
-export default function Board({ projectFilter, initialTagFilter, initialStatusFilter }) {
+export default function Board({ projectFilter, initialTagFilter, initialStatusFilter, onlyMine }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const [editingTask, setEditingTask]   = useState(null);
@@ -58,9 +58,12 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   const tagFiltered = tagFilter
     ? projectFiltered.filter((t) => (t.tags || []).includes(tagFilter))
     : projectFiltered;
-  const filtered = initialStatusFilter
+  const statusFiltered = initialStatusFilter
     ? tagFiltered.filter((t) => t.status === initialStatusFilter)
     : tagFiltered;
+  const filtered = onlyMine
+    ? statusFiltered.filter((t) => (t.assignedTo || []).includes(userId))
+    : statusFiltered;
 
   // All tags available across the (project-filtered) tasks, for the chip strip
   const availableTags = (() => {
@@ -376,6 +379,11 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
         {task.links?.length > 0 && (
           <span className="badge badge-soft-info" title={`${task.links.length} related task${task.links.length === 1 ? '' : 's'}`}>
             ↔ {task.links.length}
+          </span>
+        )}
+        {task.assignedTo?.length > 0 && (
+          <span className="badge badge-soft-muted" title={`${task.assignedTo.length} assignee${task.assignedTo.length === 1 ? '' : 's'}`}>
+            👤 {task.assignedTo.length}
           </span>
         )}
         {isRecurring && (

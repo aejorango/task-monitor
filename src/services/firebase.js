@@ -184,6 +184,7 @@ const taskCommentsRef = collection(db, 'taskComments');
 const savedViewsRef = collection(db, 'savedViews');
 const presenceRef   = collection(db, 'presence');
 const webhooksRef   = collection(db, 'webhooks');
+const invitesRef    = collection(db, 'invites');
 
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
@@ -389,6 +390,11 @@ export async function addTask(userId, task) {
     // v8 (Tier 4.4): per-project custom field values, keyed by field id.
     //   { [fieldId]: scalar }
     customValues: task.customValues || {},
+
+    // v9: explicit assignees, picked from the project's member ACL. Distinct
+    // from `requestedBy` which is a freeform "who asked for this".
+    //   [uid, ...]
+    assignedTo: task.assignedTo || [],
 
     activityCount:    0,
     totalHoursLogged: 0,
@@ -1031,4 +1037,92 @@ export function subscribeToWebhooks(userId, callback) {
     data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
   });
+}
+
+// ─── INVITES (v9 multi-user) ────────────────────────────────────────────────
+// A shareable link that lets the recipient join a project. The URL is the
+// secret. Each invite tracks role + optional expiry + a claims log.
+
+export async function createInvite(userId, { projectId, role, expiresInDays }) {
+  const expiresAt = expiresInDays
+    ? new Date(Date.now() + expiresInDays * 86400 * 1000)
+    : null;
+  return await addDoc(invitesRef, {
+    userId,
+    projectId,
+    role: role || 'viewer',
+    revoked: false,
+    expiresAt,
+    claims: [],
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function revokeInvite(inviteId) {
+  return await updateDoc(doc(db, 'invites', inviteId), { revoked: true });
+}
+
+export async function getInvite(inviteId) {
+  const snap = await getDocs(query(invitesRef, where('__name__', '==', inviteId)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() };
+}
+
+export function subscribeToInvitesForProject(projectId, callback) {
+  const q = query(invitesRef, where('projectId', '==', projectId));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => {
+      const at = a.createdAt?.toMillis?.() ?? 0;
+      const bt = b.createdAt?.toMillis?.() ?? 0;
+      return bt - at;
+    });
+    callback(data);
+  });
+}
+
+// Claim an invite — record the claim on the invite + add self to the
+// project's acl + members. Uses a batch so both writes either succeed
+// or fail together.
+export async function claimInvite(inviteId, currentUser) {
+  const invite = await getInvite(inviteId);
+  if (!invite)         throw new Error('Invite not found.');
+  if (invite.revoked)  throw new Error('Invite has been revoked.');
+  if (invite.expiresAt) {
+    const expiresMs = invite.expiresAt.toMillis?.() ?? Date.parse(invite.expiresAt);
+    if (expiresMs < Date.now()) throw new Error('Invite has expired.');
+  }
+
+  // Already a member? Just succeed.
+  const projSnap = await getDocs(query(projectsRef, where('__name__', '==', invite.projectId)));
+  const proj = projSnap.docs[0]?.data();
+  if (!proj) throw new Error('Project not found.');
+  if ((proj.members || []).includes(currentUser.uid)) {
+    return { projectId: invite.projectId, alreadyMember: true };
+  }
+
+  const batch = writeBatch(db);
+  // Record claim on invite
+  const claim = {
+    uid: currentUser.uid,
+    displayName: currentUser.displayName || '',
+    email: currentUser.email || '',
+    claimedAt: new Date(),  // serverTimestamp not allowed inside array
+  };
+  batch.update(doc(db, 'invites', inviteId), { claims: [...(invite.claims || []), claim] });
+
+  // Add to project: members + acl. The lastClaimInviteId is a side channel
+  // the security rule reads to verify this claim is legitimate.
+  const newAcl = { ...(proj.acl || {}), [currentUser.uid]: invite.role };
+  const newMembers = [...(proj.members || []), currentUser.uid];
+  batch.update(doc(db, 'projects', invite.projectId), {
+    acl: newAcl,
+    members: newMembers,
+    lastClaimInviteId: inviteId,
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+  return { projectId: invite.projectId, alreadyMember: false };
 }

@@ -72,8 +72,11 @@ export default function GanttView({ projectFilter }) {
   }, [tasks, projectFilter, projectById]);
 
   const range = useMemo(() => {
-    let min = parseDate(todayLocal());
-    let max = parseDate(todayLocal());
+    // Default view starts one week before today so recent context is visible
+    // even when the earliest scheduled task is in the future.
+    const today = parseDate(todayLocal());
+    let min = addDays(today, -7);
+    let max = today;
     rows.forEach((t) => {
       const dates = [t.plan?.startDate, t.plan?.endDate, t.actual?.startDate, t.actual?.endDate]
         .map(parseDate).filter(Boolean);
@@ -82,7 +85,8 @@ export default function GanttView({ projectFilter }) {
         if (d > max) max = d;
       });
     });
-    min = addDays(min, -3);
+    // Pad the trailing edge so future tasks have a little headroom; the
+    // leading edge already sits a week before today.
     max = addDays(max, 3);
     return { min, max, total: diffDays(min, max) + 1 };
   }, [rows]);
