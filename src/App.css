@@ -1865,7 +1865,8 @@ a:hover { text-decoration: underline; }
   color: var(--c-text);
   font-size: 13px;
 }
-.search-result:hover { background: var(--c-surface-2); }
+.search-result:hover,
+.search-result.highlight { background: var(--c-accent-soft); color: var(--c-accent-ink); }
 .search-result-title {
   font-weight: 500;
   flex: 1;

@@ -277,11 +277,12 @@ function SidebarUserBlock({ userId, ready, navigate }) {
 // ─── Global search ─────────────────────────────────────────
 
 function GlobalSearch({ projects, navigate }) {
-  const { tasks } = useTasks();
-  const { activities } = useAllActivities();
+  const { tasks, loading: tasksLoading, workspaceId } = useTasks();
+  const { activities, loading: actsLoading } = useAllActivities();
   const { byId: projectById } = useProjects();
   const [q, setQ]       = useState('');
   const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const inputRef = useRef(null);
 
   // ⌘K / Ctrl+K to focus search
@@ -290,6 +291,8 @@ function GlobalSearch({ projects, navigate }) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         inputRef.current?.focus();
+        inputRef.current?.select();
+        setOpen(true);
       }
       if (e.key === 'Escape') {
         setOpen(false);
@@ -301,7 +304,7 @@ function GlobalSearch({ projects, navigate }) {
   }, []);
 
   const results = useMemo(() => {
-    if (!q.trim()) return { tasks: [], activities: [] };
+    if (!q.trim()) return { tasks: [], activities: [], flat: [] };
     const needle = q.toLowerCase();
     const taskMatches = tasks
       .filter((t) =>
@@ -317,14 +320,75 @@ function GlobalSearch({ projects, navigate }) {
         a.taskTitle?.toLowerCase().includes(needle)
       )
       .slice(0, 6);
-    return { tasks: taskMatches, activities: activityMatches };
+    // Flat list lets keyboard nav cycle through both groups in display order.
+    const flat = [
+      ...taskMatches.map((t) => ({ kind: 'task', t })),
+      ...activityMatches.map((a) => ({ kind: 'activity', a })),
+    ];
+    return { tasks: taskMatches, activities: activityMatches, flat };
   }, [q, tasks, activities]);
+
+  // Reset highlight when results change
+  useEffect(() => { setHighlight(0); }, [results.flat.length]);
 
   const goToTask = (t) => {
     navigate({ view: 'board', projectFilter: t.projectId || 'all' });
     setQ(''); setOpen(false);
     inputRef.current?.blur();
   };
+  const activateResult = (item) => {
+    if (!item) return;
+    if (item.kind === 'task') goToTask(item.t);
+    else {
+      const t = tasks.find((x) => x.id === item.a.taskId);
+      if (t) goToTask(t);
+    }
+  };
+
+  const onInputKeyDown = (e) => {
+    if (results.flat.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(h + 1, results.flat.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
+    else if (e.key === 'Enter')  { e.preventDefault(); activateResult(results.flat[highlight]); }
+  };
+
+  // Diagnostic empty state — instead of a silent "No matches", tell the user
+  // why. Common cases: workspace context not yet loaded, or genuinely empty.
+  const renderEmptyState = () => {
+    if (tasksLoading || actsLoading) {
+      return <div className="search-empty"><span className="spinner" /> &nbsp; Loading workspace data…</div>;
+    }
+    if (!workspaceId) {
+      return (
+        <div className="search-empty">
+          <strong>No workspace selected.</strong>
+          <div className="muted small" style={{ marginTop: 4 }}>
+            Pick a workspace from the sidebar switcher first.
+          </div>
+        </div>
+      );
+    }
+    if (tasks.length === 0 && activities.length === 0) {
+      return (
+        <div className="search-empty">
+          <strong>This workspace is empty.</strong>
+          <div className="muted small" style={{ marginTop: 4 }}>
+            Add a task to start. Search looks across the active workspace only.
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="search-empty">
+        No matches for "<strong>{q}</strong>" in this workspace.
+        <div className="muted small" style={{ marginTop: 4 }}>
+          Searches: task titles, descriptions, tags, activity comments, bottleneck notes.
+        </div>
+      </div>
+    );
+  };
+
+  const placeholder = workspaceId ? `Search ${tasks.length} task${tasks.length === 1 ? '' : 's'}…  ⌘K` : 'Search…  ⌘K';
 
   return (
     <div className="search-wrap">
@@ -332,53 +396,66 @@ function GlobalSearch({ projects, navigate }) {
         ref={inputRef}
         type="search"
         className="search-input"
-        placeholder="Search tasks & activities…   ⌘K"
+        placeholder={placeholder}
         value={q}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-        onFocus={() => q && setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        onKeyDown={onInputKeyDown}
       />
       {open && q.trim() && (
         <div className="search-results">
-          {results.tasks.length === 0 && results.activities.length === 0 && (
-            <div className="search-empty">No matches.</div>
-          )}
-          {results.tasks.length > 0 && (
+          {results.flat.length === 0 ? renderEmptyState() : (
             <>
-              <div className="search-group-label">Tasks</div>
-              {results.tasks.map((t) => {
-                const proj = projectById[t.projectId];
-                return (
-                  <button key={t.id} className="search-result" onMouseDown={() => goToTask(t)}>
-                    {proj && <span className="proj-dot" style={{ background: proj.color }} />}
-                    <span className="search-result-title">{t.title}</span>
-                    <span className={`badge badge-soft-${
-                      t.status === 'done' ? 'success' :
-                      t.status === 'doing' ? 'info' : 'muted'
-                    }`}>{t.status}</span>
-                  </button>
-                );
-              })}
-            </>
-          )}
-          {results.activities.length > 0 && (
-            <>
-              <div className="search-group-label">Activities</div>
-              {results.activities.map((a) => {
-                const proj = projectById[a.projectId];
-                return (
-                  <button key={a.id} className="search-result" onMouseDown={() => {
-                    const t = tasks.find((x) => x.id === a.taskId);
-                    if (t) goToTask(t);
-                  }}>
-                    {proj && <span className="proj-dot" style={{ background: proj.color }} />}
-                    <div className="search-result-multi">
-                      <div className="search-result-title">{a.taskTitle}</div>
-                      <div className="muted small">{a.date} — {a.comment?.slice(0, 60) || a.bottleneckRemarks?.slice(0, 60)}</div>
-                    </div>
-                  </button>
-                );
-              })}
+              {results.tasks.length > 0 && (
+                <>
+                  <div className="search-group-label">Tasks · {results.tasks.length}</div>
+                  {results.tasks.map((t, i) => {
+                    const proj = projectById[t.projectId];
+                    return (
+                      <button
+                        key={t.id}
+                        className={`search-result ${highlight === i ? 'highlight' : ''}`}
+                        onMouseEnter={() => setHighlight(i)}
+                        onMouseDown={() => goToTask(t)}
+                      >
+                        {proj && <span className="proj-dot" style={{ background: proj.color }} />}
+                        <span className="search-result-title">{t.title}</span>
+                        <span className={`badge badge-soft-${
+                          t.status === 'done' ? 'success' :
+                          t.status === 'doing' ? 'info' : 'muted'
+                        }`}>{t.status}</span>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+              {results.activities.length > 0 && (
+                <>
+                  <div className="search-group-label">Activities · {results.activities.length}</div>
+                  {results.activities.map((a, i) => {
+                    const proj = projectById[a.projectId];
+                    const flatIdx = results.tasks.length + i;
+                    return (
+                      <button
+                        key={a.id}
+                        className={`search-result ${highlight === flatIdx ? 'highlight' : ''}`}
+                        onMouseEnter={() => setHighlight(flatIdx)}
+                        onMouseDown={() => {
+                          const t = tasks.find((x) => x.id === a.taskId);
+                          if (t) goToTask(t);
+                        }}
+                      >
+                        {proj && <span className="proj-dot" style={{ background: proj.color }} />}
+                        <div className="search-result-multi">
+                          <div className="search-result-title">{a.taskTitle}</div>
+                          <div className="muted small">{a.date} — {a.comment?.slice(0, 60) || a.bottleneckRemarks?.slice(0, 60)}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </>
           )}
         </div>

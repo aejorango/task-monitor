@@ -11,19 +11,28 @@ Deployed via GitHub Pages with a Firebase Firestore backend.
 ## Architecture
 
 - **Frontend:** React 19 + Vite + plain CSS (no Tailwind, no UI library)
-- **Backend:** Firebase Firestore for persistence; Firebase Anonymous Auth for `userId` scoping
-- **Hosting:** GitHub Pages (static); `base: '/task-monitor/'` in vite.config.js
-- **Three root collections:** `projects`, `tasks`, `activities`
+- **Backend:** Firebase Firestore + Firebase Auth (Anonymous + Google)
+- **Hosting:** GitHub Pages at `tasks.blueinnovation.ph` (custom domain, CNAME at dot.ph)
+- **Top-level container:** `workspaces` — every project/task/activity/template/comment/webhook belongs to exactly one workspace. Members of a workspace share its contents.
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable`
-- **Routing:** URL hash (`#/<view>/<projectFilter>`). No react-router.
+- **Routing:** URL hash (`#/<view>/<projectFilter>?ws=<workspaceId>&tag=…&status=…`). No react-router.
 - **Counters on each task** (`activityCount`, `totalHoursLogged`, `attachmentCount`, `lastActivityAt`) kept in sync via batched writes with `FieldValue.increment()`
 
 ## Data Model
 
 ```
+workspaces/{workspaceId}:                ← v10 top-level container
+  createdByUserId, name, description, color, icon
+  members: [uid, ...]                    ← array-contains query
+  acl: { [uid]: 'owner'|'admin'|'editor'|'viewer' }
+  pendingInvites: [{ email, role, token }]
+  archived, deleted, createdAt, updatedAt
+
 projects/{projectId}:
-  userId, name, description, color
+  userId, workspaceId, name, description, color
   phases: [{ id, name, order }]
+  acl: { [uid]: role }                   ← per-project ACL inside the workspace
+  members: [uid, ...]
   archived, deleted, createdAt, updatedAt
 
 tasks/{taskId}:

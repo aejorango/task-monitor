@@ -1,7 +1,7 @@
 // src/components/TaskEditor.jsx — edit modal with subtasks, tags, dependencies.
 
 import { useState, useMemo } from 'react';
-import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload } from '../services/firebase';
+import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload, todayLocal } from '../services/firebase';
 import { useTasks, useAuth, useTaskComments } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { MarkdownEditor } from './Markdown';
@@ -23,6 +23,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [projectId, setProjectId]     = useState(task.projectId || '');
   const [phaseId, setPhaseId]         = useState(task.phaseId || '');
   const [priority, setPriority]       = useState(task.priority || 'medium');
+  const [status, setStatus]           = useState(task.status || 'todo');
   const [planStart, setPlanStart]     = useState(task.plan?.startDate || '');
   const [planEnd, setPlanEnd]         = useState(task.plan?.endDate || '');
   const [actualStart, setActualStart] = useState(task.actual?.startDate || '');
@@ -118,12 +119,38 @@ export default function TaskEditor({ task, projects, onClose }) {
   const save = async () => {
     setSaving(true);
     try {
+      // Mirror the auto-stamping logic from setTaskStatus, but only when the
+      // user didn't manually fill the corresponding actual date field. This
+      // preserves explicit edits while still being helpful for the common
+      // "move task to In progress" flow.
+      const today = todayLocal();
+      let nextActualStart = actualStart;
+      let nextActualEnd   = actualEnd;
+      let nextProgress    = task.progress;
+      if (status !== task.status) {
+        if (status === 'doing' && !nextActualStart) nextActualStart = today;
+        if (status === 'done') {
+          if (!nextActualStart) nextActualStart = today;
+          if (!nextActualEnd)   nextActualEnd   = today;
+          nextProgress = 100;
+        }
+        if (status === 'todo') {
+          // Revert: clear stamps unless the user has explicitly set them in
+          // the same edit (rare; we trust the form values either way).
+          if (nextActualStart === task.actual?.startDate) nextActualStart = null;
+          if (nextActualEnd   === task.actual?.endDate)   nextActualEnd   = null;
+          if (nextProgress === 100) nextProgress = 0;
+        }
+      }
+
       const updates = {
         title: title.trim(),
         description: description.trim(),
         projectId: projectId || null,
         phaseId: phaseId || null,
         priority,
+        status,
+        progress: nextProgress,
         requestedBy: requestedBy.trim(),
         category: selectedProject?.name || task.category,
         tags,
@@ -133,12 +160,14 @@ export default function TaskEditor({ task, projects, onClose }) {
         recurrence,
         customValues,
         assignedTo,
-        'plan.startDate':   planStart   || null,
-        'plan.endDate':     planEnd     || null,
-        'actual.startDate': actualStart || null,
-        'actual.endDate':   actualEnd   || null,
+        'plan.startDate':   planStart        || null,
+        'plan.endDate':     planEnd          || null,
+        'actual.startDate': nextActualStart  || null,
+        'actual.endDate':   nextActualEnd    || null,
       };
-      if (completionPct !== null) updates.progress = completionPct;
+      // Only override progress from subtask completion if the user didn't
+      // just transition status (which has its own progress logic).
+      if (completionPct !== null && status === task.status) updates.progress = completionPct;
       await updateTask(task.id, updates);
       onClose();
     } catch (err) {
@@ -228,6 +257,14 @@ export default function TaskEditor({ task, projects, onClose }) {
               </div>
             </div>
             <div className="field-row">
+              <div className="field">
+                <label className="label">Status</label>
+                <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="todo">To do</option>
+                  <option value="doing">In progress</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
               <div className="field">
                 <label className="label">Priority</label>
                 <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
