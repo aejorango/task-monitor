@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTasks, useAllActivities, useProjects, useSavedViews } from '../hooks/useTasks';
+import { useActiveWorkspaceId, setActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useOnline } from '../hooks/useOnline';
 import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 const VIEWS = [
   { id: 'dashboard', label: 'Dashboard',    icon: '◰' },
@@ -25,6 +27,7 @@ function parseHash() {
   return {
     view: parts[0] || 'dashboard',
     projectFilter: parts[1] || 'all',
+    workspaceId:  params.get('ws')     || null,
     tagFilter:    params.get('tag')    || null,
     statusFilter: params.get('status') || null,
     savedViewId:  params.get('saved')  || null,
@@ -34,6 +37,7 @@ function parseHash() {
 
 function setHash(next) {
   const params = new URLSearchParams();
+  if (next.workspaceId)  params.set('ws',     next.workspaceId);
   if (next.tagFilter)    params.set('tag',    next.tagFilter);
   if (next.statusFilter) params.set('status', next.statusFilter);
   if (next.savedViewId)  params.set('saved',  next.savedViewId);
@@ -56,14 +60,38 @@ export function useRoute() {
 export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget }) {
   const online = useOnline();
   const current = VIEWS.find((v) => v.id === route.view) || VIEWS[0];
+  const activeWs = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+
+  // URL ↔ active-workspace binding.
+  // 1. If URL has ?ws=<id> and it's different from current state, sync state to URL.
+  // 2. If state has an active workspace but URL doesn't, push it into the URL
+  //    so the URL is shareable and survives refresh.
+  useEffect(() => {
+    if (route.workspaceId && route.workspaceId !== activeWs) {
+      setActiveWorkspaceId(route.workspaceId);
+    }
+  }, [route.workspaceId, activeWs]);
+  useEffect(() => {
+    if (activeWs && route.workspaceId !== activeWs) {
+      navigate({ workspaceId: activeWs });
+    }
+  }, [activeWs]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">
+        <div className="sidebar-brand sidebar-brand-compact">
           <div className="sidebar-brand-mark">TM</div>
           <span>Task Monitor</span>
         </div>
+
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          activeId={activeWs}
+          onSwitch={(id) => navigate({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null })}
+          onManage={() => navigate({ view: 'settings', savedViewId: null, tagFilter: null })}
+        />
 
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Views</div>
@@ -121,6 +149,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
 // ─── Save current view ────────────────────────────────────
 
 function SaveViewButton({ route, userId }) {
+  const workspaceId = useActiveWorkspaceId();
   const hasFilter = route.projectFilter !== 'all' || route.tagFilter || route.statusFilter;
   if (!userId || !hasFilter) return null;
   // Already loaded as a saved view → hide
@@ -130,6 +159,7 @@ function SaveViewButton({ route, userId }) {
     if (!name) return;
     try {
       await addSavedView(userId, {
+        workspaceId,
         name: name.trim(),
         view: route.view,
         projectFilter: route.projectFilter,

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload } from '../services/firebase';
 import { useTasks, useAuth, useTaskComments } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { MarkdownEditor } from './Markdown';
 import Markdown from './Markdown';
 import {
@@ -86,6 +87,7 @@ export default function TaskEditor({ task, projects, onClose }) {
     if (!confirm(`Promote "${s.text}" to a full task?\n\nIt will inherit this task's project and phase. The subtask will be removed from this list.`)) return;
     try {
       await addTask(userId, {
+        workspaceId: task.workspaceId,
         title: s.text,
         description: `Promoted from subtask of "${task.title}".`,
         category: selectedProject?.name || task.category,
@@ -167,7 +169,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         subtasks,
         recurrence,
       });
-      await addTemplate(userId, { name: name.trim(), kind: 'task', payload });
+      await addTemplate(userId, { workspaceId: task.workspaceId, name: name.trim(), kind: 'task', payload });
       alert(`Saved template "${name.trim()}".`);
     } catch (err) {
       console.error(err);
@@ -394,7 +396,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         )}
 
         {tab === 'comments' && (
-          <CommentsThread taskId={task.id} userId={userId} />
+          <CommentsThread task={task} userId={userId} />
         )}
 
         {tab === 'ai' && (
@@ -595,7 +597,8 @@ function LinksEditor({ links, onChange, candidates }) {
   );
 }
 
-function CommentsThread({ taskId, userId }) {
+function CommentsThread({ task, userId }) {
+  const taskId = task.id;
   const { comments, loading } = useTaskComments(taskId);
   const [body, setBody] = useState('');
   const [posting, setPosting] = useState(false);
@@ -607,7 +610,7 @@ function CommentsThread({ taskId, userId }) {
     if (!text) return;
     setPosting(true);
     try {
-      await addTaskComment(userId, taskId, text);
+      await addTaskComment(userId, task, text);
       setBody('');
     } catch (err) {
       console.error(err);

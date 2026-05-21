@@ -1,4 +1,12 @@
 // Firestore Security Rules
+//
+// Schema layering:
+//   workspaces/{id}    — top-level container; has members[] and acl{uid:role}
+//   projects/{id}      — workspaceId field; project-level ACL nested inside a workspace
+//   tasks, activities,
+//   taskComments,
+//   templates, savedViews,
+//   webhooks           — workspaceId field; access derived from workspace membership
 
 rules_version = '2';
 service cloud.firestore {
@@ -8,15 +16,36 @@ service cloud.firestore {
       return request.auth != null
           && request.auth.uid == resource.data.userId;
     }
-
     function isCreatingOwn() {
       return request.auth != null
           && request.auth.uid == request.resource.data.userId;
     }
 
-    // True if the requester appears in the project's members array. Used for
-    // ACL-aware reads on projects + cascading to tasks/activities/comments
-    // that reference projectId.
+    // ─── Workspace helpers ──────────────────────────────────────────────────
+    function isWorkspaceMember(workspaceId) {
+      return request.auth != null
+          && workspaceId is string
+          && exists(/databases/$(database)/documents/workspaces/$(workspaceId))
+          && request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members;
+    }
+    function workspaceRole(workspaceId) {
+      return request.auth != null
+          && workspaceId is string
+          && exists(/databases/$(database)/documents/workspaces/$(workspaceId))
+          ? get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.acl[request.auth.uid]
+          : null;
+    }
+    function isWorkspaceOwner(workspaceId) { return workspaceRole(workspaceId) == 'owner'; }
+    function isWorkspaceAdmin(workspaceId) {
+      let r = workspaceRole(workspaceId);
+      return r == 'owner' || r == 'admin';
+    }
+    function canEditWorkspace(workspaceId) {
+      let r = workspaceRole(workspaceId);
+      return r == 'owner' || r == 'admin' || r == 'editor';
+    }
+
+    // ─── Project helpers (per-project ACL inside a workspace) ───────────────
     function isProjectMember(projectId) {
       return request.auth != null
           && projectId is string
@@ -33,44 +62,68 @@ service cloud.firestore {
       return hasProjectRole(projectId, 'admin') || hasProjectRole(projectId, 'editor');
     }
 
-    match /tasks/{taskId} {
-      allow read:   if isOwner(resource) || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
-      allow create: if isCreatingOwn();
-      allow update: if isOwner(resource) || (resource.data.projectId is string && canEditProject(resource.data.projectId));
-      allow delete: if isOwner(resource) || (resource.data.projectId is string && hasProjectRole(resource.data.projectId, 'admin'));
+    // ─── Workspaces ─────────────────────────────────────────────────────────
+    match /workspaces/{workspaceId} {
+      // Anyone in the members array can read the workspace.
+      allow read:   if request.auth != null && request.auth.uid in resource.data.members;
+      // Anyone signed-in can create their own workspace.
+      allow create: if request.auth != null
+                    && request.resource.data.createdByUserId == request.auth.uid
+                    && request.auth.uid in request.resource.data.members
+                    && request.resource.data.acl[request.auth.uid] == 'owner';
+      // Updates: owners + admins can mutate. Members can leave (remove self).
+      allow update: if request.auth != null
+                    && (resource.data.acl[request.auth.uid] == 'owner'
+                        || resource.data.acl[request.auth.uid] == 'admin');
+      // Only the original owner can delete the workspace (soft delete in practice).
+      allow delete: if request.auth != null
+                    && resource.data.acl[request.auth.uid] == 'owner';
     }
 
-    match /activities/{activityId} {
-      allow read:   if isOwner(resource) || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
-      allow create: if isCreatingOwn();
-      allow update: if isOwner(resource) || (resource.data.projectId is string && canEditProject(resource.data.projectId));
-      allow delete: if isOwner(resource) || (resource.data.projectId is string && hasProjectRole(resource.data.projectId, 'admin'));
-    }
-
+    // ─── Projects ───────────────────────────────────────────────────────────
     match /projects/{projectId} {
-      // Owners always have full access. Shared members read it via membership.
-      allow read:   if isOwner(resource) || (request.auth != null && request.auth.uid in resource.data.members);
-      allow create: if isCreatingOwn();
-      // Updates: owner, admins, editors (no acl change), or a signed-in user
-      // who is claiming a valid invite link (adds only themselves to acl/members).
-      allow update: if isOwner(resource) ||
-                       (request.auth != null
-                        && request.auth.uid in resource.data.acl
-                        && (resource.data.acl[request.auth.uid] == 'admin'
-                            || (resource.data.acl[request.auth.uid] == 'editor'
-                                && request.resource.data.acl == resource.data.acl
-                                && request.resource.data.members == resource.data.members))) ||
-                       isClaimingInvite(projectId);
-      allow delete: if isOwner(resource);
+      allow read:   if isOwner(resource)
+                    || (request.auth != null && request.auth.uid in resource.data.members)
+                    || isWorkspaceMember(resource.data.workspaceId);
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource)
+                    || canEditProject(projectId)
+                    || canEditWorkspace(resource.data.workspaceId)
+                    || isClaimingInvite(projectId);
+      allow delete: if isOwner(resource)
+                    || hasProjectRole(projectId, 'admin')
+                    || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
-    // Self-claim rule: a signed-in user can add themselves to acl + members
-    // ONLY when:
-    //   • The write includes a `lastClaimInviteId` matching a real invite.
-    //   • The invite's projectId matches this project, isn't revoked or expired.
-    //   • The role being granted matches the invite.
-    //   • Only the requester's uid is being added to acl + members.
-    //   • The project's identity fields (userId, name, deleted) are unchanged.
+    // ─── Tasks ──────────────────────────────────────────────────────────────
+    match /tasks/{taskId} {
+      allow read:   if isOwner(resource)
+                    || isWorkspaceMember(resource.data.workspaceId)
+                    || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource)
+                    || canEditWorkspace(resource.data.workspaceId)
+                    || (resource.data.projectId is string && canEditProject(resource.data.projectId));
+      allow delete: if isOwner(resource)
+                    || isWorkspaceAdmin(resource.data.workspaceId)
+                    || (resource.data.projectId is string && hasProjectRole(resource.data.projectId, 'admin'));
+    }
+
+    // ─── Activities ─────────────────────────────────────────────────────────
+    match /activities/{activityId} {
+      allow read:   if isOwner(resource)
+                    || isWorkspaceMember(resource.data.workspaceId)
+                    || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource)
+                    || canEditWorkspace(resource.data.workspaceId)
+                    || (resource.data.projectId is string && canEditProject(resource.data.projectId));
+      allow delete: if isOwner(resource)
+                    || isWorkspaceAdmin(resource.data.workspaceId)
+                    || (resource.data.projectId is string && hasProjectRole(resource.data.projectId, 'admin'));
+    }
+
+    // ─── Project invites (kept from v9) ─────────────────────────────────────
     function isClaimingInvite(projectId) {
       let inviteId = request.resource.data.lastClaimInviteId;
       let inv = inviteId is string && exists(/databases/$(database)/documents/invites/$(inviteId))
@@ -91,11 +144,8 @@ service cloud.firestore {
     }
 
     match /invites/{inviteId} {
-      // Anyone signed in can read an invite (the URL is the secret).
       allow read:   if request.auth != null;
       allow create: if isCreatingOwn();
-      // Owner can update / revoke. Signed-in claimers can update only the
-      // claims array (other fields locked) so they can record their claim.
       allow update: if isOwner(resource) ||
                        (request.auth != null
                         && request.resource.data.userId    == resource.data.userId
@@ -105,45 +155,53 @@ service cloud.firestore {
       allow delete: if isOwner(resource);
     }
 
+    // ─── Templates ──────────────────────────────────────────────────────────
     match /templates/{templateId} {
-      allow read:   if isOwner(resource);
-      allow create: if isCreatingOwn();
-      allow update, delete: if isOwner(resource);
+      allow read:   if isOwner(resource) || isWorkspaceMember(resource.data.workspaceId);
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource) || canEditWorkspace(resource.data.workspaceId);
+      allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
+    // ─── Task comments ──────────────────────────────────────────────────────
     match /taskComments/{commentId} {
-      allow read:   if isOwner(resource);
-      allow create: if isCreatingOwn();
-      allow update, delete: if isOwner(resource);
+      allow read:   if isOwner(resource) || isWorkspaceMember(resource.data.workspaceId);
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource);
+      allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
+    // ─── Saved views (personal-per-workspace) ───────────────────────────────
     match /savedViews/{viewId} {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();
       allow update, delete: if isOwner(resource);
     }
 
+    // ─── Presence (open to all authenticated, writes by owner only) ─────────
     match /presence/{docId} {
-      // Anyone authenticated can read presence — used by collaborators to see
-      // who else is viewing a task. Writes restricted to the owner.
       allow read:   if request.auth != null;
       allow create: if isCreatingOwn();
       allow update: if isOwner(resource);
       allow delete: if isOwner(resource);
     }
 
+    // ─── Webhooks (workspace-scoped admin tool) ─────────────────────────────
     match /webhooks/{hookId} {
-      allow read:   if isOwner(resource);
-      allow create: if isCreatingOwn();
-      allow update, delete: if isOwner(resource);
+      allow read:   if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
+      allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
+    // ─── Legacy categories (unused) ─────────────────────────────────────────
     match /categories/{categoryId} {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();
       allow update, delete: if isOwner(resource);
     }
 
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

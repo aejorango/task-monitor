@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { addTask } from '../services/firebase';
 import { useAuth, useTemplates } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { parseQuickAdd } from '../services/nlpQuickAdd';
 
 export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const { userId, ready } = useAuth();
+  const workspaceId = useActiveWorkspaceId();
   const { templates } = useTemplates();
 
   const [title, setTitle] = useState('');
@@ -70,6 +72,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
       const mergedPlanEnd  = planEnd   || parsed.plan?.endDate || null;
 
       await addTask(userId, {
+        workspaceId,
         title: (parsed.title || title).trim(),
         description: description.trim(),
         category: selectedProject?.name || 'Personal',

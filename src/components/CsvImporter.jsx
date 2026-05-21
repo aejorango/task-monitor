@@ -3,6 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useAuth, useProjects, useTasks } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addTask, addActivity, todayLocal } from '../services/firebase';
 
 // Minimal RFC-4180-ish CSV parser. Handles quoted cells, escaped quotes, and
@@ -103,6 +104,7 @@ function normalizeDate(raw) {
 
 export default function CsvImporter({ onClose }) {
   const { userId } = useAuth();
+  const workspaceId = useActiveWorkspaceId();
   const { projects } = useProjects();
   const { tasks } = useTasks();
 
@@ -212,6 +214,7 @@ export default function CsvImporter({ onClose }) {
               task = createdTaskByKey[key];
             } else {
               const ref = await addTask(userId, {
+                workspaceId,
                 title: row.taskTitle,
                 category: row.project?.name || row.projectName || 'Personal',
                 projectId: row.project?.id || null,
@@ -220,6 +223,7 @@ export default function CsvImporter({ onClose }) {
               });
               task = {
                 id: ref.id,
+                workspaceId,
                 title: row.taskTitle,
                 category: row.project?.name || row.projectName || 'Personal',
                 projectId: row.project?.id || null,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useProjects, useTasks, useAuth, useTemplates } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import {
   addProject,
   updateProject,
@@ -458,6 +459,7 @@ function TemplateCard({ template, onUse, note }) {
 }
 
 function ProjectEditor({ project, userId, fromTemplate, onClose }) {
+  const workspaceId = useActiveWorkspaceId();
   const isNew = !project;
   const seed = fromTemplate?.payload;
   const [name, setName]         = useState(project?.name || seed?.name || '');
@@ -491,7 +493,7 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { name: name.trim(), description: description.trim(), color, phases, customFields });
+        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, phases, customFields });
       } else {
         await updateProject(project.id, { name: name.trim(), description: description.trim(), color, phases, customFields });
       }
@@ -519,6 +521,7 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     if (!tplName) return;
     try {
       await addTemplate(userId, {
+        workspaceId,
         name: tplName.trim(),
         kind: 'project',
         payload: projectAsTemplatePayload({ name: name.trim(), description: description.trim(), color, phases }),

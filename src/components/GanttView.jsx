@@ -6,6 +6,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { todayLocal, updateTask, addTask } from '../services/firebase';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
@@ -565,6 +566,7 @@ function PageHeader({ zoom, setZoom, onNewTask }) {
 // project + phase + plan dates (the fields you actually need on a timeline).
 function GanttQuickAdd({ projects, projectFilter, onClose }) {
   const { userId } = useAuth();
+  const workspaceId = useActiveWorkspaceId();
   const [title, setTitle]     = useState('');
   const [projectId, setProjectId] = useState(
     projectFilter !== 'all' ? projectFilter : (projects[0]?.id || '')
@@ -582,6 +584,7 @@ function GanttQuickAdd({ projects, projectFilter, onClose }) {
     setSaving(true);
     try {
       await addTask(userId, {
+        workspaceId,
         title: title.trim(),
         category: project?.name || 'Personal',
         projectId: projectId || null,

@@ -74,6 +74,7 @@ export default function AiTaskGenerator({ project, onClose }) {
         const planStart = isoFromDate(cursorDay);
         const planEnd   = isoFromDate(new Date(cursorDay.getTime() + (Math.max(0, d.estimatedDays - 1)) * DAY));
         await addTask(userId, {
+          workspaceId: project.workspaceId,
           title: d.title,
           description: d.description,
           category: project.name,

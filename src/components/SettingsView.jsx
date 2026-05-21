@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { addWorkspaceMember, removeWorkspaceMember, updateWorkspaceMemberRole } from '../services/firebase';
+import WorkspaceEditor from './WorkspaceEditor';
 import {
   addWebhook,
   updateWebhook,
@@ -200,6 +203,8 @@ export default function SettingsView() {
           <p className="page-subtitle">Per-device preferences. Stored in local storage (anonymous auth is also per-device).</p>
         </div>
       </div>
+
+      <WorkspacesSection currentUser={currentUser} />
 
       <section className="review-section">
         <h2 className="review-h2">Account</h2>
@@ -497,6 +502,7 @@ function WebhooksSection({ userId }) {
 }
 
 function WebhookEditor({ hook, userId, onClose }) {
+  const workspaceId = useActiveWorkspaceId();
   const isNew = !hook;
   const [name, setName]   = useState(hook?.name || '');
   const [url, setUrl]     = useState(hook?.url || '');
@@ -513,7 +519,7 @@ function WebhookEditor({ hook, userId, onClose }) {
     if (!url.trim()) { alert('URL is required.'); return; }
     setBusy(true);
     try {
-      if (isNew) await addWebhook(userId, { name, url, secret, events, enabled });
+      if (isNew) await addWebhook(userId, { workspaceId, name, url, secret, events, enabled });
       else       await updateWebhook(hook.id, { name, url, secret, events, enabled });
       onClose();
     } catch (err) {
@@ -564,6 +570,182 @@ function WebhookEditor({ hook, userId, onClose }) {
           <button className="btn btn-primary" onClick={save} disabled={busy || !url.trim()}>
             {busy ? 'Saving…' : 'Save'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Workspaces section ─────────────────────────────────────────────────────
+
+function WorkspacesSection({ currentUser }) {
+  const { workspaces } = useWorkspaces();
+  const activeId = useActiveWorkspaceId();
+  const active = workspaces.find((w) => w.id === activeId);
+  const [editing, setEditing] = useState(null);   // workspace or 'new'
+  const [showMembers, setShowMembers] = useState(false);
+
+  const isOwner = active?.acl?.[currentUser?.uid] === 'owner';
+  const isAdmin = isOwner || active?.acl?.[currentUser?.uid] === 'admin';
+
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">Workspaces</h2>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <p className="muted small" style={{ margin: 0 }}>
+            You belong to <strong>{workspaces.length}</strong> workspace{workspaces.length === 1 ? '' : 's'}.
+            {active && <> Currently active: <strong>{active.name}</strong>.</>}
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setEditing('new')}>+ New workspace</button>
+      </div>
+
+      {workspaces.length > 0 && (
+        <div className="ws-list">
+          {workspaces.map((w) => {
+            const isActive = w.id === activeId;
+            const myRole = w.acl?.[currentUser?.uid] || 'member';
+            return (
+              <div key={w.id} className={`ws-list-item ${isActive ? 'active' : ''}`}>
+                <span className="ws-icon ws-icon-sm" style={{ background: w.color }}>{w.icon || '◆'}</span>
+                <div className="ws-list-info">
+                  <div className="ws-list-name">{w.name}</div>
+                  <div className="muted small">
+                    {w.members?.length || 0} member{w.members?.length === 1 ? '' : 's'} · your role: <strong>{myRole}</strong>
+                  </div>
+                  {w.description && <div className="muted small" style={{ marginTop: 2 }}>{w.description}</div>}
+                </div>
+                <div className="ws-list-actions">
+                  {!isActive && (
+                    <button className="btn btn-sm" onClick={() => setActiveWorkspaceId(w.id)}>Switch to</button>
+                  )}
+                  <button className="btn btn-sm" onClick={() => setEditing(w)}>Edit</button>
+                  <button className="btn btn-sm" onClick={() => setShowMembers(w)}>Members</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {editing && (
+        <WorkspaceEditor
+          workspace={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {showMembers && (
+        <WorkspaceMembersModal
+          workspace={showMembers}
+          currentUid={currentUser?.uid}
+          isAdmin={showMembers.acl?.[currentUser?.uid] === 'owner' || showMembers.acl?.[currentUser?.uid] === 'admin'}
+          onClose={() => setShowMembers(false)}
+        />
+      )}
+    </section>
+  );
+}
+
+function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
+  const [newUid, setNewUid] = useState('');
+  const [newRole, setNewRole] = useState('editor');
+  const [busy, setBusy] = useState(false);
+
+  const add = async () => {
+    if (!newUid.trim()) return;
+    setBusy(true);
+    try { await addWorkspaceMember(workspace, newUid.trim(), newRole); setNewUid(''); }
+    catch (err) { console.error(err); alert('Could not add member: ' + (err.message || '')); }
+    finally { setBusy(false); }
+  };
+  const remove = async (uid) => {
+    if (!confirm(`Remove member ${uid}?`)) return;
+    setBusy(true);
+    try { await removeWorkspaceMember(workspace, uid); }
+    catch (err) { console.error(err); alert('Could not remove member: ' + (err.message || '')); }
+    finally { setBusy(false); }
+  };
+  const changeRole = async (uid, role) => {
+    setBusy(true);
+    try { await updateWorkspaceMemberRole(workspace, uid, role); }
+    catch (err) { console.error(err); alert('Could not change role: ' + (err.message || '')); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+        <h3 className="modal-title">{workspace.name} — members</h3>
+        <p className="modal-sub">
+          Members can see and edit everything in this workspace. Owners can add/remove members and change roles. Email invites are coming; for now, share by Firebase UID.
+        </p>
+
+        <div className="ws-members-list">
+          {(workspace.members || []).map((uid) => {
+            const role = workspace.acl?.[uid] || 'editor';
+            const isMe = uid === currentUid;
+            return (
+              <div key={uid} className="ws-member-row">
+                <span className="account-avatar fallback" style={{ width: 28, height: 28, fontSize: 12 }}>
+                  {uid.slice(0, 1).toUpperCase()}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="mono small" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {uid}{isMe && <span className="muted"> (you)</span>}
+                  </div>
+                </div>
+                {isAdmin && role !== 'owner' ? (
+                  <select
+                    className="select select-sm"
+                    value={role}
+                    onChange={(e) => changeRole(uid, e.target.value)}
+                    disabled={busy}
+                  >
+                    <option value="admin">admin</option>
+                    <option value="editor">editor</option>
+                    <option value="viewer">viewer</option>
+                  </select>
+                ) : (
+                  <span className="badge badge-soft-muted">{role}</span>
+                )}
+                {isAdmin && role !== 'owner' && (
+                  <button className="btn btn-sm btn-ghost link-danger" onClick={() => remove(uid)} disabled={busy}>✕</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {isAdmin && (
+          <div className="field" style={{ marginTop: 12 }}>
+            <label className="label">Add member by UID</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                className="input input-sm"
+                value={newUid}
+                onChange={(e) => setNewUid(e.target.value)}
+                placeholder="Firebase user ID"
+                style={{ flex: 1 }}
+              />
+              <select className="select select-sm" value={newRole} onChange={(e) => setNewRole(e.target.value)} style={{ width: 110 }}>
+                <option value="admin">admin</option>
+                <option value="editor">editor</option>
+                <option value="viewer">viewer</option>
+              </select>
+              <button className="btn btn-sm" onClick={add} disabled={busy || !newUid.trim()}>Add</button>
+            </div>
+            <p className="muted small" style={{ marginTop: 6 }}>
+              The user must already have a Firebase account. They can find their UID in their <em>Settings → Account</em> page.
+            </p>
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

@@ -176,6 +176,7 @@ export function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+const workspacesRef = collection(db, 'workspaces');
 const tasksRef = collection(db, 'tasks');
 const activitiesRef = collection(db, 'activities');
 const projectsRef = collection(db, 'projects');
@@ -186,6 +187,179 @@ const presenceRef   = collection(db, 'presence');
 const webhooksRef   = collection(db, 'webhooks');
 const invitesRef    = collection(db, 'invites');
 
+// ─── WORKSPACES ─────────────────────────────────────────────────────────────
+// A workspace is the top-level scope above projects. Every project, task,
+// activity, template, comment, view, and webhook belongs to exactly ONE
+// workspace. This gives us:
+//   - clean horizontal sharding (every query scoped to one workspace)
+//   - team boundaries (members of a workspace see its contents)
+//   - bounded blast radius per user
+//
+// Schema:
+//   workspaces/{id}
+//     createdByUserId
+//     name, description, color, icon
+//     members:        [uid, ...]            // denormalized for array-contains
+//     acl:            { uid: role }         // 'owner'|'admin'|'editor'|'viewer'
+//     pendingInvites: [{ email, role, token }]  // future: email invites
+//     archived, deleted, createdAt, updatedAt
+
+const WORKSPACE_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+const DEFAULT_WORKSPACE_ICON = '◆';
+
+export async function addWorkspace(userId, workspace) {
+  const ref = doc(workspacesRef);
+  const data = {
+    createdByUserId: userId,
+    name: workspace.name,
+    description: workspace.description || '',
+    color: workspace.color || WORKSPACE_COLORS[Math.floor(Math.random() * WORKSPACE_COLORS.length)],
+    icon:  workspace.icon  || DEFAULT_WORKSPACE_ICON,
+    members: [userId],
+    acl:     { [userId]: 'owner' },
+    pendingInvites: [],
+    archived: false,
+    deleted:  false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, data);
+  return { id: ref.id, ...data };
+}
+
+export async function updateWorkspace(workspaceId, updates) {
+  return await updateDoc(doc(db, 'workspaces', workspaceId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function softDeleteWorkspace(workspaceId) {
+  return await updateWorkspace(workspaceId, { deleted: true });
+}
+
+// Add a member by UID (used in current single-user flows or via UID-share).
+// Role: 'admin'|'editor'|'viewer'. Owner is the original creator.
+export async function addWorkspaceMember(workspace, memberUserId, role = 'editor') {
+  if (!['admin', 'editor', 'viewer'].includes(role)) {
+    throw new Error(`Invalid role: ${role}`);
+  }
+  if ((workspace.members || []).includes(memberUserId)) return;
+  const ref = doc(db, 'workspaces', workspace.id);
+  await updateDoc(ref, {
+    members: [...(workspace.members || []), memberUserId],
+    [`acl.${memberUserId}`]: role,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function removeWorkspaceMember(workspace, memberUserId) {
+  // Don't allow removing the owner via this API
+  if (workspace.acl?.[memberUserId] === 'owner') {
+    throw new Error('Cannot remove the workspace owner.');
+  }
+  const newMembers = (workspace.members || []).filter((u) => u !== memberUserId);
+  const newAcl = { ...(workspace.acl || {}) };
+  delete newAcl[memberUserId];
+  await updateDoc(doc(db, 'workspaces', workspace.id), {
+    members: newMembers,
+    acl:     newAcl,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateWorkspaceMemberRole(workspace, memberUserId, newRole) {
+  if (workspace.acl?.[memberUserId] === 'owner' && newRole !== 'owner') {
+    throw new Error('Cannot demote the workspace owner.');
+  }
+  await updateDoc(doc(db, 'workspaces', workspace.id), {
+    [`acl.${memberUserId}`]: newRole,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Live list of workspaces the current user belongs to.
+export function subscribeToWorkspaces(userId, callback) {
+  const q = query(
+    workspacesRef,
+    where('members', 'array-contains', userId),
+    where('deleted', '==', false),
+  );
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(data);
+  });
+}
+
+// ─── MIGRATION: existing user data → default "Personal" workspace ───────────
+//
+// On first sign-in after the workspaces feature ships, every existing user
+// will have projects/tasks/activities/etc. without a workspaceId. This function:
+//   1. Checks if the user is already a member of any workspace → if yes, no-op
+//   2. Creates a "Personal" workspace
+//   3. Batch-updates all the user's docs to set workspaceId = the new workspace's id
+//
+// Idempotent — safe to call on every load. Scoped to the legacy
+// `userId == request.auth.uid` rules that still apply during the transition.
+
+const _wsMigrationByUser = {};
+
+export async function migrateToWorkspaces(userId) {
+  if (_wsMigrationByUser[userId]) return _wsMigrationByUser[userId];
+  _wsMigrationByUser[userId] = (async () => {
+    // 1) Does the user already belong to a workspace?
+    const existing = await getDocs(query(
+      workspacesRef,
+      where('members', 'array-contains', userId),
+      limit(1),
+    ));
+    if (!existing.empty) {
+      return { migrated: false, reason: 'user already has a workspace' };
+    }
+
+    // 2) Create the default workspace
+    const wsDoc = await addWorkspace(userId, {
+      name: 'Personal',
+      description: 'Your starter workspace. All your existing projects, tasks, and activities live here.',
+      icon:  '◆',
+    });
+    const wsId = wsDoc.id;
+
+    // 3) Backfill workspaceId on existing data. We use batched writes (max 500
+    // operations per batch).
+    const collectionsToBackfill = [
+      { ref: projectsRef,     name: 'projects'    },
+      { ref: tasksRef,        name: 'tasks'       },
+      { ref: activitiesRef,   name: 'activities'  },
+      { ref: templatesRef,    name: 'templates'   },
+      { ref: taskCommentsRef, name: 'taskComments'},
+      { ref: savedViewsRef,   name: 'savedViews'  },
+      { ref: webhooksRef,     name: 'webhooks'    },
+    ];
+    const counts = {};
+    for (const { ref, name } of collectionsToBackfill) {
+      const snap = await getDocs(query(ref, where('userId', '==', userId)));
+      counts[name] = 0;
+      // Batch in chunks of 400 (under 500 limit)
+      let batch = writeBatch(db);
+      let n = 0;
+      for (const d of snap.docs) {
+        if (d.data().workspaceId) continue;  // already has one
+        batch.update(d.ref, { workspaceId: wsId });
+        n++; counts[name]++;
+        if (n % 400 === 0) {
+          await batch.commit();
+          batch = writeBatch(db);
+        }
+      }
+      if (n % 400 !== 0) await batch.commit();
+    }
+    return { migrated: true, workspaceId: wsId, backfilled: counts };
+  })();
+  return _wsMigrationByUser[userId];
+}
+
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
 //   phases: [{ id, name, order }]
@@ -194,6 +368,7 @@ const invitesRef    = collection(db, 'invites');
 const PROJECT_COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444'];
 
 export async function addProject(userId, project) {
+  if (!project.workspaceId) throw new Error('addProject requires project.workspaceId');
   const phases = (project.phases || []).map((p, i) => ({
     id: p.id || uid(),
     name: p.name,
@@ -201,17 +376,16 @@ export async function addProject(userId, project) {
   }));
   return await addDoc(projectsRef, {
     userId,
+    workspaceId: project.workspaceId,
     name: project.name,
     description: project.description || '',
     color: project.color || PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
     phases,
-    // v8 ACL — owner gets admin by default. Used to share projects later.
-    acl: { [userId]: 'admin' },
-    // Memberships, denormalized for query efficiency:
-    //   members: [uid, ...]  // anyone with any role
+    // Per-project ACL is retained for fine-grained sharing within a workspace.
+    acl:     { [userId]: 'admin' },
     members: [userId],
     archived: false,
-    deleted: false,
+    deleted:  false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -258,36 +432,22 @@ export async function softDeleteProject(projectId) {
 // user appears in the `members` array). Two listeners are merged into a
 // single callback. Older projects without a `members` field are picked up
 // by the owner query.
-export function subscribeToProjects(userId, callback) {
-  const ownedQ = query(
+export function subscribeToProjects(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(
     projectsRef,
-    where('userId', '==', userId),
+    where('workspaceId', '==', workspaceId),
     where('deleted', '==', false),
   );
-  const sharedQ = query(
-    projectsRef,
-    where('members', 'array-contains', userId),
-    where('deleted', '==', false),
-  );
-
-  let owned  = [];
-  let shared = [];
-  const emit = () => {
-    // Merge by id, then sort by createdAt desc
-    const map = {};
-    [...owned, ...shared].forEach((p) => { map[p.id] = p; });
-    const merged = Object.values(map);
-    merged.sort((a, b) => {
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    data.sort((a, b) => {
       const at = a.createdAt?.toMillis?.() ?? 0;
       const bt = b.createdAt?.toMillis?.() ?? 0;
       return bt - at;
     });
-    callback(merged);
-  };
-
-  const unsub1 = onSnapshot(ownedQ,  (snap) => { owned  = snap.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); });
-  const unsub2 = onSnapshot(sharedQ, (snap) => { shared = snap.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); });
-  return () => { unsub1(); unsub2(); };
+    callback(data);
+  });
 }
 
 // One-time migration: seed default projects from the legacy categories
@@ -353,8 +513,10 @@ async function _migrateLegacyCategoriesImpl(userId) {
 // ─── TASKS ──────────────────────────────────────────────────────────────────
 
 export async function addTask(userId, task) {
+  if (!task.workspaceId) throw new Error('addTask requires task.workspaceId');
   return await addDoc(tasksRef, {
     userId,
+    workspaceId: task.workspaceId,
     title: task.title,
     description: task.description || '',
     category: task.category || 'Personal',     // legacy back-compat
@@ -568,12 +730,13 @@ export async function softDeleteTask(taskId) {
   return await updateTask(taskId, { deleted: true });
 }
 
-export function subscribeToTasks(userId, callback) {
+export function subscribeToTasks(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
   const q = query(
     tasksRef,
-    where('userId',   '==', userId),
-    where('deleted',  '==', false),
-    where('archived', '==', false),
+    where('workspaceId', '==', workspaceId),
+    where('deleted',     '==', false),
+    where('archived',    '==', false),
     orderBy('createdAt', 'desc'),
   );
   return onSnapshot(q, (snap) => {
@@ -584,12 +747,14 @@ export function subscribeToTasks(userId, callback) {
 // ─── ACTIVITIES ─────────────────────────────────────────────────────────────
 
 export async function addActivity(userId, task, activity) {
+  if (!task.workspaceId) throw new Error('addActivity requires task.workspaceId');
   const batch = writeBatch(db);
 
   const newActivity = doc(activitiesRef);
   batch.set(newActivity, {
     taskId:       task.id,
     userId,
+    workspaceId:  task.workspaceId,
     taskTitle:    task.title,
     taskCategory: task.category,
     projectId:    task.projectId || null,
@@ -705,10 +870,11 @@ export function subscribeToActivities(taskId, callback) {
   });
 }
 
-export function subscribeToAllActivities(userId, callback) {
+export function subscribeToAllActivities(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
   const q = query(
     activitiesRef,
-    where('userId', '==', userId),
+    where('workspaceId', '==', workspaceId),
     orderBy('date', 'desc'),
     limit(500),
   );
@@ -717,11 +883,12 @@ export function subscribeToAllActivities(userId, callback) {
   });
 }
 
-export function subscribeToRecentActivities(userId, sinceDate, callback) {
+export function subscribeToRecentActivities(workspaceId, sinceDate, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
   const q = query(
     activitiesRef,
-    where('userId', '==', userId),
-    where('date',   '>=', sinceDate),
+    where('workspaceId', '==', workspaceId),
+    where('date',        '>=', sinceDate),
     orderBy('date', 'desc'),
     limit(200),
   );
@@ -736,8 +903,10 @@ export function subscribeToRecentActivities(userId, sinceDate, callback) {
 //   payload: task or project shape (only the structural fields, no IDs/dates)
 
 export async function addTemplate(userId, template) {
+  if (!template.workspaceId) throw new Error('addTemplate requires template.workspaceId');
   return await addDoc(templatesRef, {
     userId,
+    workspaceId: template.workspaceId,
     name:        template.name,
     description: template.description || '',
     kind:        template.kind,
@@ -759,11 +928,12 @@ export async function softDeleteTemplate(templateId) {
   return await updateTemplate(templateId, { deleted: true });
 }
 
-export function subscribeToTemplates(userId, callback) {
+export function subscribeToTemplates(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
   const q = query(
     templatesRef,
-    where('userId', '==', userId),
-    where('deleted', '==', false),
+    where('workspaceId', '==', workspaceId),
+    where('deleted',     '==', false),
   );
   return onSnapshot(q, (snap) => {
     const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -879,9 +1049,15 @@ export async function deleteUpload(path) {
 // ─── TASK COMMENTS ──────────────────────────────────────────────────────────
 // Discussion thread per task, separate from activity log.
 
-export async function addTaskComment(userId, taskId, body) {
+// Note: `task` here can be either a task object (preferred — carries workspaceId
+// directly) or the raw taskId for back-compat. Callers should pass the task.
+export async function addTaskComment(userId, task, body) {
+  const taskObj = typeof task === 'string' ? null : task;
+  const taskId  = typeof task === 'string' ? task  : task?.id;
+  if (!taskObj?.workspaceId) throw new Error('addTaskComment requires a task with workspaceId');
   return await addDoc(taskCommentsRef, {
     userId,
+    workspaceId: taskObj.workspaceId,
     taskId,
     body: String(body || ''),
     createdAt: serverTimestamp(),
@@ -925,14 +1101,16 @@ export function subscribeToTaskComments(taskId, callback) {
 // can pin in the sidebar.
 
 export async function addSavedView(userId, view) {
+  if (!view.workspaceId) throw new Error('addSavedView requires view.workspaceId');
   return await addDoc(savedViewsRef, {
     userId,
+    workspaceId:   view.workspaceId,
     name:          view.name,
     icon:          view.icon || '',
-    view:          view.view,                 // 'board' | 'table' | 'gantt' | 'calendar'
+    view:          view.view,
     projectFilter: view.projectFilter || 'all',
     tagFilter:     view.tagFilter || null,
-    statusFilter:  view.statusFilter || null, // 'todo' | 'doing' | 'done' | null
+    statusFilter:  view.statusFilter || null,
     sortBy:        view.sortBy || null,
     sortDir:       view.sortDir || 'desc',
     deleted:       false,
@@ -952,11 +1130,15 @@ export async function softDeleteSavedView(viewId) {
   return await updateSavedView(viewId, { deleted: true });
 }
 
-export function subscribeToSavedViews(userId, callback) {
+// Saved views are personal AND workspace-scoped: a user only sees their own
+// saved views within the current workspace.
+export function subscribeToSavedViews(workspaceId, userId, callback) {
+  if (!workspaceId || !userId) { callback([]); return () => {}; }
   const q = query(
     savedViewsRef,
-    where('userId', '==', userId),
-    where('deleted', '==', false),
+    where('workspaceId', '==', workspaceId),
+    where('userId',      '==', userId),
+    where('deleted',     '==', false),
   );
   return onSnapshot(q, (snap) => {
     const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -1010,8 +1192,10 @@ export function subscribeToPresence(taskId, callback) {
 // Function listening on Firestore changes (see FEATURE_ROADMAP.md → Tier 4).
 
 export async function addWebhook(userId, hook) {
+  if (!hook.workspaceId) throw new Error('addWebhook requires hook.workspaceId');
   return await addDoc(webhooksRef, {
     userId,
+    workspaceId: hook.workspaceId,
     name:    hook.name || '',
     url:     hook.url,
     secret:  hook.secret || '',
@@ -1030,8 +1214,13 @@ export async function updateWebhook(hookId, updates) {
 export async function softDeleteWebhook(hookId) {
   return await updateWebhook(hookId, { deleted: true });
 }
-export function subscribeToWebhooks(userId, callback) {
-  const q = query(webhooksRef, where('userId', '==', userId), where('deleted', '==', false));
+export function subscribeToWebhooks(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(
+    webhooksRef,
+    where('workspaceId', '==', workspaceId),
+    where('deleted',     '==', false),
+  );
   return onSnapshot(q, (snap) => {
     const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
