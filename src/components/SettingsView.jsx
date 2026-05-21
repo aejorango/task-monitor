@@ -6,6 +6,7 @@ import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '.
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addWorkspaceMember, removeWorkspaceMember, updateWorkspaceMemberRole } from '../services/firebase';
 import WorkspaceEditor from './WorkspaceEditor';
+import { WorkspaceIcon } from './WorkspaceSwitcher';
 import {
   addWebhook,
   updateWebhook,
@@ -609,7 +610,7 @@ function WorkspacesSection({ currentUser }) {
             const myRole = w.acl?.[currentUser?.uid] || 'member';
             return (
               <div key={w.id} className={`ws-list-item ${isActive ? 'active' : ''}`}>
-                <span className="ws-icon ws-icon-sm" style={{ background: w.color }}>{w.icon || '◆'}</span>
+                <WorkspaceIcon workspace={w} size="sm" />
                 <div className="ws-list-info">
                   <div className="ws-list-name">{w.name}</div>
                   <div className="muted small">

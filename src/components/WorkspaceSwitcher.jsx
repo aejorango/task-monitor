@@ -22,9 +22,7 @@ export default function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onMa
     <>
       <div className="ws-switcher" ref={ref}>
         <button className="ws-switcher-trigger" onClick={() => setOpen(!open)}>
-          <span className="ws-icon" style={{ background: active?.color || '#4f46e5' }}>
-            {active?.icon || '◆'}
-          </span>
+          <WorkspaceIcon workspace={active} />
           <div className="ws-info">
             <div className="ws-name">{active?.name || 'No workspace'}</div>
             <div className="ws-sub">{active?.members?.length || 0} member{active?.members?.length === 1 ? '' : 's'}</div>
@@ -41,7 +39,7 @@ export default function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onMa
                 className={`ws-menu-item ${w.id === activeId ? 'active' : ''}`}
                 onClick={() => { onSwitch(w.id); setOpen(false); }}
               >
-                <span className="ws-icon ws-icon-sm" style={{ background: w.color }}>{w.icon || '◆'}</span>
+                <WorkspaceIcon workspace={w} size="sm" />
                 <div className="ws-menu-item-text">
                   <div>{w.name}</div>
                   <div className="muted small">{w.members?.length || 0} member{w.members?.length === 1 ? '' : 's'}</div>
@@ -72,5 +70,27 @@ export default function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onMa
         />
       )}
     </>
+  );
+}
+
+// Renders a workspace's logo image if one is uploaded, otherwise its emoji
+// icon on a colored tile. Size is 'md' (default) or 'sm'.
+export function WorkspaceIcon({ workspace, size = 'md' }) {
+  const cls = size === 'sm' ? 'ws-icon ws-icon-sm' : 'ws-icon';
+  if (workspace?.logoUrl) {
+    return (
+      <span className={cls} style={{ background: 'transparent', overflow: 'hidden', padding: 0 }}>
+        <img
+          src={workspace.logoUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      </span>
+    );
+  }
+  return (
+    <span className={cls} style={{ background: workspace?.color || '#4f46e5' }}>
+      {workspace?.icon || '◆'}
+    </span>
   );
 }

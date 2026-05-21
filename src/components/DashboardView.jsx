@@ -15,6 +15,7 @@ import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import TaskForm from './TaskForm';
 import WorkspaceEditor from './WorkspaceEditor';
+import { WorkspaceIcon } from './WorkspaceSwitcher';
 
 function isoOf(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -225,10 +226,8 @@ export default function DashboardView({ projectFilter, navigate }) {
       <div className="dash-row dash-row-overview">
         <section className="dash-card">
           <div className="dash-card-head">
-            <h2 className="dash-card-title">
-              <span className="ws-icon ws-icon-sm" style={{ background: activeWorkspace.color, marginRight: 8 }}>
-                {activeWorkspace.icon || '◆'}
-              </span>
+            <h2 className="dash-card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <WorkspaceIcon workspace={activeWorkspace} size="sm" />
               {activeWorkspace.name}
             </h2>
             <button className="btn btn-sm btn-ghost" onClick={() => navigate?.({ view: 'settings' })}>

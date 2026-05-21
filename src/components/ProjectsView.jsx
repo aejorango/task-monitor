@@ -1,7 +1,7 @@
 // src/components/ProjectsView.jsx — list, create, edit projects + phases.
 
 import { useState, useEffect } from 'react';
-import { useProjects, useTasks, useAuth, useTemplates } from '../hooks/useTasks';
+import { useProjects, useTasks, useAuth, useTemplates, useAllActivities } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import {
   addProject,
@@ -26,18 +26,22 @@ export default function ProjectsView() {
   const { userId } = useAuth();
   const { projects, loading } = useProjects();
   const { tasks } = useTasks();
+  const { activities } = useAllActivities();
   const { templates } = useTemplates();
   const projectTemplates = templates.filter((t) => t.kind === 'project');
   const taskTemplates    = templates.filter((t) => t.kind === 'task');
   const [editing, setEditing] = useState(null);          // project or 'new'
   const [createFromTemplate, setCreateFromTemplate] = useState(null);
   const [aiFor, setAiFor] = useState(null);              // project to generate tasks for
+  const [activityLogFor, setActivityLogFor] = useState(null); // project for activity log modal
 
   const stats = (projectId) => {
     const t = tasks.filter((x) => x.projectId === projectId);
+    const a = activities.filter((x) => x.projectId === projectId);
     return {
       total: t.length,
       done:  t.filter((x) => x.status === 'done').length,
+      activities: a.length,
     };
   };
 
@@ -74,9 +78,14 @@ export default function ProjectsView() {
                   <h3 className="project-name">{p.name}</h3>
                   <button
                     className="btn btn-sm btn-ghost"
+                    title="View this project's activity log"
+                    onClick={(e) => { e.stopPropagation(); setActivityLogFor(p); }}
+                    style={{ marginLeft: 'auto' }}
+                  >☰ Log</button>
+                  <button
+                    className="btn btn-sm btn-ghost"
                     title="Generate tasks from this project's description"
                     onClick={(e) => { e.stopPropagation(); setAiFor(p); }}
-                    style={{ marginLeft: 'auto' }}
                   >✨ AI</button>
                 </div>
                 <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
@@ -89,6 +98,8 @@ export default function ProjectsView() {
                   <span>{s.total} task{s.total === 1 ? '' : 's'}</span>
                   <span>·</span>
                   <span>{s.done} done</span>
+                  <span>·</span>
+                  <span>{s.activities} activit{s.activities === 1 ? 'y' : 'ies'}</span>
                   {p.archived && (<><span>·</span><span className="badge badge-soft-muted">Archived</span></>)}
                 </div>
               </div>
@@ -159,7 +170,186 @@ export default function ProjectsView() {
           onClose={() => setAiFor(null)}
         />
       )}
+
+      {activityLogFor && (
+        <ProjectActivityLogModal
+          project={activityLogFor}
+          onClose={() => setActivityLogFor(null)}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Project activity log modal ─────────────────────────────────────────────
+// Shows all activity entries for a single project in a sortable table.
+// Includes CSV download. Read-only — the full Activity Log view (sidebar)
+// retains bulk edit / delete / import.
+function ProjectActivityLogModal({ project, onClose }) {
+  const { activities, loading } = useAllActivities();
+  const { tasks } = useTasks();
+  const taskById = {};
+  tasks.forEach((t) => { taskById[t.id] = t; });
+
+  const [sortBy, setSortBy]   = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const rows = activities
+    .filter((a) => a.projectId === project.id)
+    .map((a) => {
+      const phase = project.phases?.find((p) => p.id === a.phaseId);
+      return {
+        ...a,
+        _phase: phase?.name || '—',
+        _task:  a.taskTitle || taskById[a.taskId]?.title || '—',
+        _outputs: a.attachments || [],
+      };
+    });
+
+  rows.sort((a, b) => {
+    const av = a[`_${sortBy}`] ?? a[sortBy] ?? '';
+    const bv = b[`_${sortBy}`] ?? b[sortBy] ?? '';
+    const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const sortHandler = (key) => () => {
+    if (sortBy === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(key); setSortDir('asc'); }
+  };
+
+  const columns = [
+    { key: 'phase',      label: 'Phase' },
+    { key: 'task',       label: 'Task' },
+    { key: 'comment',    label: 'Activity details' },
+    { key: 'date',       label: 'Date' },
+    { key: 'completion', label: 'Completion' },
+    { key: 'output',     label: 'Output' },
+    { key: 'bottleneck', label: 'Bottlenecks / remarks' },
+    { key: 'requestedBy',label: 'Requested by' },
+    { key: 'hours',      label: 'Hours' },
+  ];
+
+  const totalHours = rows.reduce((sum, r) => sum + (r.hoursSpent || 0), 0);
+
+  const exportCsv = () => {
+    const headers = ['Project', 'Phase', 'Task', 'Activity details', 'Date', 'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
+    const escape = (v) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.join(',')];
+    rows.forEach((r) => {
+      lines.push([
+        project.name,
+        r._phase,
+        r._task,
+        r.comment,
+        r.date,
+        r.completionStatus,
+        r._outputs.map((a) => a.url).join(' | '),
+        r.bottleneckRemarks,
+        r.requestedBy,
+        r.hoursSpent || 0,
+      ].map(escape).join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = project.name.replace(/[^\w.\-]+/g, '_');
+    a.download = `${safeName}-activities-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 1100, width: '95vw' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <span className="proj-dot" style={{ background: project.color, width: 14, height: 14 }} />
+          <h3 className="modal-title" style={{ margin: 0 }}>{project.name} — Activity log</h3>
+        </div>
+        <p className="modal-sub" style={{ marginBottom: 12 }}>
+          {rows.length} entr{rows.length === 1 ? 'y' : 'ies'} · {totalHours.toFixed(1)}h total. Click a column to sort.
+        </p>
+
+        {loading ? (
+          <p className="muted">Loading activity log…</p>
+        ) : rows.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">☰</div>
+            <p>No activities logged for this project yet.</p>
+            <p className="small">Log activities from each task on the Board.</p>
+          </div>
+        ) : (
+          <div className="table-wrap" style={{ maxHeight: '60vh', overflow: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  {columns.map((c) => (
+                    <th
+                      key={c.key}
+                      className={sortBy === c.key ? 'sorted' : ''}
+                      onClick={sortHandler(c.key)}
+                    >
+                      {c.label}
+                      <span className="sort-icon">{sortBy === c.key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r._phase}</td>
+                    <td className="table-cell-wrap"><strong>{r._task}</strong></td>
+                    <td className="table-cell-wrap">{r.comment || <span className="muted">—</span>}</td>
+                    <td className="mono small">{r.date}</td>
+                    <td>
+                      {r.completionStatus ? (
+                        <span className={`badge badge-soft-${
+                          r.completionStatus === 'completed'   ? 'success' :
+                          r.completionStatus === 'blocked'     ? 'danger'  :
+                          r.completionStatus === 'in-progress' ? 'info'    : 'muted'
+                        }`}>{r.completionStatus}</span>
+                      ) : <span className="muted">—</span>}
+                    </td>
+                    <td>
+                      {r._outputs[0] ? (
+                        <a className="table-link" href={r._outputs[0].url} target="_blank" rel="noreferrer">
+                          📎 {(r._outputs[0].name || 'link').slice(0, 30)}
+                          {r._outputs.length > 1 && <span className="muted"> +{r._outputs.length - 1}</span>}
+                        </a>
+                      ) : <span className="muted">—</span>}
+                    </td>
+                    <td className="table-cell-wrap">
+                      {r.bottleneckRemarks
+                        ? <span style={{ color: 'var(--c-warn)' }}>⚠ {r.bottleneckRemarks}</span>
+                        : <span className="muted">—</span>}
+                    </td>
+                    <td>{r.requestedBy || <span className="muted">—</span>}</td>
+                    <td className="mono small">{(r.hoursSpent || 0).toFixed(1)}h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Close</button>
+          <button className="btn btn-primary" onClick={exportCsv} disabled={rows.length === 0}>
+            ⬇ Download CSV
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

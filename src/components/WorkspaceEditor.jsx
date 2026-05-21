@@ -1,11 +1,13 @@
 // src/components/WorkspaceEditor.jsx — create / edit a workspace.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '../hooks/useTasks';
 import {
   addWorkspace,
   updateWorkspace,
   softDeleteWorkspace,
+  uploadFile,
+  deleteUpload,
 } from '../services/firebase';
 
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
@@ -18,17 +20,70 @@ export default function WorkspaceEditor({ workspace, onClose }) {
   const [description, setDescr]   = useState(workspace?.description || '');
   const [color, setColor]         = useState(workspace?.color || COLORS[0]);
   const [icon,  setIcon]          = useState(workspace?.icon  || ICONS[0]);
+  const [logoUrl, setLogoUrl]     = useState(workspace?.logoUrl || '');
+  const [logoPath, setLogoPath]   = useState(workspace?.logoPath || '');
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [logoError, setLogoError] = useState(null);
+  const fileInputRef = useRef(null);
   const [saving, setSaving]       = useState(false);
+
+  const pickLogo = () => fileInputRef.current?.click();
+
+  const onLogoChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !userId) return;
+    if (!file.type.startsWith('image/')) {
+      setLogoError('Logo must be an image file.');
+      return;
+    }
+    setLogoError(null);
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      const prevPath = logoPath;
+      const att = await uploadFile({
+        userId,
+        taskId: `workspace-logos/${workspace?.id || 'new'}`,
+        file,
+        onProgress: setUploadPct,
+      });
+      setLogoUrl(att.url);
+      setLogoPath(att.path);
+      if (prevPath) deleteUpload(prevPath);
+    } catch (err) {
+      console.error(err);
+      setLogoError(err?.message || String(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const clearLogo = () => {
+    const prevPath = logoPath;
+    setLogoUrl('');
+    setLogoPath('');
+    if (prevPath) deleteUpload(prevPath);
+  };
 
   const save = async () => {
     if (!name.trim()) { alert('Workspace name is required.'); return; }
     setSaving(true);
     try {
+      const payload = {
+        name: name.trim(),
+        description: description.trim(),
+        color,
+        icon,
+        logoUrl: logoUrl || '',
+        logoPath: logoPath || '',
+      };
       if (isNew) {
-        const result = await addWorkspace(userId, { name: name.trim(), description: description.trim(), color, icon });
+        const result = await addWorkspace(userId, payload);
         onClose(result.id);
       } else {
-        await updateWorkspace(workspace.id, { name: name.trim(), description: description.trim(), color, icon });
+        await updateWorkspace(workspace.id, payload);
         onClose();
       }
     } catch (err) {
@@ -53,8 +108,12 @@ export default function WorkspaceEditor({ workspace, onClose }) {
 
         <div className="field-row">
           <div className="field" style={{ flex: '0 0 64px' }}>
-            <label className="label">Icon & color</label>
-            <div className="ws-icon-preview" style={{ background: color }}>{icon}</div>
+            <label className="label">Preview</label>
+            <div className="ws-icon-preview" style={{ background: logoUrl ? 'transparent' : color, overflow: 'hidden' }}>
+              {logoUrl
+                ? <img src={logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : icon}
+            </div>
           </div>
           <div className="field" style={{ flex: 1 }}>
             <label className="label">Name</label>
@@ -66,6 +125,31 @@ export default function WorkspaceEditor({ workspace, onClose }) {
               placeholder="e.g. Personal, Bridged, Client Work"
             />
           </div>
+        </div>
+
+        <div className="field">
+          <label className="label">Logo (optional)</label>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Upload an image to use instead of the icon below. Shown in the sidebar and workspace switcher.
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={onLogoChange}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-sm" onClick={pickLogo} disabled={uploading}>
+              {uploading ? `Uploading… ${Math.round(uploadPct * 100)}%` : (logoUrl ? 'Replace logo' : '⬆ Upload logo')}
+            </button>
+            {logoUrl && !uploading && (
+              <button type="button" className="btn btn-sm btn-ghost link-danger" onClick={clearLogo}>
+                Remove logo
+              </button>
+            )}
+          </div>
+          {logoError && <p className="auth-error-msg" style={{ marginTop: 6 }}>{logoError}</p>}
         </div>
 
         <div className="field">
