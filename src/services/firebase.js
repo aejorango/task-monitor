@@ -280,14 +280,15 @@ export async function updateWorkspaceMemberRole(workspace, memberUserId, newRole
 
 // Live list of workspaces the current user belongs to.
 export function subscribeToWorkspaces(userId, callback) {
-  const q = query(
-    workspacesRef,
-    where('members', 'array-contains', userId),
-    where('deleted', '==', false),
-  );
+  // Single filter — array-contains plus an equality filter on a different
+  // field would require a composite index. The deleted filter is tiny so we
+  // apply it client-side.
+  const q = query(workspacesRef, where('members', 'array-contains', userId));
   return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((w) => !w.deleted)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
   });
 }
@@ -434,18 +435,16 @@ export async function softDeleteProject(projectId) {
 // by the owner query.
 export function subscribeToProjects(workspaceId, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(
-    projectsRef,
-    where('workspaceId', '==', workspaceId),
-    where('deleted', '==', false),
-  );
+  const q = query(projectsRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    data.sort((a, b) => {
-      const at = a.createdAt?.toMillis?.() ?? 0;
-      const bt = b.createdAt?.toMillis?.() ?? 0;
-      return bt - at;
-    });
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((p) => !p.deleted)
+      .sort((a, b) => {
+        const at = a.createdAt?.toMillis?.() ?? 0;
+        const bt = b.createdAt?.toMillis?.() ?? 0;
+        return bt - at;
+      });
     callback(data);
   });
 }
@@ -732,15 +731,22 @@ export async function softDeleteTask(taskId) {
 
 export function subscribeToTasks(workspaceId, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(
-    tasksRef,
-    where('workspaceId', '==', workspaceId),
-    where('deleted',     '==', false),
-    where('archived',    '==', false),
-    orderBy('createdAt', 'desc'),
-  );
+  // We only filter by workspaceId on the server. `deleted`/`archived` filtering
+  // and `createdAt` sort happen client-side. Reason: combining 3 where-clauses
+  // with an orderBy requires a composite Firestore index per workspace —
+  // workspaces are bounded scopes (typically < 1000 tasks) so client-side
+  // sort/filter is cheap. Single equality filter uses auto-indexes only.
+  const q = query(tasksRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((t) => !t.deleted && !t.archived)
+      .sort((a, b) => {
+        const at = a.createdAt?.toMillis?.() ?? 0;
+        const bt = b.createdAt?.toMillis?.() ?? 0;
+        return bt - at;
+      });
+    callback(data);
   });
 }
 
@@ -859,41 +865,42 @@ export async function bulkUpdateActivityCompletion(activities, completionStatus)
   return await batch.commit();
 }
 
+// Activities per task — single where, sort client-side by date desc.
 export function subscribeToActivities(taskId, callback) {
-  const q = query(
-    activitiesRef,
-    where('taskId', '==', taskId),
-    orderBy('date', 'desc'),
-  );
+  const q = query(activitiesRef, where('taskId', '==', taskId));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    callback(data);
   });
 }
 
+// Cross-task activities in a workspace — single where, sort + cap client-side.
+// 500 cap matches the previous server-side limit; for workspaces with more
+// than 500 activities we'd switch to paginated fetches.
 export function subscribeToAllActivities(workspaceId, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(
-    activitiesRef,
-    where('workspaceId', '==', workspaceId),
-    orderBy('date', 'desc'),
-    limit(500),
-  );
+  const q = query(activitiesRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, 500);
+    callback(data);
   });
 }
 
 export function subscribeToRecentActivities(workspaceId, sinceDate, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(
-    activitiesRef,
-    where('workspaceId', '==', workspaceId),
-    where('date',        '>=', sinceDate),
-    orderBy('date', 'desc'),
-    limit(200),
-  );
+  const q = query(activitiesRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((a) => !sinceDate || (a.date || '') >= sinceDate)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, 200);
+    callback(data);
   });
 }
 
@@ -930,14 +937,12 @@ export async function softDeleteTemplate(templateId) {
 
 export function subscribeToTemplates(workspaceId, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(
-    templatesRef,
-    where('workspaceId', '==', workspaceId),
-    where('deleted',     '==', false),
-  );
+  const q = query(templatesRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((t) => !t.deleted)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
   });
 }
@@ -1080,18 +1085,12 @@ export async function softDeleteTaskComment(commentId) {
 }
 
 export function subscribeToTaskComments(taskId, callback) {
-  const q = query(
-    taskCommentsRef,
-    where('taskId', '==', taskId),
-    where('deleted', '==', false),
-  );
+  const q = query(taskCommentsRef, where('taskId', '==', taskId));
   return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    data.sort((a, b) => {
-      const at = a.createdAt?.toMillis?.() ?? 0;
-      const bt = b.createdAt?.toMillis?.() ?? 0;
-      return at - bt;  // chronological
-    });
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => !c.deleted)
+      .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);
   });
 }
@@ -1134,19 +1133,15 @@ export async function softDeleteSavedView(viewId) {
 // saved views within the current workspace.
 export function subscribeToSavedViews(workspaceId, userId, callback) {
   if (!workspaceId || !userId) { callback([]); return () => {}; }
-  const q = query(
-    savedViewsRef,
-    where('workspaceId', '==', workspaceId),
-    where('userId',      '==', userId),
-    where('deleted',     '==', false),
-  );
+  // Single where (workspaceId) + client-side userId/deleted filter avoids the
+  // composite (workspaceId, userId, deleted) index. Saved views per workspace
+  // are tiny — typically < 20.
+  const q = query(savedViewsRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    data.sort((a, b) => {
-      const at = a.createdAt?.toMillis?.() ?? 0;
-      const bt = b.createdAt?.toMillis?.() ?? 0;
-      return at - bt;
-    });
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((v) => v.userId === userId && !v.deleted)
+      .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);
   });
 }
@@ -1216,14 +1211,12 @@ export async function softDeleteWebhook(hookId) {
 }
 export function subscribeToWebhooks(workspaceId, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(
-    webhooksRef,
-    where('workspaceId', '==', workspaceId),
-    where('deleted',     '==', false),
-  );
+  const q = query(webhooksRef, where('workspaceId', '==', workspaceId));
   return onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((h) => !h.deleted)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
   });
 }

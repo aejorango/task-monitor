@@ -332,9 +332,19 @@ function GlobalSearch({ projects, navigate }) {
   useEffect(() => { setHighlight(0); }, [results.flat.length]);
 
   const goToTask = (t) => {
+    // Navigate to the Board with the task's project filtered, then dispatch a
+    // global "open task" event. The Board listens for this and opens the
+    // TaskEditor for the matching task. This gives users clear visual feedback
+    // when they click a search result — previously the page just changed URL
+    // and they had to find the task themselves.
     navigate({ view: 'board', projectFilter: t.projectId || 'all' });
     setQ(''); setOpen(false);
     inputRef.current?.blur();
+    // Small delay so the Board view has a chance to mount / receive the new
+    // projectFilter before we ask it to open the task editor.
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('task-monitor:open-task', { detail: { taskId: t.id } }));
+    }, 50);
   };
   const activateResult = (item) => {
     if (!item) return;

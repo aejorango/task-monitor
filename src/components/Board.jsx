@@ -46,6 +46,20 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   // Sync local tag filter when URL-level filter changes (e.g. saved view loaded)
   useEffect(() => { setTagFilter(initialTagFilter || null); }, [initialTagFilter]);
 
+  // Open a task editor when the global search dispatches the event.
+  // This makes search results feel responsive — clicking a result opens
+  // the task instead of just navigating to the project filter.
+  useEffect(() => {
+    const onOpen = (e) => {
+      const id = e.detail?.taskId;
+      if (!id) return;
+      const t = tasks.find((x) => x.id === id);
+      if (t) setEditingTask(t);
+    };
+    window.addEventListener('task-monitor:open-task', onOpen);
+    return () => window.removeEventListener('task-monitor:open-task', onOpen);
+  }, [tasks]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),

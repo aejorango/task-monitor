@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useActivities, useProjects } from '../hooks/useTasks';
-import { todayLocal } from '../services/firebase';
+import { todayLocal, setTaskStatus } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import ActivityLogger from './ActivityLogger';
 
@@ -17,6 +17,7 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
   const { byId: projectById } = useProjects();
   const [editingActivity, setEditingActivity] = useState(null);
   const [loggingNew, setLoggingNew] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const project = projectById[task.projectId];
   const phaseById = {};
@@ -24,6 +25,17 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
 
   // Today's overdue indicator for the task header
   const isOverdue = task.status !== 'done' && task.plan?.endDate && task.plan.endDate < todayLocal();
+
+  // Inline status change — calls setTaskStatus which also handles actual-date
+  // stamping (start-on-doing, end-on-done) and recurrence spawning.
+  const handleStatusChange = async (e) => {
+    const next = e.target.value;
+    if (next === task.status) return;
+    setStatusBusy(true);
+    try { await setTaskStatus(task, next); }
+    catch (err) { console.error(err); alert('Could not change status.'); }
+    finally { setStatusBusy(false); }
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -42,8 +54,20 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
                   {project.name}
                 </span>
               )}
-              <span className="muted small">
-                Status: <strong>{task.status}</strong>
+              <span className="muted small" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>Status:</span>
+                <select
+                  className="select select-sm"
+                  value={task.status}
+                  onChange={handleStatusChange}
+                  disabled={statusBusy}
+                  style={{ width: 'auto', padding: '2px 6px' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <option value="todo">To do</option>
+                  <option value="doing">In progress</option>
+                  <option value="done">Done</option>
+                </select>
                 {task.plan?.endDate && <> · Due {task.plan.endDate}</>}
                 {isOverdue && <span className="badge badge-soft-danger" style={{ marginLeft: 6 }}>Overdue</span>}
               </span>
