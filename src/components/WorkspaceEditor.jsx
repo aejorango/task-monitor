@@ -22,9 +22,11 @@ export default function WorkspaceEditor({ workspace, onClose }) {
   const [icon,  setIcon]          = useState(workspace?.icon  || ICONS[0]);
   const [logoUrl, setLogoUrl]     = useState(workspace?.logoUrl || '');
   const [logoPath, setLogoPath]   = useState(workspace?.logoPath || '');
+  const [logoUrlInput, setLogoUrlInput] = useState(workspace?.logoUrl || '');
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [logoError, setLogoError] = useState(null);
+  const [logoPreviewError, setLogoPreviewError] = useState(false);
   const fileInputRef = useRef(null);
   const [saving, setSaving]       = useState(false);
 
@@ -39,6 +41,7 @@ export default function WorkspaceEditor({ workspace, onClose }) {
       return;
     }
     setLogoError(null);
+    setLogoPreviewError(false);
     setUploading(true);
     setUploadPct(0);
     try {
@@ -50,20 +53,54 @@ export default function WorkspaceEditor({ workspace, onClose }) {
         onProgress: setUploadPct,
       });
       setLogoUrl(att.url);
+      setLogoUrlInput(att.url);
       setLogoPath(att.path);
       if (prevPath) deleteUpload(prevPath);
     } catch (err) {
       console.error(err);
-      setLogoError(err?.message || String(err));
+      const code = err?.code || err?.name || '';
+      const detail = err?.message || String(err);
+      setLogoError(
+        code
+          ? `Upload failed (${code}): ${detail}. Try pasting a public image URL below instead.`
+          : `Upload failed: ${detail}. Try pasting a public image URL below instead.`
+      );
     } finally {
       setUploading(false);
     }
   };
 
+  const applyUrl = () => {
+    setLogoError(null);
+    setLogoPreviewError(false);
+    const url = logoUrlInput.trim();
+    if (!url) {
+      // Clear logo entirely
+      const prevPath = logoPath;
+      setLogoUrl('');
+      setLogoPath('');
+      if (prevPath) deleteUpload(prevPath);
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      setLogoError('Logo URL must start with http:// or https://');
+      return;
+    }
+    // Linking an external URL means we no longer "own" a storage path —
+    // if a previous upload existed, delete it from storage to free space.
+    if (logoPath && url !== logoUrl) {
+      deleteUpload(logoPath);
+      setLogoPath('');
+    }
+    setLogoUrl(url);
+  };
+
   const clearLogo = () => {
     const prevPath = logoPath;
     setLogoUrl('');
+    setLogoUrlInput('');
     setLogoPath('');
+    setLogoPreviewError(false);
     if (prevPath) deleteUpload(prevPath);
   };
 
@@ -109,9 +146,15 @@ export default function WorkspaceEditor({ workspace, onClose }) {
         <div className="field-row">
           <div className="field" style={{ flex: '0 0 64px' }}>
             <label className="label">Preview</label>
-            <div className="ws-icon-preview" style={{ background: logoUrl ? 'transparent' : color, overflow: 'hidden' }}>
-              {logoUrl
-                ? <img src={logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div className="ws-icon-preview" style={{ background: (logoUrl && !logoPreviewError) ? 'transparent' : color, overflow: 'hidden' }}>
+              {logoUrl && !logoPreviewError
+                ? <img
+                    src={logoUrl}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={() => setLogoPreviewError(true)}
+                    onLoad={() => setLogoPreviewError(false)}
+                  />
                 : icon}
             </div>
           </div>
@@ -130,8 +173,9 @@ export default function WorkspaceEditor({ workspace, onClose }) {
         <div className="field">
           <label className="label">Logo (optional)</label>
           <p className="muted small" style={{ marginTop: 0 }}>
-            Upload an image to use instead of the icon below. Shown in the sidebar and workspace switcher.
+            Use a logo image instead of the icon below. Either <strong>upload</strong> a file or <strong>paste a public image URL</strong>.
           </p>
+
           <input
             ref={fileInputRef}
             type="file"
@@ -139,9 +183,9 @@ export default function WorkspaceEditor({ workspace, onClose }) {
             style={{ display: 'none' }}
             onChange={onLogoChange}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <button type="button" className="btn btn-sm" onClick={pickLogo} disabled={uploading}>
-              {uploading ? `Uploading… ${Math.round(uploadPct * 100)}%` : (logoUrl ? 'Replace logo' : '⬆ Upload logo')}
+              {uploading ? `Uploading… ${Math.round(uploadPct * 100)}%` : (logoUrl && logoPath ? 'Replace uploaded logo' : '⬆ Upload image')}
             </button>
             {logoUrl && !uploading && (
               <button type="button" className="btn btn-sm btn-ghost link-danger" onClick={clearLogo}>
@@ -149,6 +193,29 @@ export default function WorkspaceEditor({ workspace, onClose }) {
               </button>
             )}
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'center' }}>
+            <input
+              className="input input-sm"
+              type="url"
+              value={logoUrlInput}
+              onChange={(e) => setLogoUrlInput(e.target.value)}
+              placeholder="https://example.com/logo.png"
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyUrl(); } }}
+            />
+            <button type="button" className="btn btn-sm" onClick={applyUrl} disabled={uploading}>
+              Use URL
+            </button>
+          </div>
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Tip: right-click any web image → "Copy image address", or use a hosted URL (Google Drive direct-link, Imgur, your CDN, etc.).
+          </p>
+
+          {logoPreviewError && logoUrl && (
+            <p className="auth-error-msg" style={{ marginTop: 6 }}>
+              That URL didn't load as an image. Check it's a direct link to a .png / .jpg / .svg file, not a webpage.
+            </p>
+          )}
           {logoError && <p className="auth-error-msg" style={{ marginTop: 6 }}>{logoError}</p>}
         </div>
 

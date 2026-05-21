@@ -73,16 +73,23 @@ export default function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onMa
   );
 }
 
-// Renders a workspace's logo image if one is uploaded, otherwise its emoji
-// icon on a colored tile. Size is 'md' (default) or 'sm'.
+// Renders a workspace's logo image if one is uploaded/linked, otherwise its
+// emoji icon on a colored tile. Falls back to the icon tile if the image
+// fails to load. Size is 'md' (default) or 'sm'.
 export function WorkspaceIcon({ workspace, size = 'md' }) {
   const cls = size === 'sm' ? 'ws-icon ws-icon-sm' : 'ws-icon';
-  if (workspace?.logoUrl) {
+  const [broken, setBroken] = useState(false);
+  // Reset broken state if the URL changes (e.g. user re-uploads).
+  useEffect(() => { setBroken(false); }, [workspace?.logoUrl]);
+
+  if (workspace?.logoUrl && !broken) {
     return (
       <span className={cls} style={{ background: 'transparent', overflow: 'hidden', padding: 0 }}>
         <img
           src={workspace.logoUrl}
           alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       </span>
