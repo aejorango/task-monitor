@@ -7,12 +7,14 @@
 
 import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities, useAuth } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, auth } from '../services/firebase';
 import { suggestNextTask, getApiKey } from '../services/anthropic';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import TaskForm from './TaskForm';
+import WorkspaceEditor from './WorkspaceEditor';
 
 function isoOf(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -38,12 +40,16 @@ export default function DashboardView({ projectFilter, navigate }) {
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { activities, loading: actsLoading } = useAllActivities();
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const { workspaces, loading: wsLoading } = useWorkspaces();
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 
   const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [aiOutput, setAiOutput] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState(null);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
 
   const today    = isoToday();
   const tomorrow = addDaysIso(today, 1);
@@ -121,9 +127,59 @@ export default function DashboardView({ projectFilter, navigate }) {
 
   const goToBoard = () => navigate?.({ view: 'board' });
 
-  if (tasksLoading || actsLoading) {
-    return <p className="muted">Loading dashboard…</p>;
+  // Loading & no-workspace gates.
+  if (wsLoading) {
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}><div className="spinner" />&nbsp; Loading workspace…</div>;
   }
+  if (!activeWorkspaceId || !activeWorkspace) {
+    return (
+      <>
+        <div className="dash-greet">
+          <h1 className="dash-greet-title">Welcome to Task Monitor</h1>
+          <p className="dash-greet-sub muted">
+            You don't have any workspace selected yet. Workspaces contain your projects, tasks, and activities — and let you collaborate with others.
+          </p>
+        </div>
+        <div className="dash-empty-hero">
+          <div className="dash-empty-hero-icon">◆</div>
+          <h2 className="dash-empty-hero-title">Create your first workspace</h2>
+          <p className="dash-empty-hero-sub muted">
+            One workspace is usually enough. Most people set up a workspace per company, side-project, or context (e.g. "Personal", "Bridged", "Client work").
+          </p>
+          <div className="dash-empty-hero-actions">
+            <button className="btn btn-primary btn-lg" onClick={() => setCreatingWorkspace(true)}>
+              + Create workspace
+            </button>
+          </div>
+        </div>
+        {creatingWorkspace && (
+          <WorkspaceEditor workspace={null} onClose={() => setCreatingWorkspace(false)} />
+        )}
+      </>
+    );
+  }
+  if (tasksLoading || actsLoading) {
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}><div className="spinner" />&nbsp; Loading dashboard…</div>;
+  }
+
+  // Derived stats for the workspace + projects cards
+  const wsMemberCount = activeWorkspace?.members?.length || 1;
+  const wsRole = activeWorkspace?.acl?.[userId] || 'editor';
+
+  const projectsForFilter = projectFilter === 'all'
+    ? projects
+    : projects.filter((p) => p.id === projectFilter);
+  const projectStats = projectsForFilter.map((p) => {
+    const pTasks = tasks.filter((t) => t.projectId === p.id);
+    const total = pTasks.length;
+    const done  = pTasks.filter((t) => t.status === 'done').length;
+    const doing = pTasks.filter((t) => t.status === 'doing').length;
+    const todo  = pTasks.filter((t) => t.status === 'todo').length;
+    const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { project: p, total, done, doing, todo, pct };
+  }).sort((a, b) => b.total - a.total);
+
+  const hasAnyData = tasks.length > 0 || activities.length > 0;
 
   return (
     <>
@@ -133,6 +189,7 @@ export default function DashboardView({ projectFilter, navigate }) {
           <h1 className="dash-greet-title">{greeting}{userFirst ? `, ${userFirst}` : ''}</h1>
           <p className="dash-greet-sub muted small">
             {new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            {' · '}<strong>{activeWorkspace.name}</strong>
             {projectFilter !== 'all' && projectById[projectFilter] && (
               <> · Filtered to <strong>{projectById[projectFilter].name}</strong></>
             )}
@@ -140,7 +197,87 @@ export default function DashboardView({ projectFilter, navigate }) {
         </div>
       </div>
 
+      {/* Empty-state hero — only when the workspace has literally no data yet */}
+      {!hasAnyData && (
+        <div className="dash-empty-hero">
+          <div className="dash-empty-hero-icon" style={{ background: activeWorkspace.color }}>
+            {activeWorkspace.icon || '◆'}
+          </div>
+          <h2 className="dash-empty-hero-title">
+            "{activeWorkspace.name}" is ready for your first task
+          </h2>
+          <p className="dash-empty-hero-sub muted">
+            Add a task below to get started. You can attach it to a project, set a deadline,
+            break it into subtasks, and log activity as you make progress.
+          </p>
+          <div className="dash-empty-hero-actions">
+            <button className="btn btn-primary" onClick={goToBoard}>Open Board view</button>
+            <button className="btn" onClick={() => navigate?.({ view: 'projects' })}>
+              Set up projects first
+            </button>
+          </div>
+        </div>
+      )}
+
       <TaskForm projects={projects} projectFilter={projectFilter} />
+
+      {/* Workspace + projects overview — always visible, even with empty data */}
+      <div className="dash-row dash-row-overview">
+        <section className="dash-card">
+          <div className="dash-card-head">
+            <h2 className="dash-card-title">
+              <span className="ws-icon ws-icon-sm" style={{ background: activeWorkspace.color, marginRight: 8 }}>
+                {activeWorkspace.icon || '◆'}
+              </span>
+              {activeWorkspace.name}
+            </h2>
+            <button className="btn btn-sm btn-ghost" onClick={() => navigate?.({ view: 'settings' })}>
+              Manage →
+            </button>
+          </div>
+          {activeWorkspace.description && (
+            <p className="muted small" style={{ marginTop: 0 }}>{activeWorkspace.description}</p>
+          )}
+          <div className="dash-ws-stats">
+            <Stat label="Members" value={wsMemberCount} />
+            <Stat label="Projects" value={projects.length} />
+            <Stat label="Total tasks" value={tasks.length} />
+            <Stat label="Your role" value={wsRole} />
+          </div>
+        </section>
+
+        <section className="dash-card">
+          <div className="dash-card-head">
+            <h2 className="dash-card-title">Projects ({projectStats.length})</h2>
+            <button className="btn btn-sm btn-ghost" onClick={() => navigate?.({ view: 'projects' })}>
+              All projects →
+            </button>
+          </div>
+          {projectStats.length === 0 ? (
+            <p className="muted small">No projects yet. <a className="table-link" href="#" onClick={(e) => { e.preventDefault(); navigate?.({ view: 'projects' }); }}>Create your first project →</a></p>
+          ) : (
+            <ul className="dash-projects">
+              {projectStats.slice(0, 6).map((s) => (
+                <li key={s.project.id} className="dash-project" onClick={() => navigate?.({ view: 'board', projectFilter: s.project.id })}>
+                  <span className="proj-dot" style={{ background: s.project.color }} />
+                  <div className="dash-project-text">
+                    <div className="dash-project-name">{s.project.name}</div>
+                    <div className="muted small">
+                      {s.total === 0 ? 'No tasks yet' : `${s.done}/${s.total} done · ${s.doing} in progress`}
+                    </div>
+                  </div>
+                  {s.total > 0 && (
+                    <div className="dash-project-bar">
+                      <div className="dash-project-bar-fill" style={{ width: `${s.pct}%`, background: s.project.color }} />
+                      <span className="dash-project-pct">{s.pct}%</span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       {/* KPI tiles */}
       <div className="dash-kpi-grid">
@@ -304,6 +441,15 @@ export default function DashboardView({ projectFilter, navigate }) {
         />
       )}
     </>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div className="dash-ws-stat">
+      <div className="dash-ws-stat-value">{value}</div>
+      <div className="dash-ws-stat-label">{label}</div>
+    </div>
   );
 }
 

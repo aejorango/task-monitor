@@ -2566,6 +2566,115 @@ a:hover { text-decoration: underline; }
 }
 .dash-row-main      { grid-template-columns: 2fr 1fr; }
 .dash-row-secondary { grid-template-columns: 1fr 1fr; }
+.dash-row-overview  { grid-template-columns: 1fr 1.4fr; margin-bottom: 16px; }
+@media (max-width: 900px) {
+  .dash-row-overview { grid-template-columns: 1fr; }
+}
+
+/* Empty-state hero */
+.dash-empty-hero {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  padding: 28px 24px;
+  text-align: center;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.dash-empty-hero-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--c-accent);
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.dash-empty-hero-title { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.dash-empty-hero-sub   { max-width: 540px; margin: 0; }
+.dash-empty-hero-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.btn-lg { padding: 10px 20px; font-size: 14px; font-weight: 600; }
+
+/* Workspace stats grid */
+.dash-ws-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+@media (max-width: 600px) {
+  .dash-ws-stats { grid-template-columns: repeat(2, 1fr); }
+}
+.dash-ws-stat {
+  text-align: center;
+  padding: 10px;
+  background: var(--c-surface-2);
+  border-radius: 8px;
+}
+.dash-ws-stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--c-text);
+  text-transform: capitalize;
+}
+.dash-ws-stat-label {
+  font-size: 11px;
+  color: var(--c-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+/* Project list with progress bars */
+.dash-projects {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dash-project {
+  display: grid;
+  grid-template-columns: auto 1fr 100px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.dash-project:hover { background: var(--c-surface-2); }
+.dash-project-text  { min-width: 0; overflow: hidden; }
+.dash-project-name  { font-weight: 500; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-project-bar {
+  position: relative;
+  height: 6px;
+  background: var(--c-surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dash-project-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.dash-project-pct {
+  position: absolute;
+  top: -16px;
+  right: 0;
+  font-size: 10.5px;
+  color: var(--c-text-3);
+  font-variant-numeric: tabular-nums;
+}
 @media (max-width: 960px) {
   .dash-row-main, .dash-row-secondary { grid-template-columns: 1fr; }
 }
