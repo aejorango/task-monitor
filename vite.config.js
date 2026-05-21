@@ -2,11 +2,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
+// Served at the root of a custom domain (tasks.blueinnovation.ph via the
+// CNAME in public/). Assets resolve at '/'. When deploying to a path-based
+// host (like /task-monitor/ on raw GitHub Pages), change `base` accordingly
+// — every relative path uses `import.meta.env.BASE_URL` so it just works.
 export default defineConfig({
   plugins: [react()],
-
-  // IMPORTANT: must match your GitHub repo name for Pages routing.
-  // If you ever rename the repo, update this too.
-  base: '/task-monitor/',
+  base: '/',
 });

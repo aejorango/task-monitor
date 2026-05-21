@@ -22,7 +22,7 @@ export async function requestNotificationPermission() {
 
 export function registerServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
-  // import.meta.env.BASE_URL = '/task-monitor/' in prod, '/' in dev.
+  // import.meta.env.BASE_URL = '/' in prod (custom domain) or '/' in dev.
   const swUrl   = `${import.meta.env.BASE_URL}sw.js`;
   const swScope = import.meta.env.BASE_URL;
   return navigator.serviceWorker
@@ -50,7 +50,7 @@ async function fireOverdueNotification(task) {
   const body  = `${task.title} was due ${task.plan.endDate}.`;
   const reg = await navigator.serviceWorker?.getRegistration?.();
   if (reg && reg.showNotification) {
-    reg.showNotification(title, { body, tag: `overdue-${task.id}`, data: { url: '/task-monitor/' } });
+    reg.showNotification(title, { body, tag: `overdue-${task.id}`, data: { url: import.meta.env.BASE_URL } });
   } else if (typeof Notification !== 'undefined') {
     new Notification(title, { body, tag: `overdue-${task.id}` });
   }
