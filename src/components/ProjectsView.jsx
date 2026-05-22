@@ -19,6 +19,7 @@ import {
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
+import ActivityEditor from './ActivityEditor';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -193,6 +194,7 @@ function ProjectActivityLogModal({ project, onClose }) {
 
   const [sortBy, setSortBy]   = useState('date');
   const [sortDir, setSortDir] = useState('desc');
+  const [editing, setEditing] = useState(null); // activity being edited
 
   const rows = activities
     .filter((a) => a.projectId === project.id)
@@ -264,6 +266,7 @@ function ProjectActivityLogModal({ project, onClose }) {
   };
 
   return (
+    <>
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal"
@@ -301,6 +304,7 @@ function ProjectActivityLogModal({ project, onClose }) {
                       <span className="sort-icon">{sortBy === c.key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
                     </th>
                   ))}
+                  <th aria-label="actions" style={{ width: 48 }} />
                 </tr>
               </thead>
               <tbody>
@@ -334,6 +338,13 @@ function ProjectActivityLogModal({ project, onClose }) {
                     </td>
                     <td>{r.requestedBy || <span className="muted">—</span>}</td>
                     <td className="mono small">{(r.hoursSpent || 0).toFixed(1)}h</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        title="Edit this activity entry"
+                        onClick={() => setEditing(r)}
+                      >✎</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -350,6 +361,15 @@ function ProjectActivityLogModal({ project, onClose }) {
         </div>
       </div>
     </div>
+
+    {/* Activity editor opens on top of this modal */}
+    {editing && (
+      <ActivityEditor
+        activity={editing}
+        onClose={() => setEditing(null)}
+      />
+    )}
+    </>
   );
 }
 
