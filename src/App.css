@@ -572,32 +572,53 @@ a:hover { text-decoration: underline; }
 .input, .select, .textarea {
   display: block;
   width: 100%;
-  padding: 7px 10px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
-  background: var(--c-surface);
+  padding: 10px 16px;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-xl);
+  background: var(--c-surface-2);
   color: var(--c-text);
   font-size: 13.5px;
-  line-height: 1.4;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  -webkit-appearance: none;
+}
+.input::placeholder, .textarea::placeholder {
+  color: var(--c-text-muted);
+  font-weight: 400;
+}
+.input:hover, .select:hover {
+  background: var(--c-surface-3);
 }
 .input:focus, .select:focus, .textarea:focus {
   outline: none;
+  background: var(--c-surface);
   border-color: var(--c-accent);
   box-shadow: 0 0 0 3px var(--c-accent-soft);
 }
-.textarea { resize: vertical; min-height: 60px; }
-.input-sm { padding: 4px 8px; font-size: 12.5px; }
+.textarea {
+  resize: vertical;
+  min-height: 72px;
+  border-radius: var(--r-lg);
+}
+.input-sm { padding: 7px 12px; font-size: 12.5px; border-radius: var(--r-lg); }
+.select {
+  cursor: pointer;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
 
 .label {
   display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--c-text-2);
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
 }
 
-.field { margin-bottom: 12px; }
+.field { margin-bottom: 16px; }
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -884,16 +905,17 @@ a:hover { text-decoration: underline; }
 @keyframes modal-in { from { transform: scale(0.94) translateY(8px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
 
 .modal-title {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   letter-spacing: -0.02em;
+  color: var(--c-text);
 }
 .modal-sub {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--c-text-3);
-  margin: 0 0 20px;
-  line-height: 1.5;
+  margin: 0 0 22px;
+  line-height: 1.55;
 }
 .modal-actions {
   display: flex;
