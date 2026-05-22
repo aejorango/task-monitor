@@ -447,6 +447,9 @@ a:hover { text-decoration: underline; }
   background: var(--c-bg);
 }
 
+/* Mobile layout base — drawer + content only.
+   Sidebar visibility / positioning handled in the MOBILE RESPONSIVE
+   block at the bottom of this file. */
 @media (max-width: 720px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -455,7 +458,8 @@ a:hover { text-decoration: underline; }
       "topbar"
       "content";
   }
-  .sidebar { display: none; }
+  /* Sidebar is removed from the grid but kept as a fixed drawer.
+     Its display, position, and transform are set in the mobile block below. */
 }
 
 /* ─── Buttons ──────────────────────────────────────────────── */
@@ -2820,4 +2824,308 @@ a:hover { text-decoration: underline; }
   border-radius: 2px;
   margin-right: 4px;
   vertical-align: middle;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE
+   All rules here target ≤ 720px unless otherwise noted.
+   The sidebar becomes an off-canvas drawer; the topbar gets a
+   hamburger button; modals go full-width/bottom-sheet; grids
+   collapse to single-column; tables scroll horizontally.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Hamburger button (hidden on desktop) ────────────────── */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--c-text);
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+  padding: 0;
+}
+.nav-toggle:hover { background: var(--c-surface-2); }
+.nav-toggle-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 18px;
+}
+.nav-toggle-icon span {
+  display: block;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+/* Sidebar close button (hidden on desktop) */
+.sidebar-close-btn { display: none; }
+
+/* Sidebar overlay (hidden on desktop) */
+.sidebar-overlay { display: none; }
+
+/* ── ≤ 720px  ──────────────────────────────────────────────── */
+@media (max-width: 720px) {
+
+  /* ── Variables ── */
+  :root {
+    --content-pad: 12px;
+    --topbar-h: 52px;
+  }
+
+  /* ── App shell: topbar + content, no sidebar column ── */
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-areas:
+      "topbar"
+      "content";
+  }
+
+  /* ── Sidebar: off-canvas drawer ── */
+  .sidebar {
+    display: flex;          /* was display:none */
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 270px;
+    max-width: 85vw;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-xl);
+    overflow-y: auto;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Dim overlay behind drawer */
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 199;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    animation: overlay-in 0.2s ease;
+  }
+  @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Close ✕ inside sidebar */
+  .sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--c-text-3);
+    border-radius: var(--r-sm);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .sidebar-close-btn:hover { background: var(--c-surface-2); color: var(--c-text); }
+
+  /* Hamburger: show */
+  .nav-toggle { display: flex; }
+
+  /* ── Topbar ── */
+  .topbar {
+    padding: 0 10px;
+    gap: 6px;
+  }
+  /* Hide view title — saves space; user sees it in the sidebar */
+  .topbar-title { display: none; }
+  /* Hide "Save view" button on mobile */
+  .topbar .btn-ghost[title*="Save"] { display: none; }
+  /* Shrink "My tasks" chip */
+  .topbar-chip-mytasks { padding: 4px 8px; font-size: 11px; }
+  .chip-label-text { display: none; }   /* show icon only */
+
+  /* ── Content ── */
+  .content { padding: var(--content-pad); }
+
+  /* ── Modals: bottom-sheet on mobile ── */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal {
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    max-height: 92dvh;
+    max-height: 92vh;
+    max-width: 100%;
+    width: 100%;
+    padding: 16px 14px;
+  }
+  .modal-wide { max-width: 100%; }
+
+  /* ── Page headers ── */
+  .page-title { font-size: 18px; }
+  .page-header { gap: 8px; }
+
+  /* ── Quick-add form ── */
+  .quick-add-row    { grid-template-columns: 1fr; }
+  .quick-add-detail { grid-template-columns: 1fr 1fr; }
+
+  /* ── Board ── */
+  .board { grid-template-columns: 1fr; gap: 8px; }
+
+  /* ── Project grid ── */
+  .project-grid { grid-template-columns: 1fr; }
+  .project-card-head { flex-wrap: wrap; gap: 6px; }
+  /* Keep the AI + Log buttons visible but at reduced size */
+  .project-card-head .btn-sm { font-size: 11px; padding: 3px 6px; }
+
+  /* ── Table ── */
+  .table { font-size: 12px; }
+  .table thead th,
+  .table tbody td { padding: 8px 8px; }
+  .table-cell-wrap { max-width: 150px; }
+
+  /* ── Bulk action bar ── */
+  .bulk-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .bulk-bar .bulk-bar-count { font-size: 12px; }
+
+  /* ── KPI grids ── */
+  .kpi-grid         { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .dash-kpi-grid    { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* ── Dashboard layout ── */
+  .dash-row-main,
+  .dash-row-secondary,
+  .dash-row-overview { grid-template-columns: 1fr; }
+  .dash-kpi-value { font-size: 22px; }
+  .dash-greet-title { font-size: 18px; }
+
+  /* ── Review ── */
+  .review-2col { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 80px 1fr 44px; font-size: 12px; }
+  .bar-row-label { font-size: 12px; }
+
+  /* ── Calendar ── */
+  .cal-grid { grid-auto-rows: minmax(64px, auto); }
+  .cal-cell { padding: 2px 3px; min-height: 64px; gap: 2px; }
+  .cal-day-label { padding: 5px 3px; font-size: 9px; letter-spacing: 0; }
+  .cal-cell-num { font-size: 11px; }
+  .cal-task { font-size: 9.5px; padding: 1px 3px; }
+
+  /* ── Gantt ── */
+  .gantt { font-size: 12px; }
+  .gantt-label { padding: 6px 8px; font-size: 12px; }
+
+  /* ── Field rows in editors / workspace editor ── */
+  .field-row { grid-template-columns: 1fr; }
+
+  /* ── Subtask / dependency item grids ── */
+  .subtask-item {
+    grid-template-columns: auto 1fr auto auto auto;
+    font-size: 12.5px;
+  }
+  .dep-item { font-size: 12.5px; }
+
+  /* ── Modal actions: wrap on tiny screens ── */
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .btn { flex: 1 1 auto; justify-content: center; min-width: 80px; }
+
+  /* ── Workspace list in settings ── */
+  .ws-list-item { flex-wrap: wrap; }
+  .ws-list-actions { width: 100%; justify-content: flex-end; }
+
+  /* ── Global search: narrower input, wider dropdown ── */
+  .search-wrap { width: 150px; }
+  .search-results {
+    width: calc(100vw - 20px);
+    right: auto;
+    left: -60px;
+  }
+
+  /* ── Tag filter bar: compact ── */
+  .tag-filter-bar { padding: 6px 8px; gap: 4px; }
+
+  /* ── Sidebar brand row: squish ── */
+  .sidebar-brand-compact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+  }
+
+  /* ── Toolbar ── */
+  .toolbar { gap: 6px; }
+
+  /* ── Attach row ── */
+  .attach-row { grid-template-columns: 1fr 1fr auto; }
+
+  /* ── Dependency picker ── */
+  .dep-picker-list { max-height: 140px; }
+}
+
+/* ── ≤ 480px (very small phones) ─────────────────────────── */
+@media (max-width: 480px) {
+
+  :root {
+    --content-pad: 10px;
+    --topbar-h: 48px;
+  }
+
+  /* Modal fills more of the screen */
+  .modal { max-height: 95dvh; max-height: 95vh; padding: 14px 12px; }
+
+  /* Quick-add: fully single-column */
+  .quick-add-detail { grid-template-columns: 1fr; }
+
+  /* KPI: single column */
+  .kpi-grid      { grid-template-columns: 1fr; }
+  .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Topbar: tighter */
+  .topbar { padding: 0 8px; gap: 4px; }
+
+  /* Project card stat row wraps better */
+  .project-stats { flex-wrap: wrap; gap: 6px; }
+
+  /* Table: compact font */
+  .table { font-size: 11.5px; }
+  .table thead th,
+  .table tbody td { padding: 7px 6px; }
+
+  /* Calendar: even tighter */
+  .cal-grid { grid-auto-rows: minmax(54px, auto); }
+  .cal-cell { min-height: 54px; padding: 1px 2px; }
+  .cal-task { display: none; }   /* too tiny — just show count */
+  .cal-more { font-size: 9px; }
+
+  /* Review bar: just label + bar */
+  .bar-row { grid-template-columns: 70px 1fr; }
+  .bar-row-value { display: none; }
+
+  /* Page title smaller */
+  .page-title { font-size: 16px; }
+
+  /* Search: icon-only mode */
+  .search-wrap { width: 36px; }
+  .search-input { padding: 6px 8px; font-size: 12px; }
+
+  /* Reduce modal padding further */
+  .modal-actions { gap: 6px; }
+}
+
+/* ── Touch: show task-card actions without hover ─────────── */
+@media (hover: none) {
+  .task-card-actions { opacity: 1; }
+  .saved-view-link .saved-view-delete { opacity: 1; }
 }

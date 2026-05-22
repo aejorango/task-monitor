@@ -62,6 +62,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
   const current = VIEWS.find((v) => v.id === route.view) || VIEWS[0];
   const activeWs = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // URL ↔ active-workspace binding.
   // 1. If URL has ?ws=<id> and it's different from current state, sync state to URL.
@@ -78,19 +79,40 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
     }
   }, [activeWs]);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Close sidebar when navigating on mobile
+  const navigateAndClose = (patch) => {
+    navigate(patch);
+    setSidebarOpen(false);
+  };
+
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-brand sidebar-brand-compact">
           <div className="sidebar-brand-mark">TM</div>
           <span>Task Monitor</span>
+          {/* Mobile close button inside sidebar */}
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
+          >✕</button>
         </div>
 
         <WorkspaceSwitcher
           workspaces={workspaces}
           activeId={activeWs}
-          onSwitch={(id) => navigate({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null })}
-          onManage={() => navigate({ view: 'settings', savedViewId: null, tagFilter: null })}
+          onSwitch={(id) => navigateAndClose({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null })}
+          onManage={() => navigateAndClose({ view: 'settings', savedViewId: null, tagFilter: null })}
         />
 
         <nav className="sidebar-nav">
@@ -99,22 +121,35 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
             <button
               key={v.id}
               className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
-              onClick={() => navigate({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
+              onClick={() => navigateAndClose({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
             >
               <span className="sidebar-link-icon">{v.icon}</span>
               {v.label}
             </button>
           ))}
 
-          <SidebarSavedViews route={route} navigate={navigate} />
+          <SidebarSavedViews route={route} navigate={navigateAndClose} />
         </nav>
 
         <div className="sidebar-footer">
-          <SidebarUserBlock userId={userId} ready={ready} navigate={navigate} />
+          <SidebarUserBlock userId={userId} ready={ready} navigate={navigateAndClose} />
         </div>
       </aside>
 
       <header className="topbar">
+        {/* Hamburger — only visible on mobile via CSS */}
+        <button
+          className="nav-toggle"
+          onClick={() => setSidebarOpen((o) => !o)}
+          aria-label="Toggle menu"
+        >
+          <span className="nav-toggle-icon">
+            <span />
+            <span />
+            <span />
+          </span>
+        </button>
+
         <div className="topbar-title">{current.label}</div>
         <ProjectPicker
           projects={projects}
@@ -123,11 +158,11 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         />
         {userId && (
           <button
-            className={`chip ${route.onlyMine ? 'active' : ''}`}
+            className={`chip topbar-chip-mytasks ${route.onlyMine ? 'active' : ''}`}
             onClick={() => navigate({ onlyMine: !route.onlyMine })}
             title="Show only tasks assigned to me"
           >
-            👤 My tasks
+            👤 <span className="chip-label-text">My tasks</span>
           </button>
         )}
         <SaveViewButton route={route} userId={userId} />
