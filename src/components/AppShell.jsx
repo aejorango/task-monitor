@@ -177,6 +177,9 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
       </header>
 
       <main className="content">{children}</main>
+
+      {/* Mobile bottom tab bar — rendered via CSS display:none on desktop */}
+      <BottomNav route={route} navigate={navigate} />
     </div>
   );
 }
@@ -506,6 +509,34 @@ function GlobalSearch({ projects, navigate }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Bottom nav bar (mobile only) ─────────────────────────
+
+const BOTTOM_TABS = [
+  { id: 'dashboard', label: 'Home',     icon: '◰' },
+  { id: 'board',     label: 'Board',    icon: '▦' },
+  { id: 'projects',  label: 'Projects', icon: '◉' },
+  { id: 'table',     label: 'Log',      icon: '☰' },
+  { id: 'settings',  label: 'Settings', icon: '⚙' },
+];
+
+function BottomNav({ route, navigate }) {
+  return (
+    <nav className="bottom-nav" aria-label="Main navigation">
+      {BOTTOM_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          className={`bottom-nav-item ${route.view === tab.id ? 'active' : ''}`}
+          onClick={() => navigate({ view: tab.id, savedViewId: null, tagFilter: null, statusFilter: null })}
+          aria-label={tab.label}
+        >
+          <span className="bottom-nav-icon">{tab.icon}</span>
+          <span>{tab.label}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
