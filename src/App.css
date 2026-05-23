@@ -759,20 +759,24 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 8px;
-  border-bottom: 1px solid var(--c-border);
+  padding: 4px 4px 10px;
+  border-bottom: 2px solid var(--c-border);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--c-text-3);
 }
+.column-head.status-todo   { border-bottom-color: var(--c-todo); }
+.column-head.status-doing  { border-bottom-color: var(--c-doing); color: var(--c-doing); }
+.column-head.status-done   { border-bottom-color: var(--c-done);  color: var(--c-done); }
 .column-head .count {
   background: var(--c-surface-3);
-  padding: 1px 7px;
-  border-radius: 99px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
   font-size: 11px;
   color: var(--c-text-3);
+  font-weight: 600;
 }
 
 /* ─── Task card ────────────────────────────────────────────── */
@@ -1659,11 +1663,12 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  margin-bottom: 12px;
-  padding: 8px 12px;
+  margin-bottom: 14px;
+  padding: 8px 14px;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-card);
 }
 
 .task-card-tags {
@@ -1927,13 +1932,14 @@ a:hover { text-decoration: underline; }
 }
 .search-input {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  padding: 7px 14px;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-pill);
   background: var(--c-surface-2);
   color: var(--c-text);
   font-size: 13px;
   outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .search-input:focus {
   border-color: var(--c-accent);
@@ -1943,14 +1949,15 @@ a:hover { text-decoration: underline; }
 .search-input::placeholder { color: var(--c-text-muted); }
 .search-results {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
-  width: 360px;
+  width: 380px;
   max-height: 420px;
   overflow-y: auto;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl);
   box-shadow: var(--shadow-lg);
   z-index: 100;
   padding: 4px;
@@ -2621,15 +2628,21 @@ a:hover { text-decoration: underline; }
 
 /* ─── Dashboard ──────────────────────────────────────────── */
 .dash-greet {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(120deg, var(--c-accent-soft) 0%, var(--c-surface) 60%);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2xl);
+  box-shadow: var(--shadow-card);
 }
 .dash-greet-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 0 2px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0 0 4px;
+  color: var(--c-text);
 }
-.dash-greet-sub { margin: 0; }
+.dash-greet-sub { margin: 0; font-size: 13px; }
 
 .dash-kpi-grid {
   display: grid;
@@ -2649,6 +2662,11 @@ a:hover { text-decoration: underline; }
   transition: transform 0.14s, box-shadow 0.14s;
 }
 .dash-kpi:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.dash-kpi-icon {
+  font-size: 18px;
+  margin-bottom: 6px;
+  line-height: 1;
+}
 .dash-kpi-label {
   font-size: 11px;
   font-weight: 600;
@@ -2691,37 +2709,39 @@ a:hover { text-decoration: underline; }
 .dash-empty-hero {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 12px;
-  padding: 28px 24px;
+  border-radius: var(--r-2xl);
+  padding: 40px 28px;
   text-align: center;
   margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  box-shadow: var(--shadow-card);
 }
 .dash-empty-hero-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  background: var(--c-accent);
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(135deg, var(--c-accent), #7c3aed);
   color: white;
   display: grid;
   place-items: center;
-  font-size: 28px;
-  font-weight: 600;
-  margin-bottom: 4px;
+  font-size: 30px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  box-shadow: var(--shadow-accent);
 }
-.dash-empty-hero-title { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-.dash-empty-hero-sub   { max-width: 540px; margin: 0; }
+.dash-empty-hero-title { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+.dash-empty-hero-sub   { max-width: 540px; margin: 0; font-size: 13.5px; line-height: 1.55; }
 .dash-empty-hero-actions {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 12px;
   flex-wrap: wrap;
   justify-content: center;
 }
-.btn-lg { padding: 10px 20px; font-size: 14px; font-weight: 600; }
+.btn-lg { padding: 11px 24px; font-size: 14px; font-weight: 600; }
 
 /* Workspace stats grid */
 .dash-ws-stats {
@@ -2735,22 +2755,27 @@ a:hover { text-decoration: underline; }
 }
 .dash-ws-stat {
   text-align: center;
-  padding: 10px;
+  padding: 12px 8px;
   background: var(--c-surface-2);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--c-border);
+  transition: background 0.12s;
 }
+.dash-ws-stat:hover { background: var(--c-surface-3); }
 .dash-ws-stat-value {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--c-text);
   text-transform: capitalize;
+  letter-spacing: -0.02em;
 }
 .dash-ws-stat-label {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--c-text-3);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-top: 2px;
+  letter-spacing: 0.06em;
+  margin-top: 3px;
+  font-weight: 600;
 }
 
 /* Project list with progress bars */
@@ -2798,14 +2823,15 @@ a:hover { text-decoration: underline; }
 .dash-card {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-lg);
-  padding: 16px;
+  border-radius: var(--r-xl);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-card);
 }
 .dash-card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   gap: 8px;
 }
 .dash-card-title {

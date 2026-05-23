@@ -280,11 +280,11 @@ export default function DashboardView({ projectFilter, navigate }) {
 
       {/* KPI tiles */}
       <div className="dash-kpi-grid">
-        <KpiTile label="Hours today" value={hoursToday.toFixed(1)} suffix="h" />
-        <KpiTile label="Due today"  value={tasksDueToday.length} accent={tasksDueToday.length > 0 ? 'info' : 'muted'} />
-        <KpiTile label="Overdue"     value={overdue.length} accent={overdue.length > 0 ? 'danger' : 'muted'} />
-        <KpiTile label="Done this week" value={doneThisWeek.length} accent="success" />
-        <KpiTile label="In progress" value={inProgress.length} accent={inProgress.length > 0 ? 'info' : 'muted'} />
+        <KpiTile label="Hours today"    value={hoursToday.toFixed(1)} suffix="h" icon="⏱" />
+        <KpiTile label="Due today"      value={tasksDueToday.length} accent={tasksDueToday.length > 0 ? 'info' : 'muted'}   icon="📋" />
+        <KpiTile label="Overdue"        value={overdue.length}       accent={overdue.length > 0 ? 'danger' : 'muted'}        icon="🔴" />
+        <KpiTile label="Done this week" value={doneThisWeek.length}  accent="success"                                        icon="✅" />
+        <KpiTile label="In progress"    value={inProgress.length}    accent={inProgress.length > 0 ? 'info' : 'muted'}       icon="▶" />
       </div>
 
       <div className="dash-row dash-row-main">
@@ -452,9 +452,18 @@ function Stat({ label, value }) {
   );
 }
 
-function KpiTile({ label, value, suffix, accent }) {
+const KPI_ICONS = {
+  success: '✅',
+  danger:  '⚠️',
+  warn:    '🕐',
+  info:    '▶',
+  muted:   '○',
+};
+
+function KpiTile({ label, value, suffix, accent, icon }) {
   return (
     <div className="dash-kpi">
+      {icon && <div className="dash-kpi-icon">{icon}</div>}
       <div className="dash-kpi-label">{label}</div>
       <div className={`dash-kpi-value ${accent ? `kpi-${accent}` : ''}`}>
         {value}

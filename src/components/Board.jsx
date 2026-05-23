@@ -236,7 +236,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
 function ColumnShell({ column, count, children }) {
   return (
     <div className="column">
-      <div className="column-head">
+      <div className={`column-head status-${column.id}`}>
         <span>{column.label}</span>
         <span className="count">{count}</span>
       </div>
