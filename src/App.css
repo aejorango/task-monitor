@@ -3236,6 +3236,184 @@ a:hover { text-decoration: underline; }
   .modal-actions { gap: 6px; }
 }
 
+/* ─── WBS Modal ────────────────────────────────────────────── */
+.wbs-progress-track {
+  height: 7px;
+  background: var(--c-surface-2);
+  border-radius: var(--r-pill);
+  margin-bottom: 22px;
+  overflow: hidden;
+}
+.wbs-progress-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 4px;
+}
+
+.wbs-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+/* WBS code number */
+.wbs-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-text-muted);
+  min-width: 46px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* Root row */
+.wbs-root-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(90deg, var(--c-surface-2), var(--c-surface));
+  border-bottom: 1px solid var(--c-border);
+}
+.wbs-root-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.wbs-root-label {
+  font-weight: 700;
+  font-size: 14px;
+  flex: 1;
+  letter-spacing: -0.01em;
+}
+
+/* Phase group */
+.wbs-phase-group {
+  border-bottom: 1px solid var(--c-border);
+}
+.wbs-phase-group:last-child { border-bottom: none; }
+
+.wbs-phase-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--c-surface-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.wbs-phase-icon {
+  color: var(--c-accent);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.wbs-phase-label {
+  font-weight: 600;
+  font-size: 13px;
+  flex: 1;
+  color: var(--c-text);
+}
+.wbs-mini-bar {
+  width: 60px;
+  height: 5px;
+  background: var(--c-border);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.wbs-mini-bar > div {
+  height: 100%;
+  border-radius: var(--r-pill);
+  min-width: 3px;
+}
+
+/* Task group */
+.wbs-task-group {
+  border-bottom: 1px solid var(--c-border);
+}
+.wbs-task-group:last-child { border-bottom: none; }
+
+.wbs-task-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px 9px 32px;
+  flex-wrap: wrap;
+  background: var(--c-surface);
+  transition: background 0.12s;
+}
+.wbs-task-row:hover { background: var(--c-surface-2); }
+
+.wbs-status-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+.wbs-status-todo    { color: var(--c-text-muted); }
+.wbs-status-doing   { color: var(--c-accent); }
+.wbs-status-done    { color: var(--c-success); }
+.wbs-status-blocked { color: var(--c-danger); }
+
+.wbs-task-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-text);
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Subtask list */
+.wbs-subtask-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+  border-top: 1px dashed var(--c-border);
+}
+.wbs-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 16px 6px 56px;
+  border-bottom: 1px dashed var(--c-border);
+  transition: background 0.1s;
+}
+.wbs-subtask-row:last-child { border-bottom: none; }
+.wbs-subtask-row:hover { background: var(--c-surface-2); }
+.wbs-subtask-check {
+  font-size: 13px;
+  flex-shrink: 0;
+  color: var(--c-text-3);
+}
+.wbs-subtask-row.done .wbs-subtask-check { color: var(--c-success); }
+.wbs-subtask-text {
+  font-size: 12.5px;
+  color: var(--c-text-2);
+}
+.wbs-subtask-row.done .wbs-subtask-text {
+  text-decoration: line-through;
+  color: var(--c-text-muted);
+}
+
+/* Empty state inside tree */
+.wbs-empty {
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--c-text-3);
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .wbs-task-row  { padding-left: 20px; gap: 5px; }
+  .wbs-subtask-row { padding-left: 32px; }
+  .wbs-code { min-width: 36px; }
+  .wbs-mini-bar { width: 40px; }
+}
+
 /* ── Bottom navigation bar (mobile only) ─────────────────── */
 .bottom-nav {
   display: none;
