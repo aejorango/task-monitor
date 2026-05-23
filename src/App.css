@@ -1206,6 +1206,14 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--c-border);
 }
 
+.project-card-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+  margin-top: 2px;
+}
+
 /* ─── Activity log inside task ─────────────────────────────── */
 .activity-list {
   margin-top: 8px;

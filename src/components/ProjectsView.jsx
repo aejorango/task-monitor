@@ -78,22 +78,6 @@ export default function ProjectsView() {
                 <div className="project-card-head">
                   <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
                   <h3 className="project-name">{p.name}</h3>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    title="View Work Breakdown Structure"
-                    onClick={(e) => { e.stopPropagation(); setWbsFor(p); }}
-                    style={{ marginLeft: 'auto' }}
-                  >🗂 WBS</button>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    title="View this project's activity log"
-                    onClick={(e) => { e.stopPropagation(); setActivityLogFor(p); }}
-                  >☰ Log</button>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    title="Generate tasks from this project's description"
-                    onClick={(e) => { e.stopPropagation(); setAiFor(p); }}
-                  >✨ AI</button>
                 </div>
                 <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
                 <div className="project-phases">
@@ -108,6 +92,23 @@ export default function ProjectsView() {
                   <span>·</span>
                   <span>{s.activities} activit{s.activities === 1 ? 'y' : 'ies'}</span>
                   {p.archived && (<><span>·</span><span className="badge badge-soft-muted">Archived</span></>)}
+                </div>
+                <div className="project-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    title="View Work Breakdown Structure"
+                    onClick={() => setWbsFor(p)}
+                  >🗂 WBS</button>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    title="View this project's activity log"
+                    onClick={() => setActivityLogFor(p)}
+                  >☰ Log</button>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    title="Generate tasks with AI"
+                    onClick={() => setAiFor(p)}
+                  >✨ AI</button>
                 </div>
               </div>
             );
