@@ -315,7 +315,7 @@ export default function SettingsView() {
             placeholder="claude-sonnet-4-5-20250929"
           />
           <p className="muted small" style={{ marginTop: 4 }}>
-            Default: <span className="mono">claude-sonnet-4-5-20250929</span>. Change if you want a different Claude model.
+            Default: <span className="mono">claude-sonnet-4-5-20250929</span>. Change if you want a different GenAI model.
           </p>
         </div>
       </section>

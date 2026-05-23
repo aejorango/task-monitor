@@ -99,7 +99,7 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
   return (
     <div className="task-ai-panel">
       <p className="muted small" style={{ marginTop: 0 }}>
-        Use Claude to break this task down or produce a ready-to-paste prompt for the actual work.
+        Use GenAI to break this task down or produce a ready-to-paste prompt for the actual work.
       </p>
 
       {/* SECTION 1: Subtasks */}
@@ -149,10 +149,10 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
         )}
       </div>
 
-      {/* SECTION 2: Claude prompt */}
+      {/* SECTION 2: GenAI prompt */}
       <div className="ai-action-block">
         <div className="ai-action-head">
-          <strong>📋 Generate Claude prompt</strong>
+          <strong>📋 Generate GenAI prompt</strong>
           <button
             className="btn btn-primary btn-sm"
             onClick={runPrompt}
@@ -162,7 +162,7 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
           </button>
         </div>
         <p className="muted small">
-          Get a ready-to-paste prompt for Claude that, when pasted into a fresh chat, will produce the deliverable for this task.
+          Get a ready-to-paste prompt for GenAI that, when pasted into a fresh chat, will produce the deliverable for this task.
         </p>
 
         {prompt && (
@@ -183,7 +183,7 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
                 href="https://claude.ai/new"
                 target="_blank"
                 rel="noreferrer"
-              >Open Claude →</a>
+              >Open GenAI →</a>
             </div>
             <details style={{ marginTop: 10 }}>
               <summary className="muted small" style={{ cursor: 'pointer' }}>Preview rendered</summary>
