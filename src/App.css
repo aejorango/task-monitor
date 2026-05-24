@@ -3542,49 +3542,149 @@ a:hover { text-decoration: underline; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Work Performed — vertical timeline view
+   Work Performed — Swimlane flowchart
+   lane = project  |  node = activity
    ═══════════════════════════════════════════════════════════ */
 
-.wp-timeline {
-  position: relative;
-  max-width: 860px;
-  margin: 0 auto;
-  padding-bottom: 40px;
+/* ── Filters bar ── */
+.wp-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 20px;
+}
+.wp-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wp-filter-group label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.wp-filter-group input[type="date"],
+.wp-filter-group select {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-xl);
+  border: 1.5px solid var(--c-border);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wp-filter-group input[type="date"]:focus,
+.wp-filter-group select:focus {
+  border-color: var(--c-accent);
+  background: var(--c-surface);
 }
 
-/* ── Day group ── */
-.wp-day-group {
-  margin-bottom: 8px;
+/* ── Swimlane scroll wrapper ── */
+.wp-swimlane-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 32px;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* ── Date marker ── */
-.wp-date-marker {
+/* ── Swimlane grid ── */
+/* gridTemplateColumns is set inline: 140px repeat(N, minmax(220px, 1fr)) */
+.wp-swimlane {
+  display: grid;
+  min-width: 360px;
+  border: 1.5px solid var(--c-border);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: var(--c-surface);
+}
+
+/* ── Corner cell (top-left) ── */
+.wp-sl-corner {
+  background: var(--c-surface-2);
+  border-right: 1.5px solid var(--c-border);
+  border-bottom: 1.5px solid var(--c-border);
+  padding: 14px 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
-  padding: 0 12px;
+  position: sticky;
+  left: 0;
+  z-index: 10;
 }
-.wp-date-badge {
-  display: inline-flex;
+.wp-sl-corner-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-3);
+}
+
+/* ── Lane header cells ── */
+.wp-sl-lane-header {
+  background: var(--c-surface-2);
+  border-right: 1.5px solid var(--c-border);
+  border-bottom: 1.5px solid var(--c-border);
+  border-top: 3px solid var(--lane-color, var(--c-accent));
+  padding: 12px 14px;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-pill);
-  padding: 5px 14px;
-  box-shadow: var(--shadow-sm);
-  white-space: nowrap;
-  z-index: 2;
-  position: relative;
+  gap: 10px;
+  min-width: 0;
 }
-.wp-date-text {
+.wp-sl-lane-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px var(--c-border);
+}
+.wp-sl-lane-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.wp-sl-lane-name {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: -0.01em;
   color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.wp-date-hours {
+.wp-sl-lane-hours {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--c-surface);
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  width: fit-content;
+  border: 1px solid var(--c-border);
+}
+
+/* ── Full-width date bar ── */
+/* grid-column is set inline */
+.wp-sl-date-bar {
+  background: var(--c-surface-2);
+  border-top: 1.5px solid var(--c-border);
+  border-bottom: 1px dashed var(--c-border);
+  padding: 7px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wp-sl-date-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.01em;
+}
+.wp-sl-date-hours {
   font-size: 11px;
   font-weight: 600;
   background: var(--c-accent-soft);
@@ -3592,216 +3692,147 @@ a:hover { text-decoration: underline; }
   padding: 1px 8px;
   border-radius: var(--r-pill);
 }
-.wp-date-line {
-  flex: 1;
-  height: 1px;
-  background: var(--c-border);
-  opacity: 0.6;
+
+/* ── Date label cell (first column per date row) ── */
+.wp-sl-date-cell {
+  border-right: 1.5px solid var(--c-border);
+  padding: 16px 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: var(--c-surface-2);
+  position: sticky;
+  left: 0;
+  z-index: 5;
+}
+.wp-sl-date-stub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-text-3);
+  letter-spacing: 0.02em;
 }
 
-/* ── Activities for a day ── */
-.wp-day-activities {
+/* ── Lane cell (activity container per project per day) ── */
+.wp-sl-lane-cell {
+  border-right: 1.5px solid var(--c-border);
+  padding: 10px;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0;
-}
-
-/* ── Single activity row ── */
-.wp-activity {
-  display: grid;
-  grid-template-columns: 1fr 48px 1fr;
-  align-items: stretch;
+  gap: 8px;
   min-height: 80px;
 }
 
-/* ── Spine (center column) ── */
-.wp-spine {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.wp-spine-line {
-  flex: 1;
+/* Vertical center track line */
+.wp-sl-track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 2px;
+  transform: translateX(-50%);
   background: var(--c-border);
-  min-height: 16px;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
 }
-.wp-node {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  z-index: 2;
-  transition: transform 0.15s;
-  cursor: pointer;
-}
-.wp-node:hover { transform: scale(1.12); }
-.wp-node-label {
-  color: white;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-}
-.wp-node-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: white;
-  opacity: 0.8;
+.wp-sl-empty-cell {
+  height: 40px;
 }
 
-/* ── Callout card ── */
-.wp-card {
+/* ── Activity node card ── */
+.wp-node-card {
   all: unset;
   box-sizing: border-box;
   cursor: pointer;
-  padding: 8px;
-  align-self: center;
-  width: 100%;
-}
-.wp-card-placeholder {
-  /* empty side — keeps grid alignment */
-}
-.wp-card-inner {
+  position: relative;
+  z-index: 2;
   background: var(--c-surface);
   border: 1.5px solid var(--c-border);
-  border-radius: var(--r-xl);
-  padding: 12px 14px;
+  border-left: 3px solid var(--node-color, var(--c-accent));
+  border-radius: var(--r-lg);
+  padding: 10px 12px;
   box-shadow: var(--shadow-card);
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
-  border-left: 3px solid var(--proj-color, var(--c-accent));
+  display: block;
+  width: 100%;
+  text-align: left;
 }
-.wp-card:hover .wp-card-inner {
-  border-color: var(--proj-color, var(--c-accent));
-  box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+.wp-node-card:hover {
+  border-color: var(--node-color, var(--c-accent));
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
   transform: translateY(-1px);
 }
-.wp-card.open .wp-card-inner {
-  border-color: var(--proj-color, var(--c-accent));
+.wp-node-card.open {
+  border-color: var(--node-color, var(--c-accent));
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
 }
 
-/* right-side cards: accent on the right instead of left */
-.wp-activity-right .wp-card .wp-card-inner {
-  border-left: 1.5px solid var(--proj-color, var(--c-accent));
-  border-right: 3px solid var(--proj-color, var(--c-accent));
-}
-
-.wp-card-header {
+.wp-node-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 3px;
 }
-.wp-card-title {
-  font-size: 13px;
+.wp-node-title {
+  font-size: 12px;
   font-weight: 600;
   color: var(--c-text);
   line-height: 1.35;
-  text-align: left;
 }
-.wp-hours-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
+.wp-node-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
   border-radius: var(--r-pill);
   white-space: nowrap;
   flex-shrink: 0;
 }
-.wp-card-proj {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  color: var(--c-text-3);
-  margin-bottom: 4px;
-  text-align: left;
-}
-.wp-card-comment {
-  font-size: 12px;
+.wp-node-comment {
+  font-size: 11px;
   color: var(--c-text-2);
-  line-height: 1.45;
-  margin: 4px 0 0;
-  text-align: left;
+  line-height: 1.4;
+  margin: 2px 0 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.wp-card.open .wp-card-comment {
+.wp-node-card.open .wp-node-comment {
   -webkit-line-clamp: unset;
   overflow: visible;
 }
-.wp-card-details {
+.wp-node-details {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
-.wp-card-meta-row {
+.wp-node-meta {
   display: flex;
   gap: 6px;
   align-items: baseline;
-  font-size: 12px;
+  font-size: 11px;
 }
-.wp-card-bottleneck {
-  background: var(--c-warn-bg);
-  border-radius: var(--r-md);
-  padding: 8px 10px;
-}
-.wp-card-footer {
+.wp-node-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 6px;
-  padding-top: 6px;
+  padding-top: 5px;
   border-top: 1px dashed var(--c-border);
 }
 
-/* ── End cap ── */
-.wp-end-cap {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 0;
-}
-.wp-end-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--c-border);
-  border: 2px solid var(--c-surface);
-  box-shadow: var(--shadow-sm);
-}
-
 /* ── Mobile ── */
-@media (max-width: 600px) {
-  .wp-activity {
-    grid-template-columns: 32px 1fr;
-  }
-  /* On mobile: always show card on the right, spine on the left */
-  .wp-activity-left,
-  .wp-activity-right {
-    grid-template-columns: 32px 1fr;
-  }
-  .wp-card-placeholder { display: none; }
-  .wp-activity-right .wp-card {
-    order: 2;
-  }
-  .wp-activity-right .wp-card .wp-card-inner {
-    border-left: 3px solid var(--proj-color, var(--c-accent));
-    border-right: 1.5px solid var(--proj-color, var(--c-accent));
-  }
-  .wp-node { width: 32px; height: 32px; }
-  .wp-node-label { font-size: 8px; }
-  .wp-date-marker { padding: 0 4px; }
+@media (max-width: 720px) {
+  .wp-swimlane-scroll { padding-bottom: 120px; }
+  .wp-sl-corner        { padding: 10px 12px; }
+  .wp-sl-lane-header   { padding: 10px 10px; gap: 7px; }
+  .wp-sl-lane-dot      { width: 8px; height: 8px; }
+  .wp-sl-lane-name     { font-size: 11px; }
+  .wp-sl-date-cell     { padding: 10px 8px; }
+  .wp-sl-lane-cell     { padding: 8px; gap: 6px; min-height: 60px; }
 }
