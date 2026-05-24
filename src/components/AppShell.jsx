@@ -8,15 +8,16 @@ import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 const VIEWS = [
-  { id: 'dashboard', label: 'Dashboard',    icon: '◰' },
-  { id: 'projects',  label: 'Projects',     icon: '◉' },
-  { id: 'board',     label: 'Board',        icon: '▦' },
-  { id: 'calendar',  label: 'Calendar',     icon: '▤' },
-  { id: 'gantt',     label: 'Gantt',        icon: '▭' },
-  { id: 'table',     label: 'Activity Log', icon: '☰' },
-  { id: 'review',    label: 'Review',       icon: '◇' },
-  { id: 'analytics', label: 'Analytics',    icon: '◢' },
-  { id: 'settings',  label: 'Settings',     icon: '⚙' },
+  { id: 'dashboard',      label: 'Dashboard',       icon: '◰' },
+  { id: 'projects',       label: 'Projects',         icon: '◉' },
+  { id: 'board',          label: 'Board',            icon: '▦' },
+  { id: 'calendar',       label: 'Calendar',         icon: '▤' },
+  { id: 'gantt',          label: 'Gantt',            icon: '▭' },
+  { id: 'table',          label: 'Activity Log',     icon: '☰' },
+  { id: 'work-performed', label: 'Work Performed',   icon: '⏱' },
+  { id: 'review',         label: 'Review',           icon: '◇' },
+  { id: 'analytics',      label: 'Analytics',        icon: '◢' },
+  { id: 'settings',       label: 'Settings',         icon: '⚙' },
 ];
 
 function parseHash() {
