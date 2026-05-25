@@ -34,16 +34,58 @@ export default function WorkPerformedView({ projectFilter }) {
   const { byId: projectById }   = useProjects();
   const { userId }              = useAuth();
 
-  const [expandedId, setExpandedId] = useState(null);
-  const [dateFrom,   setDateFrom]   = useState('');
-  const [dateTo,     setDateTo]     = useState('');
-  const [userFilter, setUserFilter] = useState('all');
+  const [expandedId,   setExpandedId]   = useState(null);
+  const [dateFrom,     setDateFrom]     = useState('');
+  const [dateTo,       setDateTo]       = useState('');
+  const [userFilter,   setUserFilter]   = useState('all');
+  const [phaseFilter,  setPhaseFilter]  = useState('all');   // 'all' | 'none' | phaseId
+  const [titleFilter,  setTitleFilter]  = useState('');
 
   /* unique users in the full unfiltered set */
   const uniqueUsers = useMemo(
     () => [...new Set(activities.map(a => a.userId).filter(Boolean))],
     [activities],
   );
+
+  /* phase options:
+   *   - projectFilter === 'all'  → list every phase across every project, prefixed
+   *                                with the project name so duplicate phase names
+   *                                stay distinguishable.
+   *   - projectFilter === <pid>  → that project's phases only.
+   *   - 'No phase' option is appended when at least one activity in the visible
+   *     scope has no phaseId, so users can isolate unassigned activity. */
+  const phaseOptions = useMemo(() => {
+    const inScope = projectFilter === 'all'
+      ? activities
+      : activities.filter(a => a.projectId === projectFilter);
+    const seen = new Set();
+    const out  = [];
+    let hasUnphased = false;
+    for (const a of inScope) {
+      if (!a.phaseId) { hasUnphased = true; continue; }
+      if (seen.has(a.phaseId)) continue;
+      const proj  = projectById[a.projectId];
+      const phase = proj?.phases?.find(p => p.id === a.phaseId);
+      if (!phase) continue;
+      seen.add(a.phaseId);
+      out.push({
+        id:    a.phaseId,
+        label: projectFilter === 'all' ? `${proj.name} · ${phase.name}` : phase.name,
+      });
+    }
+    out.sort((a, b) => a.label.localeCompare(b.label));
+    if (hasUnphased) out.push({ id: 'none', label: '(No phase)' });
+    return out;
+  }, [activities, projectFilter, projectById]);
+
+  /* reset the phase filter if the currently-selected phase no longer exists
+   * in the current project scope (e.g. user switched projects) */
+  if (phaseFilter !== 'all' && phaseFilter !== 'none'
+      && phaseOptions.length > 0
+      && !phaseOptions.some(o => o.id === phaseFilter)) {
+    // setState inside render is safe here — React will queue it and re-render once
+    setPhaseFilter('all');
+  }
 
   /* apply all filters + sort */
   const filtered = useMemo(() => {
@@ -52,12 +94,18 @@ export default function WorkPerformedView({ projectFilter }) {
     if (dateFrom) arr = arr.filter(a => a.date >= dateFrom);
     if (dateTo)   arr = arr.filter(a => a.date <= dateTo);
     if (userFilter !== 'all') arr = arr.filter(a => a.userId === userFilter);
+    if (phaseFilter === 'none') arr = arr.filter(a => !a.phaseId);
+    else if (phaseFilter !== 'all') arr = arr.filter(a => a.phaseId === phaseFilter);
+    if (titleFilter.trim()) {
+      const needle = titleFilter.trim().toLowerCase();
+      arr = arr.filter(a => (a.taskTitle || '').toLowerCase().includes(needle));
+    }
     return arr.sort(
       (a, b) =>
         b.date.localeCompare(a.date) ||
         (b.loggedAt?.seconds || 0) - (a.loggedAt?.seconds || 0),
     );
-  }, [activities, projectFilter, dateFrom, dateTo, userFilter]);
+  }, [activities, projectFilter, dateFrom, dateTo, userFilter, phaseFilter, titleFilter]);
 
   /* lane order: projects that appear in filtered, in order of first appearance */
   const laneIds = useMemo(() => {
@@ -92,8 +140,15 @@ export default function WorkPerformedView({ projectFilter }) {
     [filtered],
   );
 
-  const hasFilters = dateFrom || dateTo || userFilter !== 'all';
-  const clearFilters = () => { setDateFrom(''); setDateTo(''); setUserFilter('all'); };
+  const hasFilters = dateFrom || dateTo || userFilter !== 'all'
+                  || phaseFilter !== 'all' || titleFilter.trim() !== '';
+  const clearFilters = () => {
+    setDateFrom('');
+    setDateTo('');
+    setUserFilter('all');
+    setPhaseFilter('all');
+    setTitleFilter('');
+  };
 
   /* ── render ─────────────────────────────────────────────── */
   if (loading) {
@@ -126,6 +181,26 @@ export default function WorkPerformedView({ projectFilter }) {
         <div className="wp-filter-group">
           <label>To</label>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        </div>
+        {phaseOptions.length > 0 && (
+          <div className="wp-filter-group">
+            <label>Phase</label>
+            <select value={phaseFilter} onChange={e => setPhaseFilter(e.target.value)}>
+              <option value="all">All phases</option>
+              {phaseOptions.map(opt => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="wp-filter-group">
+          <label>Task title</label>
+          <input
+            type="search"
+            value={titleFilter}
+            onChange={e => setTitleFilter(e.target.value)}
+            placeholder="Search title…"
+          />
         </div>
         {uniqueUsers.length > 1 && (
           <div className="wp-filter-group">

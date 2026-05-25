@@ -3578,6 +3578,8 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.05em;
 }
 .wp-filter-group input[type="date"],
+.wp-filter-group input[type="search"],
+.wp-filter-group input[type="text"],
 .wp-filter-group select {
   height: 36px;
   padding: 0 12px;
@@ -3590,7 +3592,13 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
+.wp-filter-group input[type="search"] {
+  cursor: text;
+  min-width: 200px;
+}
 .wp-filter-group input[type="date"]:focus,
+.wp-filter-group input[type="search"]:focus,
+.wp-filter-group input[type="text"]:focus,
 .wp-filter-group select:focus {
   border-color: var(--c-accent);
   background: var(--c-surface);
