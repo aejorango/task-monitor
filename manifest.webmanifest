@@ -13,13 +13,7 @@
       "src": "blueinnov_logo.webp",
       "sizes": "any",
       "type": "image/webp",
-      "purpose": "any"
-    },
-    {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }
