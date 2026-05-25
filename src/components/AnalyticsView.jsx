@@ -9,10 +9,15 @@
 // Members:         org-wide demographic breakdowns + AI strategic insights.
 
 import { useState, useMemo, useEffect } from 'react';
-import { useTasks, useProjects } from '../hooks/useTasks';
-import { todayLocal, subscribeToApprovedUsers } from '../services/firebase';
-import { continentOf, countryName, CONTINENT_COLORS, CONTINENTS } from '../services/countries';
+import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
+import { todayLocal, subscribeToApprovedUsers, subscribeToAllUsers } from '../services/firebase';
+import {
+  continentOf, countryName, CONTINENT_COLORS, CONTINENTS,
+  tzOffsetMinutes, formatTzBucket,
+} from '../services/countries';
 import { generateMemberInsights, getApiKey } from '../services/anthropic';
+import { useUserProfile } from '../hooks/useUserProfile';
+import { useAuth } from '../hooks/useTasks';
 import Markdown from './Markdown';
 import Icon from './Icon';
 
@@ -432,6 +437,11 @@ function MemberAnalyticsSection() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [permError, setPermError] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const { activities } = useAllActivities();
+  const { userId } = useAuth();
+  const { profile } = useUserProfile(userId);
+  const isSuperadmin = profile?.role === 'superadmin' && profile?.status === 'approved';
 
   useEffect(() => {
     setLoading(true);
@@ -444,6 +454,14 @@ function MemberAnalyticsSection() {
     });
     return () => { cleared = true; unsub?.(); };
   }, []);
+
+  // Superadmin-only: subscribe to the full user list so we can show the
+  // pending/approved/rejected funnel.
+  useEffect(() => {
+    if (!isSuperadmin) return;
+    const unsub = subscribeToAllUsers((list) => setAllUsers(list));
+    return () => unsub?.();
+  }, [isSuperadmin]);
 
   // ── Aggregate demographics
   const stats = useMemo(() => {
@@ -561,6 +579,160 @@ function MemberAnalyticsSection() {
         (members.length * profileFields.length)) * 100
     );
 
+    // Timezone clustering (derived from country)
+    const tzCounts = {};
+    members.forEach((m) => {
+      const off = tzOffsetMinutes(m.country);
+      const k = off == null ? 'Unknown' : String(off);
+      tzCounts[k] = (tzCounts[k] || 0) + 1;
+    });
+    const tzRows = Object.entries(tzCounts)
+      .map(([k, v]) => ({
+        label: k === 'Unknown' ? 'Unknown' : formatTzBucket(Number(k)),
+        offset: k === 'Unknown' ? null : Number(k),
+        value: v,
+      }))
+      .sort((a, b) => (a.offset == null ? 1 : b.offset == null ? -1 : a.offset - b.offset));
+
+    // Monthly member growth — joins per month, last 12 months
+    const monthsBack = 12;
+    const now = new Date();
+    const monthBuckets = [];
+    for (let i = monthsBack - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthBuckets.push({
+        key:   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('en', { month: 'short', year: '2-digit' }),
+        count: 0,
+        cumulative: 0,
+      });
+    }
+    const bucketByKey = Object.fromEntries(monthBuckets.map((b) => [b.key, b]));
+    members.forEach((m) => {
+      const d = m.createdAt?.toDate?.();
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const b = bucketByKey[key];
+      if (b) b.count++;
+    });
+    // Cumulative: start from (totalMembers - sum of recent months)
+    const recentTotal = monthBuckets.reduce((s, b) => s + b.count, 0);
+    let running = members.length - recentTotal;
+    monthBuckets.forEach((b) => { running += b.count; b.cumulative = running; });
+
+    // Active vs dormant (using current-workspace activities — meaningful enough)
+    const memberIds = new Set(members.map((m) => m.id));
+    const cutoff30 = new Date(); cutoff30.setDate(cutoff30.getDate() - 30);
+    const cutoff60 = new Date(); cutoff60.setDate(cutoff60.getDate() - 60);
+    const cutoff90 = new Date(); cutoff90.setDate(cutoff90.getDate() - 90);
+    const lastActivityByUser = {};
+    activities.forEach((a) => {
+      if (!a.userId || !memberIds.has(a.userId)) return;
+      const ts = a.loggedAt?.toDate?.() || (a.date ? new Date(`${a.date}T00:00:00`) : null);
+      if (!ts) return;
+      if (!lastActivityByUser[a.userId] || ts > lastActivityByUser[a.userId]) {
+        lastActivityByUser[a.userId] = ts;
+      }
+    });
+    let active30 = 0, active60 = 0, active90 = 0, dormant = 0, never = 0;
+    members.forEach((m) => {
+      const last = lastActivityByUser[m.id];
+      if (!last) { never++; return; }
+      if (last >= cutoff30) active30++;
+      else if (last >= cutoff60) active60++;
+      else if (last >= cutoff90) active90++;
+      else dormant++;
+    });
+    const activityRows = [
+      { label: 'Active (≤ 30 d)',  value: active30, color: '#10b981' },
+      { label: 'Active (31–60 d)', value: active60, color: '#84cc16' },
+      { label: 'Active (61–90 d)', value: active90, color: '#f59e0b' },
+      { label: 'Dormant (90+ d)',  value: dormant,  color: '#ef4444' },
+      { label: 'No activity yet',  value: never,    color: '#94a3b8' },
+    ];
+
+    // Top contributors — sum hoursSpent per user, last 30 days
+    const hoursByUser30 = {};
+    activities.forEach((a) => {
+      if (!a.userId) return;
+      const ts = a.loggedAt?.toDate?.() || (a.date ? new Date(`${a.date}T00:00:00`) : null);
+      if (!ts || ts < cutoff30) return;
+      hoursByUser30[a.userId] = (hoursByUser30[a.userId] || 0) + (a.hoursSpent || 0);
+    });
+    const userById = Object.fromEntries(members.map((m) => [m.id, m]));
+    const topContributorRows = Object.entries(hoursByUser30)
+      .filter(([id]) => userById[id])
+      .map(([id, hours]) => ({
+        label: userById[id].displayName || userById[id].email || id.slice(0, 6),
+        value: Math.round(hours * 10) / 10,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    // Seniority pyramid — bucketed by yearsOfExperience
+    const seniorityBuckets = [
+      { id: 'junior',  label: 'Junior (0–2 yr)',  min: 0,  max: 2  },
+      { id: 'mid',     label: 'Mid (3–5 yr)',     min: 3,  max: 5  },
+      { id: 'senior',  label: 'Senior (6–10 yr)', min: 6,  max: 10 },
+      { id: 'lead',    label: 'Lead (11–15 yr)',  min: 11, max: 15 },
+      { id: 'expert',  label: 'Expert (16+ yr)',  min: 16, max: 200 },
+      { id: 'unknown', label: 'Undisclosed',      min: null, max: null },
+    ];
+    const seniorityCounts = Object.fromEntries(seniorityBuckets.map((b) => [b.id, 0]));
+    members.forEach((m) => {
+      const yoe = typeof m.yearsOfExperience === 'number' ? m.yearsOfExperience : null;
+      if (yoe == null) { seniorityCounts.unknown++; return; }
+      const b = seniorityBuckets.find((x) => x.min != null && yoe >= x.min && yoe <= x.max);
+      if (b) seniorityCounts[b.id]++; else seniorityCounts.unknown++;
+    });
+    const seniorityRows = seniorityBuckets.map((b) => ({
+      label: b.label,
+      value: seniorityCounts[b.id],
+    }));
+
+    // Skill coverage — flatten skills[]
+    const skillCounts = {};
+    members.forEach((m) => {
+      (m.skills || []).forEach((s) => {
+        const k = String(s).toLowerCase();
+        skillCounts[k] = skillCounts[k] || { label: s, value: 0, members: 0 };
+        skillCounts[k].members++;
+        skillCounts[k].value = skillCounts[k].members;
+      });
+    });
+    const skillRows = Object.values(skillCounts)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15);
+    // Skills only one person knows = single point of failure
+    const sopfSkills = Object.values(skillCounts).filter((s) => s.value === 1);
+
+    // Languages spoken
+    const languageCounts = {};
+    members.forEach((m) => {
+      (m.languages || []).forEach((l) => {
+        const k = String(l).toLowerCase();
+        languageCounts[k] = languageCounts[k] || { label: l, value: 0 };
+        languageCounts[k].value++;
+      });
+    });
+    const languageRows = Object.values(languageCounts)
+      .sort((a, b) => b.value - a.value);
+
+    // Profession × Continent cross-tab (matrix)
+    const topProfessions = professionRows.slice(0, 6).map((r) => r.label);
+    const topContinents = continentRows.filter((r) => r.label !== 'Unknown').map((r) => r.label);
+    const crossTab = topProfessions.map((prof) => ({
+      profession: prof,
+      cells: topContinents.map((cont) => {
+        const count = members.filter((m) =>
+          (m.profession || '').toLowerCase() === prof.toLowerCase()
+          && continentOf(m.country) === cont
+        ).length;
+        return { continent: cont, count };
+      }),
+    }));
+    const crossTabMax = Math.max(1, ...crossTab.flatMap((r) => r.cells.map((c) => c.count)));
+
     return {
       totalMembers,
       ages, avgAge, minAge, maxAge,
@@ -570,8 +742,28 @@ function MemberAnalyticsSection() {
       genderRows,
       tenureRows,
       completeness,
+      tzRows,
+      monthlyGrowth: monthBuckets,
+      activityRows, dormant, never, active30,
+      topContributorRows,
+      seniorityRows, sopfSkillsCount: sopfSkills.length,
+      skillRows, totalSkills: Object.keys(skillCounts).length,
+      languageRows,
+      crossTab, crossTabMax, topProfessions, topContinents,
     };
-  }, [members]);
+  }, [members, activities]);
+
+  // Status funnel (superadmin only — needs allUsers)
+  const statusFunnel = useMemo(() => {
+    if (!isSuperadmin) return null;
+    const counts = { pending: 0, approved: 0, rejected: 0 };
+    allUsers.forEach((u) => { if (counts[u.status] != null) counts[u.status]++; });
+    return [
+      { label: 'Pending',  value: counts.pending,  color: '#f59e0b' },
+      { label: 'Approved', value: counts.approved, color: '#10b981' },
+      { label: 'Rejected', value: counts.rejected, color: '#ef4444' },
+    ];
+  }, [allUsers, isSuperadmin]);
 
   if (loading) {
     return (
@@ -700,7 +892,128 @@ function MemberAnalyticsSection() {
             total={stats.totalMembers}
           />
         </section>
+
+        <section className="review-section">
+          <h2 className="review-h2">Timezone clustering</h2>
+          <p className="muted small" style={{ marginTop: -8 }}>
+            Derived from each member's country. Useful for picking sync windows.
+          </p>
+          <HorizontalBarChart
+            rows={stats.tzRows}
+            color="#0ea5e9"
+            total={stats.totalMembers}
+          />
+        </section>
+
+        <section className="review-section">
+          <h2 className="review-h2">Seniority pyramid</h2>
+          <p className="muted small" style={{ marginTop: -8 }}>
+            Bucketed by years of professional experience.
+          </p>
+          <HorizontalBarChart
+            rows={stats.seniorityRows}
+            color="#7c3aed"
+            total={stats.totalMembers}
+          />
+        </section>
+
+        <section className="review-section">
+          <h2 className="review-h2">Languages spoken</h2>
+          {stats.languageRows.length === 0 ? (
+            <p className="muted small">No members have filled in languages yet.</p>
+          ) : (
+            <HorizontalBarChart
+              rows={stats.languageRows}
+              color="#14b8a6"
+              total={stats.totalMembers}
+            />
+          )}
+        </section>
+
+        <section className="review-section">
+          <h2 className="review-h2">Activity status</h2>
+          <p className="muted small" style={{ marginTop: -8 }}>
+            Based on the latest activity each member logged in this workspace.
+          </p>
+          <HorizontalBarChart
+            rows={stats.activityRows}
+            total={stats.totalMembers}
+          />
+        </section>
       </div>
+
+      {/* Wider charts that look better full-bleed */}
+      <section className="review-section">
+        <h2 className="review-h2">Monthly member growth — last 12 months</h2>
+        <p className="muted small" style={{ marginTop: -8 }}>
+          New approvals per month and running total of approved members.
+        </p>
+        <GrowthChart data={stats.monthlyGrowth} totalMembers={stats.totalMembers} />
+      </section>
+
+      <section className="review-section">
+        <h2 className="review-h2">Skill coverage</h2>
+        <p className="muted small" style={{ marginTop: -8 }}>
+          {stats.totalSkills} unique skills tagged across the team.
+          {stats.sopfSkillsCount > 0 && (
+            <> <strong style={{ color: 'var(--c-warn)' }}>{stats.sopfSkillsCount}</strong> skill{stats.sopfSkillsCount === 1 ? ' is' : 's are'} held by only one person (single-point-of-failure risk).</>
+          )}
+        </p>
+        {stats.skillRows.length === 0 ? (
+          <p className="muted small">No members have filled in skills yet.</p>
+        ) : (
+          <HorizontalBarChart
+            rows={stats.skillRows}
+            color="#f97316"
+            total={stats.totalMembers}
+            labelWidth={160}
+          />
+        )}
+      </section>
+
+      {stats.topContributorRows.length > 0 && (
+        <section className="review-section">
+          <h2 className="review-h2">Top contributors — hours logged (last 30 days)</h2>
+          <p className="muted small" style={{ marginTop: -8 }}>
+            Activity in the current workspace.
+          </p>
+          <HorizontalBarChart
+            rows={stats.topContributorRows}
+            color="#22c55e"
+            total={null}
+            labelWidth={170}
+            formatValue={(v) => `${v}h`}
+          />
+        </section>
+      )}
+
+      {stats.topProfessions.length > 0 && stats.topContinents.length > 0 && (
+        <section className="review-section">
+          <h2 className="review-h2">Profession × Continent — capability map</h2>
+          <p className="muted small" style={{ marginTop: -8 }}>
+            Spot geographic blind spots: cells with zero count are continents
+            where a profession isn't represented.
+          </p>
+          <CrossTabHeatmap
+            rows={stats.crossTab}
+            continents={stats.topContinents}
+            max={stats.crossTabMax}
+          />
+        </section>
+      )}
+
+      {isSuperadmin && statusFunnel && (
+        <section className="review-section">
+          <h2 className="review-h2">User-status funnel <span className="muted small">(superadmin only)</span></h2>
+          <p className="muted small" style={{ marginTop: -8 }}>
+            Pending requests still waiting on approval, plus rejected accounts.
+          </p>
+          <HorizontalBarChart
+            rows={statusFunnel}
+            total={statusFunnel.reduce((s, r) => s + r.value, 0)}
+          />
+        </section>
+      )}
 
       <MemberInsightsPanel stats={stats} members={members} />
     </>
@@ -737,11 +1050,28 @@ function MemberInsightsPanel({ stats, members }) {
     geography: {
       byContinent: stats.continentRows.map((r) => ({ continent: r.label, count: r.value })),
       topCountries: stats.countryRows.map((r) => ({ country: r.label, count: r.value })),
+      byTimezone: stats.tzRows.map((r) => ({ tz: r.label, count: r.value })),
     },
     industries: stats.industryRows.map((r) => ({ industry: r.label, count: r.value })),
     professions: stats.professionRows.map((r) => ({ profession: r.label, count: r.value })),
     gender: stats.genderRows.map((r) => ({ label: r.label, count: r.value })),
     tenure: stats.tenureRows.map((r) => ({ bucket: r.label, count: r.value })),
+    seniority: stats.seniorityRows.map((r) => ({ band: r.label, count: r.value })),
+    skills: {
+      uniqueSkillCount: stats.totalSkills,
+      singlePointOfFailureCount: stats.sopfSkillsCount,
+      topSkills: stats.skillRows.map((r) => ({ skill: r.label, members: r.value })),
+    },
+    languages: stats.languageRows.map((r) => ({ language: r.label, speakers: r.value })),
+    activity: {
+      activeLast30d: stats.active30,
+      dormant90Plus: stats.dormant,
+      neverLoggedActivity: stats.never,
+    },
+    professionContinentMatrix: stats.crossTab.map((r) => ({
+      profession: r.profession,
+      byContinent: Object.fromEntries(r.cells.map((c) => [c.continent, c.count])),
+    })),
   });
 
   const runInsights = async () => {
@@ -819,5 +1149,122 @@ function MemberInsightsPanel({ stats, members }) {
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Member-growth line + bar combo chart ───────────────────────────────────
+
+function GrowthChart({ data, totalMembers }) {
+  if (!data || data.length === 0) {
+    return <p className="muted small">No growth data yet.</p>;
+  }
+  const W = 720, H = 220, PAD = 32;
+  const innerW = W - PAD * 2;
+  const innerH = H - PAD * 2;
+  const maxCount = Math.max(1, ...data.map((d) => d.count));
+  const maxCumulative = Math.max(totalMembers || 1, ...data.map((d) => d.cumulative));
+  const barSlot = innerW / data.length;
+  const barW = barSlot * 0.6;
+  // Line points use the cumulative scale on the right axis
+  const points = data.map((d, i) => {
+    const x = PAD + barSlot * i + barSlot / 2;
+    const y = PAD + innerH - (d.cumulative / maxCumulative) * innerH;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="growth-chart-wrap">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="220" preserveAspectRatio="none" style={{ display: 'block' }}>
+        <rect x={PAD} y={PAD} width={innerW} height={innerH} fill="none" stroke="var(--c-border)" />
+        {/* gridlines */}
+        {[0.25, 0.5, 0.75].map((g) => (
+          <line key={g} x1={PAD} y1={PAD + innerH * g} x2={PAD + innerW} y2={PAD + innerH * g} stroke="var(--c-border)" strokeDasharray="2 3" opacity={0.5} />
+        ))}
+        {/* bars — new approvals per month */}
+        {data.map((d, i) => {
+          const x = PAD + barSlot * i + (barSlot - barW) / 2;
+          const h = (d.count / maxCount) * innerH;
+          const y = PAD + innerH - h;
+          return (
+            <g key={d.key}>
+              <rect x={x} y={y} width={barW} height={h} fill="var(--c-accent)" opacity={0.75}>
+                <title>{d.label}: +{d.count} new · total {d.cumulative}</title>
+              </rect>
+              {d.count > 0 && (
+                <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="var(--c-text-3)">
+                  {d.count}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {/* cumulative line */}
+        <polyline points={points} fill="none" stroke="#10b981" strokeWidth="2.5" />
+        {data.map((d, i) => {
+          const x = PAD + barSlot * i + barSlot / 2;
+          const y = PAD + innerH - (d.cumulative / maxCumulative) * innerH;
+          return <circle key={d.key} cx={x} cy={y} r={3.5} fill="#10b981" stroke="var(--c-surface)" strokeWidth="1.5" />;
+        })}
+        {/* x-axis labels */}
+        {data.map((d, i) => (
+          <text
+            key={d.key}
+            x={PAD + barSlot * i + barSlot / 2}
+            y={H - 8}
+            textAnchor="middle"
+            fontSize="10"
+            fill="var(--c-text-3)"
+          >
+            {d.label}
+          </text>
+        ))}
+      </svg>
+      <div className="chart-legend">
+        <span><span className="legend-swatch" style={{ background: 'var(--c-accent)' }} /> New approvals (bars)</span>
+        <span><span className="legend-swatch" style={{ background: '#10b981' }} /> Cumulative total (line)</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profession × Continent cross-tab heatmap ───────────────────────────────
+
+function CrossTabHeatmap({ rows, continents, max }) {
+  if (!rows.length || !continents.length) return null;
+  const intensity = (n) => {
+    if (!n) return 0;
+    return 0.12 + (n / max) * 0.78;  // 12% – 90% opacity
+  };
+  return (
+    <div className="crosstab-wrap">
+      <table className="crosstab">
+        <thead>
+          <tr>
+            <th></th>
+            {continents.map((c) => (
+              <th key={c}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.profession}>
+              <th>{r.profession}</th>
+              {r.cells.map((cell) => (
+                <td
+                  key={cell.continent}
+                  style={{
+                    background: `color-mix(in srgb, var(--c-accent) ${Math.round(intensity(cell.count) * 100)}%, transparent)`,
+                  }}
+                  title={`${r.profession} in ${cell.continent}: ${cell.count}`}
+                >
+                  {cell.count || ''}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

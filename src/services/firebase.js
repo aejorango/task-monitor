@@ -212,9 +212,19 @@ export function subscribeToApprovedUsers(callback) {
 export async function updateUserProfile(uid, updates) {
   if (!uid) throw new Error('updateUserProfile: missing uid');
   const allowed = {};
-  const FIELDS = ['birthdate', 'country', 'profession', 'industry', 'gender', 'bio'];
-  for (const k of FIELDS) {
+  const SCALAR_FIELDS = [
+    'birthdate', 'country', 'profession', 'industry', 'gender', 'bio',
+    'yearsOfExperience', 'seniority',
+  ];
+  const ARRAY_FIELDS = ['skills', 'languages'];
+  for (const k of SCALAR_FIELDS) {
     if (k in updates) allowed[k] = updates[k] ?? null;
+  }
+  for (const k of ARRAY_FIELDS) {
+    if (k in updates) {
+      const arr = updates[k];
+      allowed[k] = Array.isArray(arr) ? arr.map((s) => String(s).trim()).filter(Boolean) : [];
+    }
   }
   allowed.profileUpdatedAt = serverTimestamp();
   await updateDoc(doc(usersRef, uid), allowed);

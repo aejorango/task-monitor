@@ -707,6 +707,11 @@ function ProfileSection({ userId, profile }) {
   const [profession, setProfession] = useState(profile?.profession || '');
   const [industry,   setIndustry]   = useState(profile?.industry   || '');
   const [gender,     setGender]     = useState(profile?.gender     || '');
+  const [yearsOfExperience, setYearsOfExperience] = useState(
+    profile?.yearsOfExperience != null ? String(profile.yearsOfExperience) : ''
+  );
+  const [skills,    setSkills]    = useState((profile?.skills    || []).join(', '));
+  const [languages, setLanguages] = useState((profile?.languages || []).join(', '));
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -717,7 +722,13 @@ function ProfileSection({ userId, profile }) {
     setProfession(profile?.profession || '');
     setIndustry(profile?.industry || '');
     setGender(profile?.gender || '');
-  }, [profile?.birthdate, profile?.country, profile?.profession, profile?.industry, profile?.gender]);
+    setYearsOfExperience(profile?.yearsOfExperience != null ? String(profile.yearsOfExperience) : '');
+    setSkills((profile?.skills || []).join(', '));
+    setLanguages((profile?.languages || []).join(', '));
+  }, [
+    profile?.birthdate, profile?.country, profile?.profession, profile?.industry,
+    profile?.gender, profile?.yearsOfExperience, profile?.skills, profile?.languages,
+  ]);
 
   const computedAge = (() => {
     if (!birthdate) return null;
@@ -730,23 +741,32 @@ function ProfileSection({ userId, profile }) {
     return age >= 0 && age < 130 ? age : null;
   })();
 
+  const parseList = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
+
   const dirty =
     birthdate  !== (profile?.birthdate  || '') ||
     country    !== (profile?.country    || '') ||
     profession !== (profile?.profession || '') ||
     industry   !== (profile?.industry   || '') ||
-    gender     !== (profile?.gender     || '');
+    gender     !== (profile?.gender     || '') ||
+    yearsOfExperience !== (profile?.yearsOfExperience != null ? String(profile.yearsOfExperience) : '') ||
+    skills    !== (profile?.skills    || []).join(', ') ||
+    languages !== (profile?.languages || []).join(', ');
 
   const handleSave = async () => {
     setBusy(true);
     setSaved(false);
     try {
+      const yoeNum = yearsOfExperience.trim() === '' ? null : Number(yearsOfExperience);
       await updateUserProfile(userId, {
         birthdate:  birthdate.trim()  || null,
         country:    country.trim()    || null,
         profession: profession.trim() || null,
         industry:   industry.trim()   || null,
         gender:     gender.trim()     || null,
+        yearsOfExperience: Number.isFinite(yoeNum) && yoeNum >= 0 ? yoeNum : null,
+        skills:    parseList(skills),
+        languages: parseList(languages),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -818,20 +838,63 @@ function ProfileSection({ userId, profile }) {
         </div>
       </div>
 
+      <div className="field-row">
+        <div className="field">
+          <label className="label">Gender (optional)</label>
+          <select
+            className="select"
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+          >
+            <option value="">— Prefer not to say —</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="non-binary">Non-binary</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="label">Years of professional experience</label>
+          <input
+            type="number"
+            min={0}
+            max={70}
+            step={1}
+            className="input"
+            value={yearsOfExperience}
+            onChange={(e) => setYearsOfExperience(e.target.value)}
+            placeholder="e.g. 5"
+          />
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Used by the seniority pyramid on the Member analytics dashboard.
+          </p>
+        </div>
+      </div>
+
       <div className="field">
-        <label className="label">Gender (optional)</label>
-        <select
-          className="select"
-          value={gender}
-          onChange={(e) => setGender(e.target.value)}
-          style={{ maxWidth: 280 }}
-        >
-          <option value="">— Prefer not to say —</option>
-          <option value="female">Female</option>
-          <option value="male">Male</option>
-          <option value="non-binary">Non-binary</option>
-          <option value="other">Other</option>
-        </select>
+        <label className="label">Skills</label>
+        <input
+          className="input"
+          value={skills}
+          onChange={(e) => setSkills(e.target.value)}
+          placeholder="comma-separated, e.g. React, Python, AutoCAD, Project management"
+        />
+        <p className="muted small" style={{ marginTop: 4 }}>
+          Powers the skill-coverage chart. Use the same naming convention as your teammates so skills group together.
+        </p>
+      </div>
+
+      <div className="field">
+        <label className="label">Languages spoken</label>
+        <input
+          className="input"
+          value={languages}
+          onChange={(e) => setLanguages(e.target.value)}
+          placeholder="comma-separated, e.g. English, Filipino, Spanish"
+        />
+        <p className="muted small" style={{ marginTop: 4 }}>
+          Useful for client-coverage planning.
+        </p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>

@@ -214,3 +214,59 @@ export function countryName(countryCode) {
   const c = COUNTRY_BY_CODE[countryCode.toUpperCase()];
   return c ? c.name : countryCode;
 }
+
+// ─── Primary UTC offset per country ────────────────────────────────────────
+// For multi-timezone countries (US, RU, AU, BR, CA, MX) we pick the offset
+// for the most populous region. The value is offset-in-minutes (e.g. -300
+// for UTC-5, +330 for UTC+5:30). This is used by the Timezone-clustering
+// chart on the Member analytics dashboard.
+const TZ_OFFSET_MIN = {
+  // North America
+  US: -300, CA: -300, MX: -360, GT: -360, CU: -300, DO: -240, HT: -300,
+  HN: -360, JM: -300, NI: -360, PA: -300, CR: -360, SV: -360, PR: -240,
+  TT: -240, BS: -300, BB: -240,
+  // South America
+  BR: -180, AR: -180, CL: -240, CO: -300, PE: -300, VE: -240, EC: -300,
+  BO: -240, PY: -240, UY: -180, GY: -240, SR: -180,
+  // Europe
+  GB:    0, IE:    0, FR:   60, DE:   60, ES:   60, IT:   60, PT:    0,
+  NL:   60, BE:   60, CH:   60, AT:   60, SE:   60, NO:   60, DK:   60,
+  FI:  120, IS:    0, PL:   60, CZ:   60, SK:   60, HU:   60, RO:  120,
+  BG:  120, GR:  120, HR:   60, SI:   60, RS:   60, BA:   60, AL:   60,
+  MK:   60, ME:   60, EE:  120, LV:  120, LT:  120, BY:  180, UA:  120,
+  MD:  120, RU:  180, LU:   60, MT:   60, CY:  120,
+  // Asia
+  PH:  480, JP:  540, KR:  540, KP:  540, CN:  480, HK:  480, TW:  480,
+  MO:  480, IN:  330, PK:  300, BD:  360, LK:  330, NP:  345, BT:  360,
+  MV:  300, AF:  270, IR:  210, IQ:  180, SA:  180, AE:  240, QA:  180,
+  KW:  180, BH:  180, OM:  240, YE:  180, IL:  120, PS:  120, JO:  120,
+  LB:  120, SY:  120, TR:  180, AM:  240, AZ:  240, GE:  240, KZ:  360,
+  KG:  360, TJ:  300, TM:  300, UZ:  300, MN:  480, TH:  420, VN:  420,
+  LA:  420, KH:  420, MM:  390, MY:  480, SG:  480, BN:  480, ID:  420,
+  TL:  540,
+  // Africa
+  EG:  120, LY:  120, TN:   60, DZ:   60, MA:   60, SD:  120, SS:  120,
+  ET:  180, ER:  180, DJ:  180, SO:  180, KE:  180, UG:  180, TZ:  180,
+  RW:  120, BI:  120, NG:   60, GH:    0, CI:    0, SN:    0, ML:    0,
+  BF:    0, NE:   60, TD:   60, CM:   60, CF:   60, GA:   60, CG:   60,
+  CD:   60, AO:   60, ZM:  120, ZW:  120, MZ:  120, MW:  120, NA:  120,
+  BW:  120, ZA:  120, LS:  120, SZ:  120, MG:  180, MU:  240, SC:  240,
+  // Oceania
+  AU:  600, NZ:  720, PG:  600, FJ:  720, SB:  660, VU:  660, WS:  780,
+  TO:  780, KI:  720, MH:  720, FM:  660, NR:  720, PW:  540, TV:  720,
+};
+
+export function tzOffsetMinutes(countryCode) {
+  if (!countryCode) return null;
+  const v = TZ_OFFSET_MIN[countryCode.toUpperCase()];
+  return v == null ? null : v;
+}
+
+export function formatTzBucket(offsetMinutes) {
+  if (offsetMinutes == null) return 'Unknown';
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const hh = Math.floor(abs / 60);
+  const mm = abs % 60;
+  return mm === 0 ? `UTC${sign}${hh}` : `UTC${sign}${hh}:${String(mm).padStart(2, '0')}`;
+}
