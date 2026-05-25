@@ -217,26 +217,13 @@ service cloud.firestore {
 
     // ─── Users (approval-gated access control) ──────────────────────────────
     // Each authenticated user has a doc at users/{uid} carrying their status
-    // (pending | approved | rejected) and role (user | superadmin), plus
-    // optional demographic fields (birthdate, country, profession, industry,
-    // gender) used by the member analytics dashboard.
-    function isApprovedUser() {
-      return request.auth != null
-          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
-    }
+    // (pending | approved | rejected) and role (user | superadmin).
     match /users/{userId} {
-      // Reads:
-      //   - Any user can read their own profile (so the auth gate can fetch
-      //     status on sign-in).
-      //   - Approved users can read other profiles so the Member analytics
-      //     dashboard (age, continent, industry, profession breakdowns) can
-      //     aggregate across the organisation.
-      //   - Superadmins always pass.
+      // Users can always read their own profile (so the auth gate can fetch
+      // status on sign-in). Approved superadmins can read all profiles to
+      // power the User Management UI.
       allow read: if request.auth != null
-                  && (request.auth.uid == userId
-                      || isApprovedUser()
-                      || isApprovedSuperadmin());
+                  && (request.auth.uid == userId || isApprovedSuperadmin());
 
       // First-time profile creation on sign-in. The user creates their own
       // doc; status must start as 'pending' (role 'user') unless the email

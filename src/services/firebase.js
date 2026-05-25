@@ -193,33 +193,6 @@ export function subscribeToAllUsers(callback) {
   });
 }
 
-// Subscribe to all approved users — used by the Member analytics dashboard.
-// Approved users can read other approved profiles (see Firestore rules).
-export function subscribeToApprovedUsers(callback) {
-  const q = query(usersRef, where('status', '==', 'approved'));
-  return onSnapshot(q, (s) => {
-    const list = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    callback(list);
-  }, (err) => {
-    // Fall back gracefully if rules block the listing (e.g. pre-deploy state).
-    console.warn('[subscribeToApprovedUsers] listener error:', err?.message || err);
-    callback([]);
-  });
-}
-
-// Update the signed-in user's own profile demographic fields. Cannot change
-// status/role/email — Firestore rules enforce that.
-export async function updateUserProfile(uid, updates) {
-  if (!uid) throw new Error('updateUserProfile: missing uid');
-  const allowed = {};
-  const FIELDS = ['birthdate', 'country', 'profession', 'industry', 'gender', 'bio'];
-  for (const k of FIELDS) {
-    if (k in updates) allowed[k] = updates[k] ?? null;
-  }
-  allowed.profileUpdatedAt = serverTimestamp();
-  await updateDoc(doc(usersRef, uid), allowed);
-}
-
 export async function approveUser(targetUid, approverUid) {
   await updateDoc(doc(usersRef, targetUid), {
     status: 'approved',
