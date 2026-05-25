@@ -1,11 +1,13 @@
 // src/App.jsx — root shell + view router with code-split non-Board views.
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useAuth, useProjects } from './hooks/useTasks';
 import { useOverdueScan } from './hooks/useNotifications';
 import AppShell, { useRoute } from './components/AppShell';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
+import LandingView, { isLandingDismissed } from './components/LandingView';
+import { auth } from './services/firebase';
 import './App.css';
 
 const TableView         = lazy(() => import('./components/TableView'));
@@ -32,6 +34,23 @@ export default function App() {
   const { projects } = useProjects();
   const { route, navigate } = useRoute();
   useOverdueScan();
+
+  // Landing-page gate. Show the welcome screen on first visit (when the user
+  // is anonymous and hasn't dismissed it). Invite-claim links bypass this so
+  // shared invites still land directly on the claim flow. A signed-in Google
+  // user is never anonymous, so the gate naturally falls through for them.
+  const [landingDismissed, setLandingDismissed] = useState(isLandingDismissed);
+  const isAnonymous = !!auth.currentUser?.isAnonymous;
+  const showLanding =
+    ready &&
+    userId &&
+    isAnonymous &&
+    !landingDismissed &&
+    route.view !== 'invite';
+
+  if (showLanding) {
+    return <LandingView onDone={() => setLandingDismissed(true)} />;
+  }
 
   return (
     <AppShell

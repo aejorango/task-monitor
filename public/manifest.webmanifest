@@ -1,19 +1,25 @@
 {
-  "name": "Task Monitor",
+  "name": "Task Monitor · Blue Innovation",
   "short_name": "Tasks",
-  "description": "Personal project management suite",
+  "description": "Project management suite by Blue Innovation",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#fafafa",
-  "theme_color": "#4f46e5",
+  "background_color": "#f4f6fb",
+  "theme_color": "#5b4fff",
   "orientation": "any",
   "icons": [
+    {
+      "src": "blueinnov_logo.webp",
+      "sizes": "any",
+      "type": "image/webp",
+      "purpose": "any"
+    },
     {
       "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ]
 }

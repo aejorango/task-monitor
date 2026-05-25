@@ -658,6 +658,45 @@ function ProjectSharing({ project }) {
     }
   };
 
+  const shareLink = async () => {
+    if (!generatedLink) return;
+    const shareData = {
+      title: `Join "${project.name}" on Task Monitor`,
+      text: `You're invited to collaborate on "${project.name}" as ${inviteRole}. Open the link to accept.`,
+      url: generatedLink.url,
+    };
+    // Web Share API: works on mobile + most desktops (Safari/Edge). Falls back
+    // to clipboard copy when unavailable or when the user cancels.
+    try {
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        await navigator.share(shareData);
+        return;
+      }
+      throw new Error('share-unsupported');
+    } catch (err) {
+      if (err?.name === 'AbortError') return; // user cancelled the share sheet
+      // Fall back to clipboard so the link still ends up somewhere usable.
+      await copyLink();
+    }
+  };
+
+  const shareViaEmail = () => {
+    if (!generatedLink) return;
+    const subject = encodeURIComponent(`Join "${project.name}" on Task Monitor`);
+    const body = encodeURIComponent(
+      `You're invited to collaborate on "${project.name}" as ${inviteRole}.\n\nOpen this link to accept the invite:\n${generatedLink.url}\n`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+  };
+
+  const shareViaWhatsApp = () => {
+    if (!generatedLink) return;
+    const text = encodeURIComponent(
+      `You're invited to collaborate on "${project.name}" on Task Monitor: ${generatedLink.url}`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');
+  };
+
   const handleRevoke = async (inviteId) => {
     if (!confirm('Revoke this invite link? Anyone who hasn\'t claimed it yet will be unable to join.')) return;
     try { await revokeInvite(inviteId); }
@@ -726,17 +765,32 @@ function ProjectSharing({ project }) {
         </button>
 
         {generatedLink && (
-          <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              className="input input-sm mono"
-              value={generatedLink.url}
-              readOnly
-              style={{ flex: 1, fontSize: 11 }}
-              onClick={(e) => e.target.select()}
-            />
-            <button type="button" className="btn btn-sm" onClick={copyLink}>
-              {copyOk ? '✓ Copied' : '⎘ Copy'}
-            </button>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                className="input input-sm mono"
+                value={generatedLink.url}
+                readOnly
+                style={{ flex: 1, fontSize: 11 }}
+                onClick={(e) => e.target.select()}
+              />
+              <button type="button" className="btn btn-sm" onClick={copyLink}>
+                {copyOk ? '✓ Copied' : '⎘ Copy'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              {typeof navigator !== 'undefined' && navigator.share && (
+                <button type="button" className="btn btn-sm btn-primary" onClick={shareLink} title="Open device share sheet">
+                  ↗ Share…
+                </button>
+              )}
+              <button type="button" className="btn btn-sm" onClick={shareViaEmail} title="Share via email">
+                ✉ Email
+              </button>
+              <button type="button" className="btn btn-sm" onClick={shareViaWhatsApp} title="Share via WhatsApp">
+                💬 WhatsApp
+              </button>
+            </div>
           </div>
         )}
 
