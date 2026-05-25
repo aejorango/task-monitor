@@ -228,6 +228,46 @@ Under 200 words total. No emojis.`;
   return text.trim();
 }
 
+// Member analytics — given an aggregated demographics summary, produce a
+// candid assessment of the organisation's strengths, weaknesses, and
+// concrete suggestions for strengthening the team's composition.
+//
+// `summary` is a pre-aggregated object so we do NOT send raw PII (names,
+// emails, birthdates) to the model — only counts.
+export async function generateMemberInsights({ summary }) {
+  const system = `You are an organisational strategy advisor analysing a team's demographic and skill composition. You write candid, useful, non-flattering assessments that an executive can act on.
+
+Respond in Markdown with these sections in this order:
+
+## Snapshot
+2-3 sentences describing the team as it stands today.
+
+## Strengths
+3-5 bullets. Each bullet names a concrete strength (industry mix, professional depth, geographic reach, age balance, etc.) and a one-line "why this matters" for the organisation.
+
+## Gaps & risks
+3-5 bullets. Be specific — call out concentration risks (e.g. "70% from one industry"), missing competencies, geographic blind spots, single-points-of-failure, or talent-pipeline risks.
+
+## Recommendations
+4-6 bullets organised under two sub-headings:
+**Strengthen the core** — how to deepen existing capabilities.
+**Expand the edges** — what kinds of professions, industries, or regions to recruit from next, with the strategic reason.
+
+## Quick wins (next 90 days)
+2-4 bullets — concrete, low-cost moves the org can make immediately.
+
+Tone: direct, professional, evidence-based. No emojis. No celebratory framing. Under 600 words.`;
+
+  const summaryText = JSON.stringify(summary, null, 2);
+  const user = `Below is an aggregated, anonymised summary of the organisation's members.
+
+${summaryText}
+
+Provide your assessment. Be specific: cite numbers from the summary, name industries/professions/regions that appear, and recommend a recruiting / development path. If the dataset is small (< 5 members), say so up front and frame your advice as preliminary.`;
+  const text = await callClaude({ system, user, maxTokens: 1600 });
+  return text.trim();
+}
+
 // "Draft a status update from these activities"
 export async function draftStatusUpdate({ activities, audience = 'a teammate' }) {
   const lines = activities.map((a) => `- ${a.date} · ${a.taskTitle || ''}${a.comment ? `: ${a.comment}` : ''}`);

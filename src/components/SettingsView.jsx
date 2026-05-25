@@ -19,9 +19,11 @@ import {
   approveUser,
   rejectUser,
   setUserRole,
+  updateUserProfile,
   SUPERADMIN_EMAILS,
 } from '../services/firebase';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { COUNTRIES } from '../services/countries';
 import {
   getNotificationPermission,
   requestNotificationPermission,
@@ -213,6 +215,8 @@ export default function SettingsView() {
           Your data syncs across any device where you sign in with this Google account.
         </p>
       </section>
+
+      <ProfileSection userId={userId} profile={profile} />
 
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
 
@@ -692,6 +696,155 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Profile (your demographic info, used by Member analytics) ──────────────
+
+function ProfileSection({ userId, profile }) {
+  const [birthdate,  setBirthdate]  = useState(profile?.birthdate  || '');
+  const [country,    setCountry]    = useState(profile?.country    || '');
+  const [profession, setProfession] = useState(profile?.profession || '');
+  const [industry,   setIndustry]   = useState(profile?.industry   || '');
+  const [gender,     setGender]     = useState(profile?.gender     || '');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Keep local state in sync when the profile snapshot updates.
+  useEffect(() => {
+    setBirthdate(profile?.birthdate || '');
+    setCountry(profile?.country || '');
+    setProfession(profile?.profession || '');
+    setIndustry(profile?.industry || '');
+    setGender(profile?.gender || '');
+  }, [profile?.birthdate, profile?.country, profile?.profession, profile?.industry, profile?.gender]);
+
+  const computedAge = (() => {
+    if (!birthdate) return null;
+    const [y, m, d] = birthdate.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    const today = new Date();
+    let age = today.getFullYear() - y;
+    const mDiff = today.getMonth() + 1 - m;
+    if (mDiff < 0 || (mDiff === 0 && today.getDate() < d)) age--;
+    return age >= 0 && age < 130 ? age : null;
+  })();
+
+  const dirty =
+    birthdate  !== (profile?.birthdate  || '') ||
+    country    !== (profile?.country    || '') ||
+    profession !== (profile?.profession || '') ||
+    industry   !== (profile?.industry   || '') ||
+    gender     !== (profile?.gender     || '');
+
+  const handleSave = async () => {
+    setBusy(true);
+    setSaved(false);
+    try {
+      await updateUserProfile(userId, {
+        birthdate:  birthdate.trim()  || null,
+        country:    country.trim()    || null,
+        profession: profession.trim() || null,
+        industry:   industry.trim()   || null,
+        gender:     gender.trim()     || null,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      console.error(err);
+      alert('Could not save profile: ' + (err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">Your profile</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Optional. Used by the Member analytics dashboard to show age,
+        geographic, industry, and profession breakdowns for the whole
+        organisation. Only approved members can see your profile data.
+      </p>
+
+      <div className="field-row">
+        <div className="field">
+          <label className="label">Birthdate</label>
+          <input
+            type="date"
+            className="input"
+            value={birthdate}
+            onChange={(e) => setBirthdate(e.target.value)}
+          />
+          {computedAge !== null && (
+            <p className="muted small" style={{ marginTop: 4 }}>
+              You are <strong>{computedAge}</strong> years old.
+            </p>
+          )}
+        </div>
+        <div className="field">
+          <label className="label">Country</label>
+          <select
+            className="select"
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+          >
+            <option value="">— Select a country —</option>
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="field-row">
+        <div className="field">
+          <label className="label">Profession</label>
+          <input
+            className="input"
+            value={profession}
+            onChange={(e) => setProfession(e.target.value)}
+            placeholder="e.g. Software Engineer, Designer, Civil Engineer"
+          />
+        </div>
+        <div className="field">
+          <label className="label">Industry</label>
+          <input
+            className="input"
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value)}
+            placeholder="e.g. Technology, Construction, Healthcare"
+          />
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="label">Gender (optional)</label>
+        <select
+          className="select"
+          value={gender}
+          onChange={(e) => setGender(e.target.value)}
+          style={{ maxWidth: 280 }}
+        >
+          <option value="">— Prefer not to say —</option>
+          <option value="female">Female</option>
+          <option value="male">Male</option>
+          <option value="non-binary">Non-binary</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={handleSave}
+          disabled={busy || !dirty}
+        >
+          {busy ? 'Saving…' : 'Save profile'}
+        </button>
+        {saved && <span className="muted small" style={{ color: 'var(--c-success)' }}>✓ Saved</span>}
+      </div>
+    </section>
   );
 }
 
