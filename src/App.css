@@ -2685,10 +2685,21 @@ a:hover { text-decoration: underline; }
 }
 .dash-kpi:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .dash-kpi-icon {
-  font-size: 18px;
-  margin-bottom: 6px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text-3);
+  margin-bottom: 8px;
+  transition: background 0.14s, color 0.14s;
 }
+.dash-kpi.kpi-tile-success .dash-kpi-icon { background: var(--c-success-bg); color: var(--c-success); }
+.dash-kpi.kpi-tile-danger  .dash-kpi-icon { background: var(--c-danger-bg);  color: var(--c-danger);  }
+.dash-kpi.kpi-tile-warn    .dash-kpi-icon { background: var(--c-warn-bg);    color: var(--c-warn);    }
+.dash-kpi.kpi-tile-info    .dash-kpi-icon { background: var(--c-info-bg);    color: var(--c-info);    }
 .dash-kpi-label {
   font-size: 11px;
   font-weight: 600;

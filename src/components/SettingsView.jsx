@@ -133,7 +133,7 @@ export default function SettingsView() {
     const options = {
       body: 'If you see this banner, notifications are working.',
       tag: `test-${Date.now()}`,        // unique tag avoids being coalesced
-      icon: `${import.meta.env.BASE_URL}favicon.svg`,
+      icon: `${import.meta.env.BASE_URL}blueinnov_logo.webp`,
       requireInteraction: false,
       silent: false,
     };

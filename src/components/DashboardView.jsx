@@ -16,6 +16,7 @@ import TaskEditor from './TaskEditor';
 import TaskForm from './TaskForm';
 import WorkspaceEditor from './WorkspaceEditor';
 import { WorkspaceIcon } from './WorkspaceSwitcher';
+import Icon from './Icon';
 
 function isoOf(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -280,11 +281,11 @@ export default function DashboardView({ projectFilter, navigate }) {
 
       {/* KPI tiles */}
       <div className="dash-kpi-grid">
-        <KpiTile label="Hours today"    value={hoursToday.toFixed(1)} suffix="h" icon="⏱" />
-        <KpiTile label="Due today"      value={tasksDueToday.length} accent={tasksDueToday.length > 0 ? 'info' : 'muted'}   icon="📋" />
-        <KpiTile label="Overdue"        value={overdue.length}       accent={overdue.length > 0 ? 'danger' : 'muted'}        icon="🔴" />
-        <KpiTile label="Done this week" value={doneThisWeek.length}  accent="success"                                        icon="✅" />
-        <KpiTile label="In progress"    value={inProgress.length}    accent={inProgress.length > 0 ? 'info' : 'muted'}       icon="▶" />
+        <KpiTile label="Hours today"    value={hoursToday.toFixed(1)} suffix="h" icon={<Icon name="clock" />} />
+        <KpiTile label="Due today"      value={tasksDueToday.length} accent={tasksDueToday.length > 0 ? 'info' : 'muted'}   icon={<Icon name="calendar" />} />
+        <KpiTile label="Overdue"        value={overdue.length}       accent={overdue.length > 0 ? 'danger' : 'muted'}        icon={<Icon name="alert" />} />
+        <KpiTile label="Done this week" value={doneThisWeek.length}  accent="success"                                        icon={<Icon name="check" />} />
+        <KpiTile label="In progress"    value={inProgress.length}    accent={inProgress.length > 0 ? 'info' : 'muted'}       icon={<Icon name="play" />} />
       </div>
 
       <div className="dash-row dash-row-main">
@@ -297,8 +298,10 @@ export default function DashboardView({ projectFilter, navigate }) {
                 className="btn btn-sm btn-primary"
                 onClick={runAiSuggest}
                 disabled={aiBusy}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
-                {aiBusy ? 'Thinking…' : '✨ Suggest with AI'}
+                <Icon name="sparkles" size={14} />
+                {aiBusy ? 'Thinking…' : 'Suggest with AI'}
               </button>
             )}
           </div>
@@ -399,7 +402,10 @@ export default function DashboardView({ projectFilter, navigate }) {
             <h2 className="dash-card-title">Bottlenecks (last 7 days)</h2>
           </div>
           {recentBottlenecks.length === 0 ? (
-            <p className="muted small">No blockers recorded. ✨</p>
+            <p className="muted small" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="check" size={14} style={{ color: 'var(--c-success)' }} />
+              No blockers recorded.
+            </p>
           ) : (
             <ul className="dash-feed dash-bottleneck-list">
               {recentBottlenecks.map((a) => {
@@ -412,8 +418,9 @@ export default function DashboardView({ projectFilter, navigate }) {
                         <strong>{a.taskTitle || '(task)'}</strong>
                         <span className="muted small mono">{a.date}</span>
                       </div>
-                      <p className="dash-feed-body" style={{ color: 'var(--c-warn)' }}>
-                        ⚠ {a.bottleneckRemarks}
+                      <p className="dash-feed-body" style={{ color: 'var(--c-warn)', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <Icon name="warning" size={14} style={{ marginTop: 2 }} />
+                        <span>{a.bottleneckRemarks}</span>
                       </p>
                     </div>
                   </li>
@@ -452,17 +459,9 @@ function Stat({ label, value }) {
   );
 }
 
-const KPI_ICONS = {
-  success: '✅',
-  danger:  '⚠️',
-  warn:    '🕐',
-  info:    '▶',
-  muted:   '○',
-};
-
 function KpiTile({ label, value, suffix, accent, icon }) {
   return (
-    <div className="dash-kpi">
+    <div className={`dash-kpi ${accent ? `kpi-tile-${accent}` : ''}`}>
       {icon && <div className="dash-kpi-icon">{icon}</div>}
       <div className="dash-kpi-label">{label}</div>
       <div className={`dash-kpi-value ${accent ? `kpi-${accent}` : ''}`}>
