@@ -1,20 +1,10 @@
-// src/components/LandingView.jsx — login/signup landing page for new users.
+// src/components/LandingView.jsx — login page. Anonymous/guest access has
+// been removed; Google sign-in is required.
 
 import { useState } from 'react';
-import { signInWithGoogle, switchToGoogle } from '../services/firebase';
+import { signInWithGoogle } from '../services/firebase';
 
-const LANDING_DISMISSED_KEY = 'tm.landingDismissed';
-
-export function isLandingDismissed() {
-  try { return localStorage.getItem(LANDING_DISMISSED_KEY) === '1'; }
-  catch { return false; }
-}
-
-export function dismissLanding() {
-  try { localStorage.setItem(LANDING_DISMISSED_KEY, '1'); } catch { /* ignore */ }
-}
-
-export default function LandingView({ onDone }) {
+export default function LandingView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -22,30 +12,12 @@ export default function LandingView({ onDone }) {
     setBusy(true); setError(null);
     const res = await signInWithGoogle();
     setBusy(false);
-    if (res.ok) {
-      dismissLanding();
-      onDone?.();
-      return;
+    if (!res.ok && res.code !== 'popup-closed') {
+      setError({ code: res.code, message: res.message });
     }
-    if (res.code === 'popup-closed') return; // user cancelled, no error UI
-    setError({ code: res.code, message: res.message });
-  };
-
-  const handleSwitch = async () => {
-    setBusy(true); setError(null);
-    const res = await switchToGoogle();
-    setBusy(false);
-    if (res.ok) {
-      dismissLanding();
-      onDone?.();
-      return;
-    }
-    setError({ code: res.code, message: res.message || 'Sign-in failed.' });
-  };
-
-  const handleGuest = () => {
-    dismissLanding();
-    onDone?.();
+    // On success, App.jsx will re-render with the user signed in. The auth
+    // gate routes to PendingApprovalView or the full app depending on the
+    // user's profile status — nothing else to do here.
   };
 
   const logo = `${import.meta.env.BASE_URL}blueinnov_logo.webp`;
@@ -64,10 +36,10 @@ export default function LandingView({ onDone }) {
           </div>
         </div>
 
-        <h2 className="landing-h2">Welcome</h2>
+        <h2 className="landing-h2">Sign in to continue</h2>
         <p className="landing-sub">
-          Plan projects, track activity, and collaborate with your team —
-          everything in one workspace.
+          Access is invite-only. Sign in with Google and a Blue Innovation
+          administrator will review your request.
         </p>
 
         <ul className="landing-feat">
@@ -83,21 +55,13 @@ export default function LandingView({ onDone }) {
             disabled={busy}
           >
             <GoogleIcon />
-            <span>{busy ? 'Signing in…' : 'Continue with Google'}</span>
-          </button>
-
-          <button
-            className="btn btn-lg landing-guest"
-            onClick={handleGuest}
-            disabled={busy}
-          >
-            Continue as guest
+            <span>{busy ? 'Signing in…' : 'Sign in with Google'}</span>
           </button>
         </div>
 
         <p className="landing-fineprint">
-          Signing in with Google syncs your data across devices. Guest mode keeps
-          everything on this device — you can upgrade to Google any time.
+          New accounts are placed in a pending state until an administrator
+          approves them. You will be notified once your access is granted.
         </p>
 
         {error && (
@@ -113,13 +77,6 @@ export default function LandingView({ onDone }) {
               >✕</button>
             </div>
             <p className="auth-error-msg">{error.message}</p>
-            {error.code === 'account-already-exists' && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button className="btn btn-primary" onClick={handleSwitch} disabled={busy}>
-                  {busy ? 'Switching…' : 'Switch to this account'}
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>

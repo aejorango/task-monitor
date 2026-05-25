@@ -1,13 +1,14 @@
 // src/App.jsx — root shell + view router with code-split non-Board views.
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { useAuth, useProjects } from './hooks/useTasks';
+import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import AppShell, { useRoute } from './components/AppShell';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
-import LandingView, { isLandingDismissed } from './components/LandingView';
-import { auth } from './services/firebase';
+import LandingView from './components/LandingView';
+import PendingApprovalView from './components/PendingApprovalView';
 import './App.css';
 
 const TableView         = lazy(() => import('./components/TableView'));
@@ -29,28 +30,64 @@ function ViewSpinner() {
   );
 }
 
+function FullPageSpinner({ label = 'Loading…' }) {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'column',
+      gap: 12,
+      color: 'var(--c-text-3)',
+    }}>
+      <div className="spinner" />
+      <span className="small">{label}</span>
+    </div>
+  );
+}
+
 export default function App() {
   const { userId, ready } = useAuth();
-  const { projects } = useProjects();
+  const { profile, loading: profileLoading } = useUserProfile(userId);
   const { route, navigate } = useRoute();
-  useOverdueScan();
 
-  // Landing-page gate. Show the welcome screen on first visit (when the user
-  // is anonymous and hasn't dismissed it). Invite-claim links bypass this so
-  // shared invites still land directly on the claim flow. A signed-in Google
-  // user is never anonymous, so the gate naturally falls through for them.
-  const [landingDismissed, setLandingDismissed] = useState(isLandingDismissed);
-  const isAnonymous = !!auth.currentUser?.isAnonymous;
-  const showLanding =
-    ready &&
-    userId &&
-    isAnonymous &&
-    !landingDismissed &&
-    route.view !== 'invite';
+  // Auth gate:
+  //   1. Auth not ready yet            → spinner
+  //   2. No user                       → LandingView (Google sign-in only)
+  //   3. User but profile loading      → spinner
+  //   4. Status pending                → PendingApprovalView
+  //   5. Status rejected               → PendingApprovalView (rejected state)
+  //   6. Status approved               → AppShell
 
-  if (showLanding) {
-    return <LandingView onDone={() => setLandingDismissed(true)} />;
+  if (!ready) {
+    return <FullPageSpinner label="Signing in…" />;
   }
+
+  if (!userId) {
+    return <LandingView />;
+  }
+
+  if (profileLoading) {
+    return <FullPageSpinner label="Loading your profile…" />;
+  }
+
+  // Profile is null when the doc hasn't been created yet (the sign-in flow
+  // creates it, but the listener can race here). Treat as pending until the
+  // profile arrives so we never accidentally let an unprofiled user in.
+  if (!profile || profile.status === 'pending') {
+    return <PendingApprovalView user={{ uid: userId }} profile={profile} />;
+  }
+  if (profile.status === 'rejected') {
+    return <PendingApprovalView user={{ uid: userId }} profile={profile} />;
+  }
+
+  return <ApprovedApp userId={userId} ready={ready} route={route} navigate={navigate} profile={profile} />;
+}
+
+function ApprovedApp({ userId, ready, route, navigate, profile }) {
+  const { projects } = useProjects();
+  useOverdueScan();
 
   return (
     <AppShell
@@ -60,6 +97,7 @@ export default function App() {
       route={route}
       navigate={navigate}
       timerWidget={<TimerWidget />}
+      userProfile={profile}
     >
       <Suspense fallback={<ViewSpinner />}>
         {route.view === 'invite'    && <InviteClaimView inviteId={route.projectFilter} navigate={navigate} />}

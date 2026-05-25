@@ -14,10 +14,14 @@ import {
 } from '../services/firebase';
 import {
   auth,
-  signInWithGoogle,
-  switchToGoogle,
   signOutUser,
+  subscribeToAllUsers,
+  approveUser,
+  rejectUser,
+  setUserRole,
+  SUPERADMIN_EMAILS,
 } from '../services/firebase';
+import { useUserProfile } from '../hooks/useUserProfile';
 import {
   getNotificationPermission,
   requestNotificationPermission,
@@ -35,16 +39,15 @@ export default function SettingsView() {
   const { tasks } = useTasks();
   const { activities } = useAllActivities();
   const { userId } = useAuth();
+  const { profile } = useUserProfile(userId);
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
-  const [signInError, setSignInError] = useState(null);  // { code, message } or null
-  const [signingIn, setSigningIn] = useState(false);
   const [anthroKey, setAnthroKey]     = useState(getAnthropicKey());
   const [anthroModel, setAnthroModel] = useState(getAnthropicModel());
   const [aiKeyVisible, setAiKeyVisible] = useState(false);
   const currentUser = auth.currentUser;
-  const isAnonymous = !!currentUser?.isAnonymous;
-  const displayName = currentUser?.displayName || currentUser?.email || (isAnonymous ? 'Anonymous' : 'Signed out');
+  const displayName = currentUser?.displayName || currentUser?.email || 'Signed out';
   const photoURL = currentUser?.photoURL;
+  const isSuperadmin = profile?.role === 'superadmin' && profile?.status === 'approved';
 
   // Keep permission state fresh
   useEffect(() => {
@@ -52,32 +55,8 @@ export default function SettingsView() {
     return () => clearInterval(id);
   }, []);
 
-  const handleSignIn = async () => {
-    setSignInError(null);
-    setSigningIn(true);
-    const result = await signInWithGoogle();
-    setSigningIn(false);
-    if (!result.ok) {
-      // Don't alert for the most common, harmless case (user closed popup)
-      if (result.code !== 'popup-closed') {
-        setSignInError({ code: result.code, message: result.message });
-      }
-    }
-  };
-
-  const handleSwitchAccount = async () => {
-    setSignInError(null);
-    setSigningIn(true);
-    const result = await switchToGoogle();
-    setSigningIn(false);
-    if (!result.ok) {
-      setSignInError({ code: result.code, message: result.message || 'Sign-in failed.' });
-    }
-  };
-
   const handleSignOut = async () => {
-    if (!confirm('Sign out? You’ll be put back in anonymous mode (new device session).')) return;
-    setSignInError(null);
+    if (!confirm('Sign out of Task Monitor?')) return;
     await signOutUser();
   };
 
@@ -201,7 +180,7 @@ export default function SettingsView() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Per-device preferences. Stored in local storage (anonymous auth is also per-device).</p>
+          <p className="page-subtitle">Per-device preferences. Stored in local storage.</p>
         </div>
       </div>
 
@@ -218,60 +197,24 @@ export default function SettingsView() {
             </div>
           )}
           <div className="account-info">
-            <div className="account-name">{displayName}</div>
-            <div className="muted small">
-              {isAnonymous
-                ? 'Anonymous session. Data lives on this device only.'
-                : currentUser?.email || 'Signed in.'}
+            <div className="account-name">
+              {displayName}
+              {profile?.role === 'superadmin' && (
+                <span className="badge badge-soft-info" style={{ marginLeft: 8 }}>superadmin</span>
+              )}
             </div>
+            <div className="muted small">{currentUser?.email || 'Signed in.'}</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            {isAnonymous ? (
-              <button className="btn btn-primary" onClick={handleSignIn} disabled={signingIn}>
-                {signingIn ? 'Signing in…' : 'Sign in with Google'}
-              </button>
-            ) : (
-              <button className="btn" onClick={handleSignOut}>Sign out</button>
-            )}
+            <button className="btn" onClick={handleSignOut}>Sign out</button>
           </div>
         </div>
         <p className="muted small" style={{ marginTop: 8 }}>
-          {isAnonymous
-            ? 'Signing in with Google links this anonymous session to your Google account, so the same data appears on all your devices.'
-            : 'Your data syncs across any device where you sign in with this Google account.'}
+          Your data syncs across any device where you sign in with this Google account.
         </p>
-
-        {signInError && (
-          <div className="auth-error">
-            <div className="auth-error-head">
-              <span className="badge badge-soft-danger">Sign-in error</span>
-              <span className="mono small">{signInError.code}</span>
-              <button
-                type="button"
-                className="link-danger"
-                onClick={() => setSignInError(null)}
-                style={{ marginLeft: 'auto' }}
-              >✕</button>
-            </div>
-            <p className="auth-error-msg">{signInError.message}</p>
-            {signInError.code === 'account-already-exists' && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button className="btn btn-primary" onClick={handleSwitchAccount} disabled={signingIn}>
-                  {signingIn ? 'Switching…' : 'Switch to this account'}
-                </button>
-                <span className="muted small" style={{ alignSelf: 'center' }}>
-                  Tip: export your anonymous data first (button below) if you want a backup.
-                </span>
-              </div>
-            )}
-            {signInError.code === 'popup-blocked' && (
-              <p className="muted small" style={{ marginTop: 6 }}>
-                In Chrome: click the popup-blocked icon in the URL bar → Always allow popups from this site.
-              </p>
-            )}
-          </div>
-        )}
       </section>
+
+      {isSuperadmin && <UserManagementSection currentUid={userId} />}
 
       <section className="review-section">
         <h2 className="review-h2">AI (Anthropic API)</h2>
@@ -414,9 +357,8 @@ export default function SettingsView() {
       <section className="review-section">
         <h2 className="review-h2">About this device</h2>
         <p className="muted small">
-          Your data is stored in Firebase Firestore (project <span className="mono">task-monitor-cbaf2</span>),
-          isolated to your anonymous session. Different browsers, devices, or clearing site data create separate identities.
-          To share data across devices, upgrade to Google sign-in.
+          Your data is stored in Firebase Firestore (project <span className="mono">task-monitor-cbaf2</span>)
+          and synced to your Google account, so it appears on every device you sign in from.
         </p>
       </section>
     </>
@@ -750,5 +692,168 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── User Management (superadmin only) ──────────────────────────────────────
+
+function UserManagementSection({ currentUid }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('pending');  // 'pending' | 'approved' | 'rejected' | 'all'
+  const [busyUid, setBusyUid] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const unsub = subscribeToAllUsers((list) => {
+      setUsers(list);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const filtered = users.filter((u) => filter === 'all' ? true : u.status === filter);
+  const counts = {
+    pending:  users.filter((u) => u.status === 'pending').length,
+    approved: users.filter((u) => u.status === 'approved').length,
+    rejected: users.filter((u) => u.status === 'rejected').length,
+  };
+
+  const handleApprove = async (uid) => {
+    setBusyUid(uid);
+    try { await approveUser(uid, currentUid); }
+    catch (err) { alert('Failed to approve: ' + (err.message || err)); }
+    finally { setBusyUid(null); }
+  };
+  const handleReject = async (uid) => {
+    if (!confirm('Reject this user? They will be blocked from accessing the app.')) return;
+    setBusyUid(uid);
+    try { await rejectUser(uid, currentUid); }
+    catch (err) { alert('Failed to reject: ' + (err.message || err)); }
+    finally { setBusyUid(null); }
+  };
+  const handleToggleRole = async (uid, currentRole) => {
+    const nextRole = currentRole === 'superadmin' ? 'user' : 'superadmin';
+    if (!confirm(`Change role to "${nextRole}"?`)) return;
+    setBusyUid(uid);
+    try { await setUserRole(uid, nextRole); }
+    catch (err) { alert('Failed to change role: ' + (err.message || err)); }
+    finally { setBusyUid(null); }
+  };
+
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">User Management</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Approve or reject sign-in requests. Superadmin emails
+        ({SUPERADMIN_EMAILS.join(', ')}) are auto-approved on first sign-in.
+      </p>
+
+      <div className="field" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {[
+          { id: 'pending',  label: `Pending (${counts.pending})` },
+          { id: 'approved', label: `Approved (${counts.approved})` },
+          { id: 'rejected', label: `Rejected (${counts.rejected})` },
+          { id: 'all',      label: `All (${users.length})` },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`btn btn-sm ${filter === tab.id ? 'btn-primary' : ''}`}
+            onClick={() => setFilter(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p className="muted small">Loading users…</p>
+      ) : filtered.length === 0 ? (
+        <p className="muted small">
+          {filter === 'pending' ? 'No pending requests.' : `No ${filter} users.`}
+        </p>
+      ) : (
+        <div className="user-mgmt-list">
+          {filtered.map((u) => (
+            <div key={u.id} className="user-mgmt-row">
+              {u.photoURL ? (
+                <img src={u.photoURL} alt="" className="um-avatar" />
+              ) : (
+                <div className="um-avatar fallback">
+                  {(u.displayName || u.email || '?')[0].toUpperCase()}
+                </div>
+              )}
+              <div className="um-info">
+                <div className="um-name">
+                  {u.displayName || '(no name)'}
+                  {u.role === 'superadmin' && (
+                    <span className="badge badge-soft-info" style={{ marginLeft: 6 }}>superadmin</span>
+                  )}
+                </div>
+                <div className="um-email">{u.email}</div>
+              </div>
+              <span
+                className={`badge badge-soft-${
+                  u.status === 'approved' ? 'success'
+                    : u.status === 'rejected' ? 'danger'
+                    : 'warn'
+                }`}
+              >
+                {u.status}
+              </span>
+              <div className="um-actions">
+                {u.status === 'pending' && (
+                  <>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => handleApprove(u.id)}
+                      disabled={busyUid === u.id}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="btn btn-sm btn-ghost link-danger"
+                      onClick={() => handleReject(u.id)}
+                      disabled={busyUid === u.id}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+                {u.status === 'approved' && u.id !== currentUid && (
+                  <>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => handleToggleRole(u.id, u.role)}
+                      disabled={busyUid === u.id}
+                      title={u.role === 'superadmin' ? 'Demote to user' : 'Promote to superadmin'}
+                    >
+                      {u.role === 'superadmin' ? '↓ Demote' : '↑ Make admin'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-ghost link-danger"
+                      onClick={() => handleReject(u.id)}
+                      disabled={busyUid === u.id}
+                    >
+                      Revoke
+                    </button>
+                  </>
+                )}
+                {u.status === 'rejected' && (
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleApprove(u.id)}
+                    disabled={busyUid === u.id}
+                  >
+                    Restore
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

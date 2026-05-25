@@ -4,9 +4,7 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
-  signInAnonymously,
   signInWithPopup,
-  linkWithPopup,
   signOut,
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -21,6 +19,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -69,52 +68,40 @@ export const db = _db;
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Bootstrap auth: if no user is signed in after Firebase initializes, kick off
-// anonymous auth. If a real user is signed in (Google), don't touch it.
-let _authBootstrapped = false;
-onAuthStateChanged(auth, (user) => {
-  if (_authBootstrapped) return;
-  _authBootstrapped = true;
-  if (!user) {
-    signInAnonymously(auth).catch((err) => {
-      console.error('Anonymous sign-in failed:', err);
-    });
-  }
-});
+// Anonymous auth has been removed. All users must sign in with Google and
+// be approved by a superadmin before they can access the app. The auth state
+// is now "signed-out" until the user clicks the Google sign-in button on the
+// landing screen.
 
 export function onAuthChange(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
-// Google sign-in. If the current user is anonymous, link the Google credential
-// onto the anonymous account so existing data carries over.
-// Returns { ok: true, user, mode } on success.
-// Returns { ok: false, code, message } for known errors so callers can render
-// actionable UI (e.g. "this account is already linked — switch to it?").
+// Hardcoded superadmin emails. Users signing in with these emails are
+// auto-approved and given the 'superadmin' role on first sign-in. Anyone
+// else lands in 'pending' state until a superadmin approves them.
+export const SUPERADMIN_EMAILS = [
+  'blueinnovation.ph@gmail.com',
+  'aejorango888@gmail.com',
+];
+
+function isSuperadminEmail(email) {
+  if (!email) return false;
+  const e = email.toLowerCase();
+  return SUPERADMIN_EMAILS.some((s) => s.toLowerCase() === e);
+}
+
+// Google sign-in. Always opens a Google popup — anonymous accounts no longer
+// exist so there is nothing to link onto. After sign-in succeeds, ensures
+// the user has a profile document in `users/{uid}`.
+// Returns { ok: true, user } on success or { ok: false, code, message } on error.
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
-  const current = auth.currentUser;
   try {
-    if (current?.isAnonymous) {
-      const result = await linkWithPopup(current, provider);
-      return { ok: true, user: result.user, mode: 'linked' };
-    }
     const result = await signInWithPopup(auth, provider);
-    return { ok: true, user: result.user, mode: 'signed-in' };
+    await ensureUserProfile(result.user);
+    return { ok: true, user: result.user };
   } catch (err) {
-    // 'credential-already-in-use' / 'email-already-in-use': the Google account
-    // is already attached to a different Firebase user (typically the same
-    // user signing in from a different device). Surface this to the caller —
-    // calling signInWithPopup again here would be blocked because the user
-    // gesture (the click) has already been consumed by the first popup.
-    if (err?.code === 'auth/credential-already-in-use' ||
-        err?.code === 'auth/email-already-in-use') {
-      return {
-        ok: false,
-        code: 'account-already-exists',
-        message: 'This Google account is already registered elsewhere. Click "Switch to this account" to sign out anonymous and switch (anonymous data on this device will no longer be visible — export it first if you need it).',
-      };
-    }
     if (err?.code === 'auth/popup-closed-by-user') {
       return { ok: false, code: 'popup-closed', message: 'Sign-in popup was closed.' };
     }
@@ -136,30 +123,95 @@ export async function signInWithGoogle() {
   }
 }
 
-// Used after signInWithGoogle returned account-already-exists. Must be invoked
-// from a fresh user gesture (e.g. a button click). Signs out anonymous, then
-// opens a popup to sign in to the existing account.
-export async function switchToGoogle() {
-  await signOut(auth);
-  const provider = new GoogleAuthProvider();
-  try {
-    const result = await signInWithPopup(auth, provider);
-    return { ok: true, user: result.user, mode: 'switched' };
-  } catch (err) {
-    // Sign out already happened — if the popup is blocked or closed here, the
-    // app will end up in a signed-out state. The auth bootstrap below will
-    // re-create an anonymous user shortly via onAuthStateChanged.
-    return { ok: false, code: err?.code || 'unknown', message: err?.message || 'Sign-in failed.' };
-  }
-}
-
 export async function signOutUser() {
   await signOut(auth);
-  // After sign-out, the onAuthStateChanged listener will fire with null and
-  // _authBootstrapped is still true, so manually kick off anonymous again so
-  // the app stays usable.
-  try { await signInAnonymously(auth); }
-  catch (err) { console.error('Re-anonymous sign-in after sign-out failed:', err); }
+}
+
+// ─── User profile / approval ────────────────────────────────────────────────
+// Each authenticated user has a doc at `users/{uid}` capturing their approval
+// status. The doc is created on first sign-in. Superadmin emails are
+// auto-approved. Everyone else lands in 'pending' until a superadmin clicks
+// Approve in Settings → User Management.
+
+const usersRef = collection(db, 'users');
+
+async function ensureUserProfile(user) {
+  if (!user?.uid) return;
+  const ref = doc(usersRef, user.uid);
+  const snap = await getDoc(ref);
+  const superadmin = isSuperadminEmail(user.email);
+
+  if (!snap.exists()) {
+    // First sign-in for this UID. Create the profile.
+    await setDoc(ref, {
+      email: user.email || '',
+      displayName: user.displayName || '',
+      photoURL: user.photoURL || '',
+      status: superadmin ? 'approved' : 'pending',
+      role:   superadmin ? 'superadmin' : 'user',
+      createdAt: serverTimestamp(),
+      approvedAt: superadmin ? serverTimestamp() : null,
+      approvedBy: superadmin ? 'system' : null,
+    });
+    return;
+  }
+
+  // Existing profile — keep display fields fresh and ensure superadmin
+  // emails are always promoted (handles the case where the superadmin list
+  // changes after a user first signs in).
+  const data = snap.data();
+  const patch = {
+    email: user.email || data.email,
+    displayName: user.displayName || data.displayName,
+    photoURL: user.photoURL || data.photoURL,
+  };
+  if (superadmin && (data.role !== 'superadmin' || data.status !== 'approved')) {
+    patch.role = 'superadmin';
+    patch.status = 'approved';
+    patch.approvedAt = serverTimestamp();
+    patch.approvedBy = 'system';
+  }
+  await updateDoc(ref, patch);
+}
+
+export function subscribeToUserProfile(uid, callback) {
+  if (!uid) {
+    callback(null);
+    return () => {};
+  }
+  return onSnapshot(doc(usersRef, uid), (snap) => {
+    callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+  });
+}
+
+export function subscribeToAllUsers(callback) {
+  // Used by superadmin User Management. Firestore rules restrict this query
+  // to approved superadmins only.
+  return onSnapshot(usersRef, (s) => {
+    const list = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    callback(list);
+  });
+}
+
+export async function approveUser(targetUid, approverUid) {
+  await updateDoc(doc(usersRef, targetUid), {
+    status: 'approved',
+    approvedAt: serverTimestamp(),
+    approvedBy: approverUid,
+  });
+}
+
+export async function rejectUser(targetUid, approverUid) {
+  await updateDoc(doc(usersRef, targetUid), {
+    status: 'rejected',
+    approvedAt: serverTimestamp(),
+    approvedBy: approverUid,
+  });
+}
+
+export async function setUserRole(targetUid, role) {
+  // role must be 'user' or 'superadmin'
+  await updateDoc(doc(usersRef, targetUid), { role });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

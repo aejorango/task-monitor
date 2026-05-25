@@ -21,6 +21,20 @@ service cloud.firestore {
           && request.auth.uid == request.resource.data.userId;
     }
 
+    // ─── User profile / approval helpers ────────────────────────────────────
+    // Hardcoded superadmin emails. Mirrored in src/services/firebase.js so
+    // both client and rules agree on who is auto-approved.
+    function isSuperadminEmail(email) {
+      return email == 'blueinnovation.ph@gmail.com'
+          || email == 'aejorango888@gmail.com';
+    }
+    function isApprovedSuperadmin() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin'
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
     // ─── Workspace helpers ──────────────────────────────────────────────────
     function isWorkspaceMember(workspaceId) {
       return request.auth != null
@@ -199,6 +213,48 @@ service cloud.firestore {
       allow read:   if isOwner(resource);
       allow create: if isCreatingOwn();
       allow update, delete: if isOwner(resource);
+    }
+
+    // ─── Users (approval-gated access control) ──────────────────────────────
+    // Each authenticated user has a doc at users/{uid} carrying their status
+    // (pending | approved | rejected) and role (user | superadmin).
+    match /users/{userId} {
+      // Users can always read their own profile (so the auth gate can fetch
+      // status on sign-in). Approved superadmins can read all profiles to
+      // power the User Management UI.
+      allow read: if request.auth != null
+                  && (request.auth.uid == userId || isApprovedSuperadmin());
+
+      // First-time profile creation on sign-in. The user creates their own
+      // doc; status must start as 'pending' (role 'user') unless the email
+      // matches the hardcoded superadmin list — in which case they may
+      // self-create as approved superadmin.
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.email == request.auth.token.email
+                    && (
+                      (request.resource.data.status == 'pending'
+                        && request.resource.data.role == 'user')
+                      ||
+                      (request.resource.data.status == 'approved'
+                        && request.resource.data.role == 'superadmin'
+                        && isSuperadminEmail(request.auth.token.email))
+                    );
+
+      // Users can update their own profile (display name, photo) but cannot
+      // change their own status or role. Superadmins can update any profile.
+      allow update: if request.auth != null
+                    && (
+                      isApprovedSuperadmin()
+                      ||
+                      (request.auth.uid == userId
+                        && request.resource.data.status == resource.data.status
+                        && request.resource.data.role   == resource.data.role
+                        && request.resource.data.email  == resource.data.email)
+                    );
+
+      // No deletes — historical records are kept.
+      allow delete: if false;
     }
 
     // Default deny

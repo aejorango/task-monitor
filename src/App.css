@@ -4004,3 +4004,141 @@ a:hover { text-decoration: underline; }
     background: var(--c-surface);
   }
 }
+
+/* ── Pending approval view ── */
+.pending-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin-bottom: 18px;
+}
+.pending-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: var(--c-surface);
+}
+.pending-avatar.fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--c-accent), #7c3aed);
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+}
+.pending-account-info { min-width: 0; }
+.pending-account-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--c-warn-bg);
+  color: #92400e;
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+.pending-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--c-warn);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+  animation: pending-pulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pending-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18); }
+  50%      { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.05); }
+}
+
+.pending-admin-list {
+  background: var(--c-surface-2);
+  border: 1px dashed var(--c-border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+.pending-admin-list ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--c-text-2);
+}
+.pending-admin-list li { margin: 2px 0; }
+
+/* ── User Management section (Settings) ── */
+.user-mgmt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.user-mgmt-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+.user-mgmt-row .um-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+.user-mgmt-row .um-avatar.fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--c-accent), #7c3aed);
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+}
+.user-mgmt-row .um-info { min-width: 0; }
+.user-mgmt-row .um-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-mgmt-row .um-email {
+  font-size: 11.5px;
+  color: var(--c-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-mgmt-row .um-actions {
+  display: flex;
+  gap: 6px;
+}
+@media (max-width: 600px) {
+  .user-mgmt-row {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+  .user-mgmt-row .um-status,
+  .user-mgmt-row .um-actions {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}

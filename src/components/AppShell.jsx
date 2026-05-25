@@ -58,7 +58,7 @@ export function useRoute() {
   return { route, navigate };
 }
 
-export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget }) {
+export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget, userProfile }) {
   const online = useOnline();
   const current = VIEWS.find((v) => v.id === route.view) || VIEWS[0];
   const activeWs = useActiveWorkspaceId();
@@ -133,7 +133,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         </nav>
 
         <div className="sidebar-footer">
-          <SidebarUserBlock userId={userId} ready={ready} navigate={navigateAndClose} />
+          <SidebarUserBlock userId={userId} ready={ready} navigate={navigateAndClose} userProfile={userProfile} />
         </div>
       </aside>
 
@@ -269,7 +269,7 @@ function SidebarSavedViews({ route, navigate }) {
 
 // ─── Sidebar user block ───────────────────────────────────
 
-function SidebarUserBlock({ userId, ready, navigate }) {
+function SidebarUserBlock({ userId, ready, navigate, userProfile }) {
   const [user, setUser] = useState(auth.currentUser);
 
   useEffect(() => {
@@ -283,19 +283,8 @@ function SidebarUserBlock({ userId, ready, navigate }) {
   if (!ready) return <span className="muted-2">signing in…</span>;
   if (ready && !userId) return <span className="session-pill warn">auth offline</span>;
 
-  const isAnonymous = user?.isAnonymous;
-  if (isAnonymous) {
-    return (
-      <button
-        className="sidebar-user-anon"
-        onClick={() => navigate({ view: 'settings' })}
-        title="Anonymous session — click to sign in with Google"
-      >
-        <span>Session</span>
-        <span className="session-pill">{userId.slice(0, 6)}</span>
-      </button>
-    );
-  }
+  const isSuperadmin = userProfile?.role === 'superadmin';
+
   return (
     <button
       className="sidebar-user-block"
@@ -307,7 +296,7 @@ function SidebarUserBlock({ userId, ready, navigate }) {
         : <div className="sidebar-user-avatar fallback">{(user?.displayName || user?.email || '?')[0].toUpperCase()}</div>}
       <div className="sidebar-user-text">
         <div className="sidebar-user-name">{user?.displayName || user?.email}</div>
-        <div className="sidebar-user-sub">Signed in</div>
+        <div className="sidebar-user-sub">{isSuperadmin ? 'Superadmin' : 'Signed in'}</div>
       </div>
     </button>
   );
