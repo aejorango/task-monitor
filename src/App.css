@@ -3094,54 +3094,6 @@ a:hover { text-decoration: underline; }
   .hbar-value { font-size: 10.5px; right: 4px; }
 }
 
-/* Growth combo chart */
-.growth-chart-wrap {
-  margin-top: 8px;
-}
-.growth-chart-wrap svg text {
-  font-family: inherit;
-}
-
-/* Profession × Continent cross-tab heatmap */
-.crosstab-wrap {
-  overflow-x: auto;
-  margin-top: 8px;
-}
-.crosstab {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 12.5px;
-}
-.crosstab th,
-.crosstab td {
-  border: 1px solid var(--c-border);
-  padding: 8px 10px;
-  text-align: center;
-  vertical-align: middle;
-  font-variant-numeric: tabular-nums;
-}
-.crosstab thead th {
-  font-weight: 600;
-  color: var(--c-text-2);
-  background: var(--c-surface-2);
-  white-space: nowrap;
-}
-.crosstab tbody th {
-  text-align: left;
-  font-weight: 500;
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  white-space: nowrap;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-}
-.crosstab td {
-  color: var(--c-text);
-  font-weight: 500;
-  min-width: 56px;
-}
-
 /* ══════════════════════════════════════════════════════════════
    MOBILE RESPONSIVE
    All rules here target ≤ 720px unless otherwise noted.
