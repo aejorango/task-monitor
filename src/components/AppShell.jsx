@@ -17,6 +17,7 @@ const VIEWS = [
   { id: 'work-performed', label: 'Work Performed',   icon: '⏱' },
   { id: 'review',         label: 'Review',           icon: '◇' },
   { id: 'analytics',      label: 'Analytics',        icon: '◢' },
+  { id: 'how-to-use',     label: 'How to Use',       icon: '?' },
   { id: 'settings',       label: 'Settings',         icon: '⚙' },
 ];
 

@@ -21,6 +21,7 @@ const InviteClaimView   = lazy(() => import('./components/InviteClaimView'));
 const ProjectsView      = lazy(() => import('./components/ProjectsView'));
 const SettingsView      = lazy(() => import('./components/SettingsView'));
 const WorkPerformedView = lazy(() => import('./components/WorkPerformedView'));
+const HowToUseView      = lazy(() => import('./components/HowToUseView'));
 
 function ViewSpinner() {
   return (
@@ -111,6 +112,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'projects'       && <ProjectsView />}
         {route.view === 'settings'       && <SettingsView />}
         {route.view === 'work-performed' && <WorkPerformedView projectFilter={route.projectFilter} />}
+        {route.view === 'how-to-use'     && <HowToUseView />}
       </Suspense>
     </AppShell>
   );

@@ -4161,3 +4161,472 @@ a:hover { text-decoration: underline; }
     justify-self: start;
   }
 }
+
+/* ─── How-to-use view ─────────────────────────────────────── */
+.htu-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .htu-layout { grid-template-columns: 1fr; }
+}
+
+.htu-toc {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-card);
+}
+@media (max-width: 960px) {
+  .htu-toc { position: static; }
+}
+.htu-toc-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-3);
+  padding: 4px 8px 8px;
+}
+.htu-toc-link {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.htu-toc-link:hover { background: var(--c-surface-2); color: var(--c-text); }
+.htu-toc-link.active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-ink);
+  font-weight: 600;
+}
+
+.htu-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.htu-section { scroll-margin-top: 12px; }
+.htu-section .review-h2 { font-size: 17px; }
+
+.htu-lede {
+  font-size: 14px;
+  color: var(--c-text-2);
+  line-height: 1.6;
+  margin: 0 0 14px;
+}
+
+.htu-callout {
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  margin: 12px 0;
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-soft);
+}
+.htu-callout-info { border-left-color: var(--c-accent); background: var(--c-accent-soft); }
+.htu-callout-tip  {
+  border-left-color: var(--c-emerald, #10b981);
+  background: color-mix(in srgb, var(--c-emerald, #10b981) 12%, var(--c-surface) 88%);
+}
+.htu-callout-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--c-text);
+  margin-bottom: 6px;
+}
+.htu-callout-body {
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.55;
+  margin: 0;
+}
+.htu-callout-body ul { margin: 6px 0 0; padding-left: 18px; }
+.htu-callout-body li { margin: 2px 0; }
+
+.htu-list {
+  margin: 6px 0;
+  padding-left: 18px;
+  color: var(--c-text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.htu-list li { margin: 4px 0; }
+
+.htu-ol {
+  margin: 6px 0;
+  padding-left: 20px;
+  color: var(--c-text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.htu-ol li { margin: 4px 0; }
+
+/* Hierarchy diagram */
+.htu-hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  background: var(--c-surface-2);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--c-border);
+}
+.htu-hier-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 12px;
+  align-items: center;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.htu-hier-row:hover { transform: translateX(4px); box-shadow: var(--shadow-card); }
+.htu-hier-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.htu-hier-text { min-width: 0; }
+.htu-hier-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--c-text);
+}
+.htu-hier-tagline {
+  font-size: 12px;
+  color: var(--c-text-3);
+  margin-top: 1px;
+}
+.htu-hier-example {
+  font-size: 12px;
+  color: var(--c-text-2);
+  margin-top: 4px;
+  font-style: italic;
+}
+.htu-hier-arrow {
+  text-align: center;
+  font-size: 18px;
+  color: var(--c-text-muted);
+  line-height: 1;
+  padding: 2px 0;
+}
+
+/* Concept cards */
+.htu-concept-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.htu-concept-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.htu-concept-card.open { border-color: var(--c-accent); box-shadow: var(--shadow-card); }
+.htu-concept-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--c-text);
+}
+.htu-concept-icon { font-size: 18px; }
+.htu-concept-name { font-size: 15px; font-weight: 700; flex: 1; }
+.htu-concept-toggle { color: var(--c-text-3); font-size: 12px; }
+.htu-concept-oneline {
+  font-size: 13px;
+  color: var(--c-text-2);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.htu-concept-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.htu-twocol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 720px) {
+  .htu-twocol { grid-template-columns: 1fr; }
+}
+.htu-twocol-pane {
+  background: var(--c-surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.htu-pane-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-3);
+  margin-bottom: 4px;
+}
+.htu-pane-do    { border-left: 3px solid var(--c-emerald, #10b981); }
+.htu-pane-dont  { border-left: 3px solid var(--c-danger,  #ef4444); }
+
+.htu-examples {
+  background: var(--c-surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.htu-example {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.5;
+  padding: 3px 0;
+}
+.htu-example.good { color: var(--c-text-2); }
+.htu-example.bad  { color: var(--c-text-2); }
+.htu-example-mark {
+  font-weight: 700;
+  text-align: center;
+}
+.htu-example.good .htu-example-mark { color: var(--c-success, #16a34a); }
+.htu-example.bad  .htu-example-mark { color: var(--c-danger,  #dc2626); }
+
+.htu-rule {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-ink);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Decision tree */
+.htu-decision {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.htu-decision-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 12px;
+}
+.htu-decision-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+.htu-decision-q {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 8px;
+}
+.htu-decision-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.htu-decision-yes {
+  color: var(--c-success, #16a34a);
+}
+.htu-decision-no {
+  color: var(--c-text-3);
+}
+
+/* Scenarios */
+.htu-scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.htu-scenario {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+}
+.htu-scenario-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.htu-scenario-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  flex: 1;
+  min-width: 0;
+}
+.htu-scenario-verdict {
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--c-accent);
+  color: white;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.htu-scenario-reason {
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+.htu-scenario-structure-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-3);
+  margin-top: 8px;
+}
+
+/* Workflows */
+.htu-workflows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .htu-workflows { grid-template-columns: 1fr; }
+}
+.htu-workflow {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+}
+.htu-workflow-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-text);
+  margin: 0 0 6px;
+}
+
+/* Principles */
+.htu-principle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 900px) {
+  .htu-principle-grid { grid-template-columns: 1fr; }
+}
+.htu-principle {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+}
+.htu-principle-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text);
+  margin-bottom: 4px;
+}
+.htu-principle-body {
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.55;
+}
+
+/* Anti-patterns */
+.htu-antipattern-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.htu-antipattern {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+}
+.htu-antipattern-bad {
+  font-size: 14px;
+  color: var(--c-text);
+  margin-bottom: 6px;
+}
+.htu-antipattern-why {
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.55;
+  margin-bottom: 6px;
+}
+.htu-antipattern-instead {
+  font-size: 13px;
+  color: var(--c-text);
+  line-height: 1.55;
+  padding-top: 6px;
+  border-top: 1px dashed var(--c-border);
+}
+
+/* Glossary */
+.htu-glossary {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.htu-glossary td {
+  padding: 8px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--c-border);
+}
+.htu-glossary tr:last-child td { border-bottom: 0; }
+.htu-glossary-term {
+  font-weight: 700;
+  color: var(--c-text);
+  width: 140px;
+  white-space: nowrap;
+}
+.htu-glossary-def {
+  color: var(--c-text-2);
+  line-height: 1.55;
+}
