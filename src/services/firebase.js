@@ -956,6 +956,35 @@ export function subscribeToRecentActivities(workspaceId, sinceDate, callback) {
   });
 }
 
+// Subscribe to activities across multiple workspaces. One listener per
+// workspace (Firestore array-contains-any doesn't work on equality fields).
+// Calls back with the merged list whenever any workspace's data changes.
+// Used by cross-workspace analytics (e.g. Workspace activity pulse).
+export function subscribeToActivitiesAcrossWorkspaces(workspaceIds, sinceDate, callback) {
+  if (!workspaceIds || workspaceIds.length === 0) {
+    callback([]);
+    return () => {};
+  }
+  const byWs = {};   // workspaceId → activities[]
+  const seenInitial = new Set();
+  const fire = () => {
+    // Only fire once all workspaces have produced at least one snapshot.
+    if (seenInitial.size < workspaceIds.length) return;
+    callback(Object.values(byWs).flat());
+  };
+  const unsubs = workspaceIds.map((wsId) => {
+    const q = query(activitiesRef, where('workspaceId', '==', wsId));
+    return onSnapshot(q, (snap) => {
+      byWs[wsId] = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => !sinceDate || (a.date || '') >= sinceDate);
+      seenInitial.add(wsId);
+      fire();
+    });
+  });
+  return () => unsubs.forEach((u) => u && u());
+}
+
 // ─── TEMPLATES ──────────────────────────────────────────────────────────────
 // A template is a reusable starting point for either a task or a project.
 //   kind: 'task' | 'project'
