@@ -2,6 +2,7 @@
 
 import { lazy, Suspense } from 'react';
 import { useAuth, useProjects } from './hooks/useTasks';
+import { useWorkspaces, useSyncMyMemberProfile } from './hooks/useWorkspace';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import AppShell, { useRoute } from './components/AppShell';
@@ -88,6 +89,8 @@ export default function App() {
 
 function ApprovedApp({ userId, ready, route, navigate, profile }) {
   const { projects } = useProjects();
+  const { workspaces } = useWorkspaces();
+  useSyncMyMemberProfile(workspaces);
   useOverdueScan();
 
   return (

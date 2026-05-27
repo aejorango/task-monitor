@@ -12,7 +12,9 @@ import {
   DragOverlay,
 } from '@dnd-kit/core';
 import { useTasks, useProjects, useActivities } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useTimer } from '../hooks/useTimer';
+import { auth } from '../services/firebase';
 import {
   setTaskStatus,
   updateTask,
@@ -395,11 +397,10 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
             ↔ {task.links.length}
           </span>
         )}
-        {task.assignedTo?.length > 0 && (
-          <span className="badge badge-soft-muted" title={`${task.assignedTo.length} assignee${task.assignedTo.length === 1 ? '' : 's'}`}>
-            👤 {task.assignedTo.length}
-          </span>
-        )}
+        <AssigneeBadges
+          assignedTo={task.assignedTo || []}
+          assignedToExternal={task.assignedToExternal || []}
+        />
         {isRecurring && (
           <span className="badge badge-soft-info" title={`Recurring: ${task.recurrence.rule}`}>
             🔁 {task.recurrence.rule}
@@ -517,5 +518,52 @@ function ActivityListInline({ taskId, onEditActivity }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// Inline assignee badges for the task card. Shows up to two readable names
+// (system users' displayNames via memberProfiles, plus external freeform
+// names), then collapses the rest into a "+N" pill.
+function AssigneeBadges({ assignedTo, assignedToExternal }) {
+  const activeWsId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const ws = workspaces.find((w) => w.id === activeWsId);
+  const memberProfiles = ws?.memberProfiles || {};
+  const me = auth.currentUser;
+
+  const total = assignedTo.length + assignedToExternal.length;
+  if (total === 0) return null;
+
+  const labelFor = (uid) => {
+    const p = memberProfiles[uid];
+    if (p?.displayName) return p.displayName;
+    if (p?.email) return p.email;
+    if (uid === me?.uid) return me.displayName || me.email || `${uid.slice(0, 6)}…`;
+    return `${uid.slice(0, 6)}…`;
+  };
+
+  const items = [
+    ...assignedTo.map((uid) => ({ kind: 'user', label: labelFor(uid), key: `u-${uid}`, title: uid })),
+    ...assignedToExternal.map((name) => ({ kind: 'ext', label: name, key: `e-${name}`, title: 'External (not in system)' })),
+  ];
+
+  const visible = items.slice(0, 2);
+  const extra = items.length - visible.length;
+
+  return (
+    <>
+      {visible.map((it) => (
+        <span
+          key={it.key}
+          className={`badge badge-assignee ${it.kind === 'ext' ? 'badge-assignee-ext' : ''}`}
+          title={it.title}
+        >
+          {it.kind === 'ext' ? '✎ ' : '👤 '}{it.label}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="badge badge-soft-muted" title={`${total} assignees total`}>+{extra}</span>
+      )}
+    </>
   );
 }

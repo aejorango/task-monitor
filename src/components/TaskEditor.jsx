@@ -1,9 +1,10 @@
 // src/components/TaskEditor.jsx — edit modal with subtasks, tags, dependencies.
 
 import { useState, useMemo } from 'react';
-import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload, todayLocal } from '../services/firebase';
+import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload, todayLocal, auth } from '../services/firebase';
 import { useTasks, useAuth, useTaskComments } from '../hooks/useTasks';
-import { useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import AssigneePicker from './AssigneePicker';
 import { MarkdownEditor } from './Markdown';
 import Markdown from './Markdown';
 import {
@@ -32,6 +33,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [tags, setTags]               = useState(task.tags || []);
   const [customValues, setCustomValues] = useState(task.customValues || {});
   const [assignedTo, setAssignedTo] = useState(task.assignedTo || []);
+  const [assignedToExternal, setAssignedToExternal] = useState(task.assignedToExternal || []);
   const [subtasks, setSubtasks]       = useState(task.subtasks || []);
   const [dependsOn, setDependsOn]     = useState(task.dependsOn || []);
   const [links, setLinks]             = useState(task.links || []);
@@ -160,6 +162,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         recurrence,
         customValues,
         assignedTo,
+        assignedToExternal,
         'plan.startDate':   planStart        || null,
         'plan.endDate':     planEnd          || null,
         'actual.startDate': nextActualStart  || null,
@@ -279,11 +282,14 @@ export default function TaskEditor({ task, projects, onClose }) {
               </div>
             </div>
 
-            <AssigneePicker
-              members={selectedProject?.acl || {}}
-              membersDetails={selectedProject?.memberDetails || {}}
+            <TaskAssigneeSection
+              project={selectedProject}
               assignedTo={assignedTo}
-              onChange={setAssignedTo}
+              assignedToExternal={assignedToExternal}
+              onChange={({ assignedTo: a, assignedToExternal: e }) => {
+                setAssignedTo(a);
+                setAssignedToExternal(e);
+              }}
             />
 
             <div className="field-row">
@@ -462,39 +468,48 @@ export default function TaskEditor({ task, projects, onClose }) {
   );
 }
 
-function AssigneePicker({ members, assignedTo, onChange }) {
-  const uids = Object.keys(members || {});
-  const toggle = (uid) => {
-    if (assignedTo.includes(uid)) onChange(assignedTo.filter((x) => x !== uid));
-    else onChange([...assignedTo, uid]);
-  };
-  if (uids.length === 0) {
-    return null;
+// TaskAssigneeSection: thin wrapper over the shared AssigneePicker that
+// pulls candidate UIDs from the project's ACL (preferred) or the active
+// workspace's member list (when no project is selected), and resolves
+// display names via the workspace's memberProfiles map.
+function TaskAssigneeSection({ project, assignedTo, assignedToExternal, onChange }) {
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+  const memberProfiles = ws?.memberProfiles || {};
+
+  // Candidates: workspace members ∪ project members (deduped). Falling back
+  // to project ACL keys if member arrays aren't populated.
+  const candidates = useMemo(() => {
+    const set = new Set();
+    (ws?.members || []).forEach((u) => set.add(u));
+    (project?.members || []).forEach((u) => set.add(u));
+    Object.keys(project?.acl || {}).forEach((u) => set.add(u));
+    // Always include any already-assigned UIDs (even if no longer members)
+    (assignedTo || []).forEach((u) => set.add(u));
+    return [...set];
+  }, [ws, project, assignedTo]);
+
+  // Fallback labels: self-name for the current auth user
+  const me = auth.currentUser;
+  const fallbackLabels = {};
+  if (me?.uid) {
+    fallbackLabels[me.uid] = me.displayName || me.email || `${me.uid.slice(0, 6)}…`;
   }
+
   return (
     <div className="field">
-      <label className="label">Assigned to ({assignedTo.length})</label>
-      <p className="muted small" style={{ marginTop: -4 }}>
-        Pick from project members. Use Sharing on the project page to invite teammates.
-      </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-        {uids.map((uid) => {
-          const role = members[uid];
-          const selected = assignedTo.includes(uid);
-          return (
-            <button
-              key={uid}
-              type="button"
-              className={`chip ${selected ? 'active' : ''}`}
-              title={`${uid} · ${role}`}
-              onClick={() => toggle(uid)}
-            >
-              <span className="mono small">{uid.slice(0, 6)}</span>
-              <span className="muted small" style={{ marginLeft: 4 }}>{role}</span>
-            </button>
-          );
-        })}
-      </div>
+      <AssigneePicker
+        candidates={candidates}
+        memberProfiles={memberProfiles}
+        assignedTo={assignedTo}
+        assignedToExternal={assignedToExternal}
+        onChange={onChange}
+        fallbackLabels={fallbackLabels}
+        helpText={candidates.length === 0
+          ? 'No teammates yet. Add an external name below, or invite people via Settings → Workspaces.'
+          : 'Click a teammate to assign them, or add a free-form name for someone not in the system yet.'}
+      />
     </div>
   );
 }

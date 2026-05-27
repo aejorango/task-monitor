@@ -330,6 +330,31 @@ export async function updateWorkspaceMemberRole(workspace, memberUserId, newRole
   });
 }
 
+// Each workspace doc carries a `memberProfiles` map keyed by uid so any
+// member can resolve another member's display name without needing read
+// access to /users/{uid} (which is locked down). Each user keeps their own
+// slot fresh; nobody can write to anyone else's slot (enforced by rules).
+export async function updateMyMemberProfileInWorkspace(workspaceId, profile) {
+  if (!workspaceId) return;
+  const user = auth.currentUser;
+  if (!user?.uid) return;
+  const slot = {
+    displayName: profile?.displayName || user.displayName || '',
+    email:       profile?.email       || user.email       || '',
+    photoURL:    profile?.photoURL    || user.photoURL    || '',
+    updatedAt:   new Date().toISOString(),
+  };
+  try {
+    await updateDoc(doc(db, 'workspaces', workspaceId), {
+      [`memberProfiles.${user.uid}`]: slot,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // Non-fatal — names will just fall back to UID prefixes if this fails.
+    console.warn('[memberProfiles] self-update failed:', err);
+  }
+}
+
 // Live list of workspaces the current user belongs to.
 export function subscribeToWorkspaces(userId, callback) {
   // Single filter — array-contains plus an equality filter on a different
@@ -437,6 +462,13 @@ export async function addProject(userId, project) {
     // Per-project ACL is retained for fine-grained sharing within a workspace.
     acl:     { [userId]: 'admin' },
     members: [userId],
+
+    // v11: explicit project assignees (the "lead / owner" concept), separate
+    // from ACL membership. assignedTo = system users; assignedToExternal =
+    // freeform names for people not yet in the system.
+    assignedTo:         project.assignedTo         || [],
+    assignedToExternal: project.assignedToExternal || [],
+
     archived: false,
     deleted:  false,
     createdAt: serverTimestamp(),
@@ -608,6 +640,11 @@ export async function addTask(userId, task) {
     // from `requestedBy` which is a freeform "who asked for this".
     //   [uid, ...]
     assignedTo: task.assignedTo || [],
+
+    // v11: free-form "external" assignee names — for people who aren't
+    // (yet) in the system. Display-only; doesn't grant access.
+    //   [string, ...]
+    assignedToExternal: task.assignedToExternal || [],
 
     activityCount:    0,
     totalHoursLogged: 0,

@@ -15,6 +15,8 @@ import {
   onAuthChange,
   subscribeToWorkspaces,
   migrateToWorkspaces,
+  updateMyMemberProfileInWorkspace,
+  auth,
 } from '../services/firebase';
 
 const WS_STORAGE_KEY = 'task-monitor.activeWorkspace.v1';
@@ -105,4 +107,40 @@ export function useWorkspaces() {
   }, [authReady, userId]);
 
   return { workspaces, loading, userId, authReady };
+}
+
+// ─── useSyncMyMemberProfile ────────────────────────────────────────────────
+// Whenever the signed-in user's workspaces (or their displayName) change,
+// push their current display data into each workspace's memberProfiles map
+// so other members can see their name without needing read access to
+// /users/{uid}. Fire-and-forget; failures are logged but non-fatal.
+
+const _syncedSignature = { uid: null, key: null };
+
+export function useSyncMyMemberProfile(workspaces) {
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user?.uid || !workspaces || workspaces.length === 0) return;
+    // Compute a signature so we don't re-fire on every render unnecessarily.
+    const sig = `${user.displayName || ''}|${user.email || ''}|${user.photoURL || ''}|${workspaces.map((w) => w.id).join(',')}`;
+    if (_syncedSignature.uid === user.uid && _syncedSignature.key === sig) return;
+    _syncedSignature.uid = user.uid;
+    _syncedSignature.key = sig;
+
+    workspaces.forEach((w) => {
+      const existing = w.memberProfiles?.[user.uid];
+      // Only push if missing or display fields differ — keeps writes minimal.
+      if (
+        existing
+        && existing.displayName === (user.displayName || '')
+        && existing.email       === (user.email       || '')
+        && existing.photoURL    === (user.photoURL    || '')
+      ) return;
+      updateMyMemberProfileInWorkspace(w.id, {
+        displayName: user.displayName || '',
+        email:       user.email       || '',
+        photoURL:    user.photoURL    || '',
+      });
+    });
+  }, [workspaces]);
 }

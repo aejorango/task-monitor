@@ -1,8 +1,8 @@
 // src/components/ProjectsView.jsx — list, create, edit projects + phases.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useProjects, useTasks, useAuth, useTemplates, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
   addProject,
   updateProject,
@@ -16,10 +16,12 @@ import {
   createInvite,
   revokeInvite,
   subscribeToInvitesForProject,
+  auth,
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
 import ActivityEditor from './ActivityEditor';
+import AssigneePicker from './AssigneePicker';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -80,6 +82,7 @@ export default function ProjectsView() {
                   <h3 className="project-name">{p.name}</h3>
                 </div>
                 <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
+                <ProjectAssigneeStrip project={p} />
                 <div className="project-phases">
                   {p.phases?.length > 0 ? p.phases.map((ph) => (
                     <span key={ph.id} className="phase-tag">{ph.name}</span>
@@ -942,7 +945,23 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     ]
   );
   const [customFields, setCustomFields] = useState(project?.customFields || []);
+  const [assignedTo, setAssignedTo] = useState(project?.assignedTo || []);
+  const [assignedToExternal, setAssignedToExternal] = useState(project?.assignedToExternal || []);
   const [saving, setSaving] = useState(false);
+
+  // Pull workspace members + memberProfiles for the AssigneePicker.
+  const { workspaces } = useWorkspaces();
+  const ws = workspaces.find((w) => w.id === workspaceId);
+  const memberProfiles = ws?.memberProfiles || {};
+  const candidates = useMemo(() => {
+    const set = new Set();
+    (ws?.members || []).forEach((u) => set.add(u));
+    Object.keys(project?.acl || {}).forEach((u) => set.add(u));
+    (assignedTo || []).forEach((u) => set.add(u));
+    return [...set];
+  }, [ws, project, assignedTo]);
+  const me = auth.currentUser;
+  const fallbackLabels = me?.uid ? { [me.uid]: me.displayName || me.email || `${me.uid.slice(0, 6)}…` } : {};
 
   const addPhase = () => setPhases([...phases, { id: uid(), name: 'New phase', order: phases.length }]);
   const updatePhase = (id, name) => setPhases(phases.map((p) => p.id === id ? { ...p, name } : p));
@@ -960,9 +979,9 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, phases, customFields });
+        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, phases, customFields, assignedTo, assignedToExternal });
       } else {
-        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, phases, customFields });
+        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, phases, customFields, assignedTo, assignedToExternal });
       }
       onClose();
     } catch (err) {
@@ -1049,6 +1068,22 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
           </div>
         </div>
 
+        <div className="field">
+          <AssigneePicker
+            candidates={candidates}
+            memberProfiles={memberProfiles}
+            assignedTo={assignedTo}
+            assignedToExternal={assignedToExternal}
+            onChange={({ assignedTo: a, assignedToExternal: e }) => {
+              setAssignedTo(a);
+              setAssignedToExternal(e);
+            }}
+            fallbackLabels={fallbackLabels}
+            label="Assigned to (project lead / responsible)"
+            helpText="Who owns this project? Click teammates to assign, or type an external name. This doesn't grant edit access — use Sharing below for that."
+          />
+        </div>
+
         <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
 
         {!isNew && (
@@ -1070,6 +1105,45 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Compact strip showing project assignees on the project card. Pulls
+// display names from the active workspace's memberProfiles map for system
+// users, and renders external names verbatim.
+function ProjectAssigneeStrip({ project }) {
+  const activeWsId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const ws = workspaces.find((w) => w.id === activeWsId);
+  const memberProfiles = ws?.memberProfiles || {};
+  const me = auth.currentUser;
+  const uids = project.assignedTo || [];
+  const ext  = project.assignedToExternal || [];
+  if (uids.length === 0 && ext.length === 0) return null;
+  const labelFor = (uid) => {
+    const p = memberProfiles[uid];
+    if (p?.displayName) return p.displayName;
+    if (p?.email) return p.email;
+    if (uid === me?.uid) return me.displayName || me.email || `${uid.slice(0, 6)}…`;
+    return `${uid.slice(0, 6)}…`;
+  };
+  return (
+    <div className="project-assignees" title="Assigned to">
+      <span className="muted small">👤</span>
+      {uids.slice(0, 4).map((uid) => (
+        <span key={uid} className="project-assignee-chip" title={uid}>
+          {labelFor(uid)}
+        </span>
+      ))}
+      {ext.slice(0, 4).map((name) => (
+        <span key={name} className="project-assignee-chip external" title="External (not in system)">
+          ✎ {name}
+        </span>
+      ))}
+      {(uids.length + ext.length) > 8 && (
+        <span className="muted small">+{(uids.length + ext.length) - 8} more</span>
+      )}
     </div>
   );
 }

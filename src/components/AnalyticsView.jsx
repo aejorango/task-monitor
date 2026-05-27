@@ -352,7 +352,25 @@ export default function AnalyticsView({ projectFilter }) {
       if (!seen.has(k)) { seen.add(k); order.push(k); }
     });
 
-    // assignee → week → hours
+    // Resolve display names via the active workspace's memberProfiles. Falls
+    // back to user.displayName for the signed-in user, then short UID.
+    const activeWs = workspaces.find((w) => w.id === activeWorkspaceId);
+    const memberProfiles = activeWs?.memberProfiles || {};
+    const me = auth.currentUser?.uid;
+    const meName = auth.currentUser?.displayName || auth.currentUser?.email || null;
+    const resolveLabel = (key) => {
+      if (key === '(unassigned)') return 'Unassigned';
+      if (key.startsWith('ext:')) return `✎ ${key.slice(4)}`;
+      const p = memberProfiles[key];
+      if (p?.displayName) return p.displayName;
+      if (p?.email) return p.email;
+      if (key === me && meName) return meName;
+      return `${key.slice(0, 6)}…`;
+    };
+
+    // assignee → week → hours.
+    // We key both system users (raw UID) and external names (prefixed "ext:")
+    // into the same map so the chart treats them uniformly.
     const byPerson = {};
     filtered.forEach((t) => {
       const start = parseISO(t.plan?.startDate);
@@ -361,7 +379,10 @@ export default function AnalyticsView({ projectFilter }) {
       const totalDays = Math.max(1, Math.round((end - start) / 86400000) + 1);
       const totalHours = Math.max(1, t.totalHoursLogged || totalDays);
       const perDay = totalHours / totalDays;
-      const assignees = (t.assignedTo && t.assignedTo.length > 0) ? t.assignedTo : ['(unassigned)'];
+      const uidAssignees = t.assignedTo || [];
+      const extAssignees = (t.assignedToExternal || []).map((n) => `ext:${n}`);
+      const allAssignees = [...uidAssignees, ...extAssignees];
+      const assignees = allAssignees.length > 0 ? allAssignees : ['(unassigned)'];
       const perAssigneeDay = perDay / assignees.length;
       for (let i = 0; i < totalDays; i++) {
         const d = new Date(start);
@@ -369,28 +390,29 @@ export default function AnalyticsView({ projectFilter }) {
         const ds = isoOf(d);
         if (ds < dates[0] || ds > dates[dates.length - 1]) continue;
         const wk = isoWeekKey(d);
-        assignees.forEach((uid) => {
-          byPerson[uid] = byPerson[uid] || {};
-          byPerson[uid][wk] = (byPerson[uid][wk] || 0) + perAssigneeDay;
+        assignees.forEach((key) => {
+          byPerson[key] = byPerson[key] || {};
+          byPerson[key][wk] = (byPerson[key][wk] || 0) + perAssigneeDay;
         });
       }
     });
 
-    const me = auth.currentUser?.uid;
-    const meName = auth.currentUser?.displayName || auth.currentUser?.email || null;
-    const people = Object.keys(byPerson).map((uid) => {
+    const people = Object.keys(byPerson).map((key) => {
       const weeks = order.map((wk) => ({
         wk,
-        hours: byPerson[uid][wk] || 0,
-        over: (byPerson[uid][wk] || 0) > CAPACITY_PER_WEEK,
+        hours: byPerson[key][wk] || 0,
+        over: (byPerson[key][wk] || 0) > CAPACITY_PER_WEEK,
       }));
       const peak = Math.max(0, ...weeks.map((w) => w.hours));
       const avg  = weeks.reduce((s, w) => s + w.hours, 0) / Math.max(1, weeks.length);
       const overWeeks = weeks.filter((w) => w.over).length;
-      const label = uid === me && meName ? meName
-                  : uid === '(unassigned)' ? 'Unassigned'
-                  : `${uid.slice(0, 6)}…`;
-      return { uid, label, weeks, peak, avg, overWeeks, isMe: uid === me };
+      return {
+        uid: key,
+        label: resolveLabel(key),
+        weeks, peak, avg, overWeeks,
+        isMe: key === me,
+        isExternal: key.startsWith('ext:'),
+      };
     }).sort((a, b) => b.peak - a.peak);
 
     return {
@@ -399,7 +421,7 @@ export default function AnalyticsView({ projectFilter }) {
       capacityPerWeek: CAPACITY_PER_WEEK,
       maxHours: Math.max(CAPACITY_PER_WEEK, ...people.flatMap((p) => p.weeks.map((w) => w.hours))),
     };
-  }, [filtered, dates]);
+  }, [filtered, dates, workspaces, activeWorkspaceId]);
 
   // ───── Dependency network ───────────────────────────────────────────────
   // Build a layered DAG: tasks with dependsOn → edges. Compute depth via
@@ -945,11 +967,12 @@ function CapacityChart({ data }) {
   return (
     <div className="capacity-wrap">
       {people.map((p) => (
-        <div key={p.uid} className={`capacity-row ${p.isMe ? 'is-me' : ''}`}>
+        <div key={p.uid} className={`capacity-row ${p.isMe ? 'is-me' : ''} ${p.isExternal ? 'is-external' : ''}`}>
           <div className="capacity-label">
             <div className="capacity-name">
               {p.label}
               {p.isMe && <span className="muted small"> (you)</span>}
+              {p.isExternal && <span className="muted small" title="External — not in the system"> · external</span>}
             </div>
             <div className="capacity-meta muted small">
               peak <strong className={p.peak > capacityPerWeek ? 'danger' : ''}>{p.peak.toFixed(0)}h</strong>
