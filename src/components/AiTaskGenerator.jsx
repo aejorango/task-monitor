@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { generateTaskDrafts, getApiKey } from '../services/anthropic';
 import { useAuth } from '../hooks/useTasks';
-import { addTask, todayLocal } from '../services/firebase';
+import { addTask } from '../services/firebase';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -12,10 +12,68 @@ function isoFromDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Parse a YYYY-MM-DD string as a local-time Date (no timezone shift).
+function parseLocalDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function addDays(date, n) {
+  const x = new Date(date);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+// Compute plan.startDate / plan.endDate for each task in `tasks`, honoring an
+// optional [planStart, planEnd] window.
+//
+//   • No dates              → start today, lay tasks end-to-end by estimatedDays.
+//   • Start only            → start on that date, lay tasks end-to-end.
+//   • Start + End (or End   → distribute tasks proportionally to their
+//     only → start today)      estimatedDays so they exactly fill the window;
+//                              the last task ends on the end date.
+//
+// Returns an array parallel to `tasks` of { startDate, endDate } ISO strings.
+function scheduleDrafts(tasks, planStart, planEnd) {
+  const start = planStart ? parseLocalDate(planStart) : new Date();
+
+  // Windowed mode: an explicit end date means we fit everything inside.
+  if (planEnd) {
+    const end = parseLocalDate(planEnd);
+    const spanDays = Math.max(1, Math.round((end - start) / DAY) + 1); // inclusive
+    const totalEstimated = tasks.reduce((s, t) => s + Math.max(1, t.estimatedDays || 1), 0);
+    let cursorOffset = 0; // days elapsed from start (fractional)
+    return tasks.map((t, i) => {
+      const share = Math.max(1, t.estimatedDays || 1) / totalEstimated;
+      const startOffset = Math.round(cursorOffset);
+      cursorOffset += share * spanDays;
+      let endOffset = Math.round(cursorOffset) - 1; // inclusive; -1 leaves no overlap
+      if (endOffset < startOffset) endOffset = startOffset;
+      if (i === tasks.length - 1) endOffset = spanDays - 1; // last task lands on end date
+      return {
+        startDate: isoFromDate(addDays(start, startOffset)),
+        endDate:   isoFromDate(addDays(start, endOffset)),
+      };
+    });
+  }
+
+  // Sequential mode: lay tasks end-to-end by their estimatedDays.
+  let cursor = new Date(start);
+  return tasks.map((t) => {
+    const days = Math.max(1, t.estimatedDays || 1);
+    const startDate = isoFromDate(cursor);
+    const endDate   = isoFromDate(new Date(cursor.getTime() + (days - 1) * DAY));
+    cursor = new Date(cursor.getTime() + days * DAY);
+    return { startDate, endDate };
+  });
+}
+
 export default function AiTaskGenerator({ project, onClose }) {
   const { userId } = useAuth();
   const apiKey = getApiKey();
   const [count, setCount] = useState(8);
+  const [planStart, setPlanStart] = useState('');  // '' → start on creation day
+  const [planEnd, setPlanEnd]     = useState('');  // '' → sequential (no fixed window)
   const [drafts, setDrafts] = useState(null);     // array | null
   const [accepted, setAccepted] = useState({});   // { [draftId]: true|false }  — true=accept, false=reject, undefined=undecided
   const [editingId, setEditingId] = useState(null);
@@ -57,22 +115,30 @@ export default function AiTaskGenerator({ project, onClose }) {
     setAccepted(Object.fromEntries(drafts.map((d) => [d.id, true])));
   };
 
+  const dateRangeInvalid = planStart && planEnd && planEnd < planStart;
+
   const createAccepted = async () => {
     const toCreate = drafts.filter((d) => accepted[d.id] === true);
     if (toCreate.length === 0) {
       alert('Mark at least one draft as Accept first.');
       return;
     }
+    if (dateRangeInvalid) {
+      alert('End date must be on or after the start date.');
+      return;
+    }
     setCreating(true);
     let created = 0;
-    let cursorDay = new Date();
+    // Compute the schedule for the accepted tasks up-front, honoring the
+    // optional start/end window. The schedule array is parallel to toCreate.
+    const schedule = scheduleDrafts(toCreate, planStart, planEnd);
     try {
-      for (const d of toCreate) {
+      for (let i = 0; i < toCreate.length; i++) {
+        const d = toCreate[i];
+        const { startDate, endDate } = schedule[i];
         const phase = d.phase
           ? (project.phases || []).find((p) => p.name.toLowerCase() === d.phase.toLowerCase())
           : null;
-        const planStart = isoFromDate(cursorDay);
-        const planEnd   = isoFromDate(new Date(cursorDay.getTime() + (Math.max(0, d.estimatedDays - 1)) * DAY));
         await addTask(userId, {
           workspaceId: project.workspaceId,
           title: d.title,
@@ -81,11 +147,9 @@ export default function AiTaskGenerator({ project, onClose }) {
           projectId: project.id,
           phaseId: phase?.id || null,
           priority: d.priority,
-          plan: { startDate: planStart, endDate: planEnd },
+          plan: { startDate, endDate },
           tags: ['ai-generated'],
         });
-        // Move cursor for the next task: estimatedDays after this one finishes.
-        cursorDay = new Date(cursorDay.getTime() + d.estimatedDays * DAY);
         created++;
       }
       setDone({ created });
@@ -132,6 +196,21 @@ export default function AiTaskGenerator({ project, onClose }) {
                 </p>
               </div>
             </div>
+
+            <div className="field-row">
+              <div className="field">
+                <label className="label">Start date <span className="muted small">(optional)</span></label>
+                <input type="date" className="input" value={planStart} max={planEnd || undefined} onChange={(e) => setPlanStart(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="label">End date <span className="muted small">(optional)</span></label>
+                <input type="date" className="input" value={planEnd} min={planStart || undefined} onChange={(e) => setPlanEnd(e.target.value)} />
+              </div>
+            </div>
+            <p className="muted small" style={{ marginTop: -4 }}>
+              <ScheduleHint planStart={planStart} planEnd={planEnd} invalid={dateRangeInvalid} />
+            </p>
+
             {error && (
               <div className="auth-error">
                 <div className="auth-error-head"><span className="badge badge-soft-danger">Error</span></div>
@@ -168,6 +247,17 @@ export default function AiTaskGenerator({ project, onClose }) {
                   {generating ? 'Regenerating…' : '↻ Regenerate'}
                 </button>
               </div>
+            </div>
+
+            <div className="ai-schedule-bar">
+              <span className="small muted" style={{ fontWeight: 600 }}>Schedule:</span>
+              <label className="small muted">Start</label>
+              <input type="date" className="input input-sm" value={planStart} max={planEnd || undefined} onChange={(e) => setPlanStart(e.target.value)} />
+              <label className="small muted">End</label>
+              <input type="date" className="input input-sm" value={planEnd} min={planStart || undefined} onChange={(e) => setPlanEnd(e.target.value)} />
+              <span className="small muted" style={{ flex: 1 }}>
+                <ScheduleHint planStart={planStart} planEnd={planEnd} invalid={dateRangeInvalid} />
+              </span>
             </div>
 
             <div className="ai-drafts">
@@ -242,7 +332,7 @@ export default function AiTaskGenerator({ project, onClose }) {
             <div className="modal-actions">
               <div style={{ flex: 1 }} />
               <button className="btn" onClick={onClose} disabled={creating}>Cancel</button>
-              <button className="btn btn-primary" onClick={createAccepted} disabled={creating || Object.values(accepted).filter((v) => v === true).length === 0}>
+              <button className="btn btn-primary" onClick={createAccepted} disabled={creating || dateRangeInvalid || Object.values(accepted).filter((v) => v === true).length === 0}>
                 {creating ? 'Creating…' : `Create ${Object.values(accepted).filter((v) => v === true).length} task(s)`}
               </button>
             </div>
@@ -263,4 +353,22 @@ export default function AiTaskGenerator({ project, onClose }) {
       </div>
     </div>
   );
+}
+
+// Inline hint describing how the chosen (or unchosen) dates will schedule
+// the generated tasks. Keeps the user oriented about what will happen.
+function ScheduleHint({ planStart, planEnd, invalid }) {
+  if (invalid) {
+    return <span style={{ color: 'var(--c-danger)' }}>End date must be on or after the start date.</span>;
+  }
+  if (planStart && planEnd) {
+    return <>Tasks will be spread across <strong>{planStart}</strong> → <strong>{planEnd}</strong>, sized by their estimates; the last one ends on the end date.</>;
+  }
+  if (planStart && !planEnd) {
+    return <>Tasks start on <strong>{planStart}</strong> and run back-to-back by their estimated durations.</>;
+  }
+  if (!planStart && planEnd) {
+    return <>Tasks will be spread from <strong>today</strong> → <strong>{planEnd}</strong>, sized by their estimates.</>;
+  }
+  return <>No dates set — tasks start <strong>today</strong> and run back-to-back by their estimated durations.</>;
 }
