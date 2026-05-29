@@ -41,6 +41,34 @@ function fmtShort(d, zoomId) {
   return `${d.getDate()}`;
 }
 
+// Preset period helpers. Each returns { from, to } as YYYY-MM-DD strings.
+function presetThisMonth() {
+  const now = parseDate(todayLocal());
+  return {
+    from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to:   fmtDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+function presetThisQuarter() {
+  const now = parseDate(todayLocal());
+  const q = Math.floor(now.getMonth() / 3);
+  return {
+    from: fmtDate(new Date(now.getFullYear(), q * 3, 1)),
+    to:   fmtDate(new Date(now.getFullYear(), q * 3 + 3, 0)),
+  };
+}
+function presetNext30() {
+  const now = parseDate(todayLocal());
+  return { from: fmtDate(now), to: fmtDate(addDays(now, 30)) };
+}
+function presetThisYear() {
+  const now = parseDate(todayLocal());
+  return {
+    from: fmtDate(new Date(now.getFullYear(), 0, 1)),
+    to:   fmtDate(new Date(now.getFullYear(), 11, 31)),
+  };
+}
+
 export default function GanttView({ projectFilter }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
@@ -48,7 +76,12 @@ export default function GanttView({ projectFilter }) {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  // Date-period filter. Both optional; either bound may be set independently.
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo]     = useState('');
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
+
+  const periodActive = !!(periodFrom || periodTo);
 
   const rows = useMemo(() => {
     // Earliest date on a task (plan or actual start, then ends as fallback)
@@ -58,10 +91,28 @@ export default function GanttView({ projectFilter }) {
         .sort();
       return candidates[0] || '9999-12-31';
     };
+    // A task's full date span [first, last] as YYYY-MM-DD strings (or null).
+    const spanOf = (t) => {
+      const all = [t.plan?.startDate, t.plan?.endDate, t.actual?.startDate, t.actual?.endDate]
+        .filter(Boolean)
+        .sort();
+      if (all.length === 0) return null;
+      return { first: all[0], last: all[all.length - 1] };
+    };
+    // Does the task overlap the selected [periodFrom, periodTo] window?
+    const inPeriod = (t) => {
+      if (!periodActive) return true;
+      const span = spanOf(t);
+      if (!span) return false;
+      if (periodFrom && span.last  < periodFrom) return false; // ends before window
+      if (periodTo   && span.first > periodTo)   return false; // starts after window
+      return true;
+    };
 
     return tasks
       .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
       .filter((t) => t.plan?.startDate || t.plan?.endDate || t.actual?.startDate || t.actual?.endDate)
+      .filter(inPeriod)
       .sort((a, b) => {
         // 1. Group by project (alphabetical by project name; null project last)
         const aProj = projectById[a.projectId]?.name || '￿';
@@ -70,12 +121,37 @@ export default function GanttView({ projectFilter }) {
         // 2. Within a project, earliest start first
         return earliestOf(a).localeCompare(earliestOf(b));
       });
-  }, [tasks, projectFilter, projectById]);
+  }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo]);
 
   const range = useMemo(() => {
-    // Default view starts one week before today so recent context is visible
-    // even when the earliest scheduled task is in the future.
+    // When a period is set, the timeline window is pinned to it (each bound
+    // independently). Otherwise it auto-fits the visible tasks, starting one
+    // week before today so recent context is visible.
     const today = parseDate(todayLocal());
+
+    if (periodActive) {
+      // Explicit bounds win. For any unset bound, fall back to the extent of
+      // the visible tasks, then to a sensible default.
+      let min = periodFrom ? parseDate(periodFrom) : null;
+      let max = periodTo   ? parseDate(periodTo)   : null;
+      if (!min || !max) {
+        let taskMin = null;
+        let taskMax = null;
+        rows.forEach((t) => {
+          [t.plan?.startDate, t.plan?.endDate, t.actual?.startDate, t.actual?.endDate]
+            .map(parseDate).filter(Boolean)
+            .forEach((d) => {
+              if (!taskMin || d < taskMin) taskMin = d;
+              if (!taskMax || d > taskMax) taskMax = d;
+            });
+        });
+        if (!min) min = taskMin || (max ? addDays(max, -30) : addDays(today, -7));
+        if (!max) max = taskMax || (min ? addDays(min, 30)  : addDays(today, 30));
+      }
+      if (max < min) max = min;
+      return { min, max, total: diffDays(min, max) + 1 };
+    }
+
     let min = addDays(today, -7);
     let max = today;
     rows.forEach((t) => {
@@ -90,7 +166,7 @@ export default function GanttView({ projectFilter }) {
     // leading edge already sits a week before today.
     max = addDays(max, 3);
     return { min, max, total: diffDays(min, max) + 1 };
-  }, [rows]);
+  }, [rows, periodActive, periodFrom, periodTo]);
 
   const today = parseDate(todayLocal());
 
@@ -100,10 +176,30 @@ export default function GanttView({ projectFilter }) {
     return (
       <>
         <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} />
+        <GanttDateFilter
+          from={periodFrom} to={periodTo}
+          setFrom={setPeriodFrom} setTo={setPeriodTo}
+        />
         <div className="empty-state">
           <div className="empty-state-icon">▭</div>
-          <p>No tasks with plan or actual dates yet.</p>
-          <p className="small">Click <strong>+ New task</strong> above, or add plan start/end dates to existing tasks.</p>
+          {periodActive ? (
+            <>
+              <p>No tasks fall within the selected period.</p>
+              <p className="small">
+                Widen the date range or{' '}
+                <button
+                  className="table-link"
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+                  onClick={() => { setPeriodFrom(''); setPeriodTo(''); }}
+                >clear the filter</button>.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>No tasks with plan or actual dates yet.</p>
+              <p className="small">Click <strong>+ New task</strong> above, or add plan start/end dates to existing tasks.</p>
+            </>
+          )}
         </div>
         {quickAddOpen && (
           <GanttQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
@@ -194,7 +290,12 @@ export default function GanttView({ projectFilter }) {
 
   return (
     <>
-      <PageHeader zoom={zoom} setZoom={setZoom} />
+      <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} />
+      <GanttDateFilter
+        from={periodFrom} to={periodTo}
+        setFrom={setPeriodFrom} setTo={setPeriodTo}
+        visibleCount={rows.length}
+      />
 
       <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px`, position: 'relative' }}>
         <div className="gantt-row header" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}>
@@ -464,7 +565,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
 
   // Clicking the row's label area opens the activities modal. Bar drags are
   // not affected because drag handlers stopPropagation on the bar elements.
-  const handleLabelClick = (e) => {
+  const handleLabelClick = () => {
     // Only fire on direct label clicks, not on bubbling from interactive children.
     if (!onClick) return;
     onClick();
@@ -558,6 +659,76 @@ function PageHeader({ zoom, setZoom, onNewTask }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Date-period filter bar. Lets the user pin the Gantt window to a specific
+// period (presets or custom from/to). Tasks that don't overlap the window are
+// hidden, and the timeline is clamped to the chosen bounds.
+function GanttDateFilter({ from, to, setFrom, setTo, visibleCount }) {
+  const active = !!(from || to);
+
+  const applyPreset = (preset) => {
+    setFrom(preset.from);
+    setTo(preset.to);
+  };
+  const isPreset = (preset) => active && from === preset.from && to === preset.to;
+
+  const thisMonth   = presetThisMonth();
+  const thisQuarter = presetThisQuarter();
+  const next30      = presetNext30();
+  const thisYear    = presetThisYear();
+
+  return (
+    <div className="toolbar gantt-date-filter">
+      <span className="small muted" style={{ fontWeight: 600 }}>Period:</span>
+
+      <button className={`chip ${!active ? 'active' : ''}`} onClick={() => { setFrom(''); setTo(''); }}>
+        All
+      </button>
+      <button className={`chip ${isPreset(thisMonth) ? 'active' : ''}`} onClick={() => applyPreset(thisMonth)}>
+        This month
+      </button>
+      <button className={`chip ${isPreset(thisQuarter) ? 'active' : ''}`} onClick={() => applyPreset(thisQuarter)}>
+        This quarter
+      </button>
+      <button className={`chip ${isPreset(next30) ? 'active' : ''}`} onClick={() => applyPreset(next30)}>
+        Next 30 days
+      </button>
+      <button className={`chip ${isPreset(thisYear) ? 'active' : ''}`} onClick={() => applyPreset(thisYear)}>
+        This year
+      </button>
+
+      <span className="gantt-date-inputs">
+        <label className="small muted">From</label>
+        <input
+          type="date"
+          className="input input-sm"
+          value={from}
+          max={to || undefined}
+          onChange={(e) => setFrom(e.target.value)}
+        />
+        <label className="small muted">To</label>
+        <input
+          type="date"
+          className="input input-sm"
+          value={to}
+          min={from || undefined}
+          onChange={(e) => setTo(e.target.value)}
+        />
+      </span>
+
+      {active && (
+        <>
+          <button className="btn btn-sm btn-ghost" onClick={() => { setFrom(''); setTo(''); }}>
+            ✕ Clear
+          </button>
+          {typeof visibleCount === 'number' && (
+            <span className="small muted">{visibleCount} task{visibleCount === 1 ? '' : 's'} in range</span>
+          )}
+        </>
+      )}
     </div>
   );
 }
