@@ -231,7 +231,7 @@ export default function WorkPerformedView({ projectFilter }) {
         <div className="wp-swimlane-scroll">
           <div
             className="wp-swimlane"
-            style={{ gridTemplateColumns: `140px repeat(${laneIds.length}, minmax(220px, 300px))` }}
+            style={{ gridTemplateColumns: `140px repeat(${laneIds.length}, 200px)` }}
           >
             {/* ── Lane headers row ── */}
             <div className="wp-sl-corner">
