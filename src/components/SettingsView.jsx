@@ -818,25 +818,37 @@ function UserManagementSection({ currentUid }) {
                   )}
                 </div>
                 <div className="um-email">{u.email}</div>
-                {u.status === 'approved' && (
-                  <div className="um-company-row">
-                    <label className="small muted" style={{ marginRight: 6 }}>Company:</label>
-                    <select
-                      className="select select-sm"
-                      value={u.companyId || ''}
-                      disabled={busyUid === u.id}
-                      onChange={(e) => handleAssignCompany(u.id, e.target.value)}
-                      title="Assign this user to a company (their AI calls bill to that company's API key)"
-                    >
-                      <option value="">— Unassigned —</option>
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}{c.anthropicApiKey ? '' : ' (no key)'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                {u.status === 'approved' && (() => {
+                  const assignedCompany = companies.find((c) => c.id === u.companyId);
+                  const aiBlocked = !u.companyId || !(assignedCompany?.anthropicApiKey || '').trim();
+                  const aiBlockedReason = !u.companyId
+                    ? 'Unassigned — AI disabled for this user.'
+                    : `Company "${assignedCompany?.name}" has no Anthropic key — AI disabled for this user.`;
+                  return (
+                    <div className="um-company-row">
+                      <label className="small muted" style={{ marginRight: 6 }}>Company:</label>
+                      <select
+                        className="select select-sm"
+                        value={u.companyId || ''}
+                        disabled={busyUid === u.id}
+                        onChange={(e) => handleAssignCompany(u.id, e.target.value)}
+                        title="Assign this user to a company (their AI calls bill to that company's API key)"
+                      >
+                        <option value="">— Unassigned —</option>
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}{c.anthropicApiKey ? '' : ' (no key)'}
+                          </option>
+                        ))}
+                      </select>
+                      {u.role !== 'superadmin' && aiBlocked && (
+                        <span className="badge badge-soft-warn" title={aiBlockedReason}>
+                          AI off
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <span
                 className={`badge badge-soft-${

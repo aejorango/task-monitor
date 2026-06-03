@@ -1,9 +1,10 @@
 // src/App.jsx — root shell + view router with code-split non-Board views.
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useAuth, useProjects } from './hooks/useTasks';
 import { useWorkspaces, useSyncMyMemberProfile } from './hooks/useWorkspace';
 import { useMyCompany } from './hooks/useCompany';
+import { setCurrentUserRole } from './services/anthropic';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import AppShell, { useRoute } from './components/AppShell';
@@ -95,6 +96,13 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
   // Pipe the user's company's Anthropic key into the AI client so every AI
   // call this user makes is billed to that company's budget.
   useMyCompany(profile);
+  // Push the role into the AI client so its getEffectiveApiKey() can decide
+  // whether the personal localStorage key is a valid fallback (superadmin
+  // only). Without this, regular users could quietly use a stale localStorage
+  // key and bypass the company-budget gate.
+  useEffect(() => {
+    setCurrentUserRole(profile?.role);
+  }, [profile?.role]);
   useOverdueScan();
 
   return (

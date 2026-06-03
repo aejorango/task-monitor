@@ -36,6 +36,15 @@ let _companyKey = '';
 let _companyModel = '';
 let _companyMeta = null;  // { id, name } for diagnostics
 
+// ─── Current user's role (pushed from App.jsx once profile loads) ─────────
+// The personal localStorage key is ONLY a valid fallback for superadmins —
+// regular users must rely on a company key set by an admin. This is what
+// gates AI access correctly: no company key + non-admin = no AI.
+let _userRole = '';  // '', 'user', or 'superadmin'
+
+export function setCurrentUserRole(role) {
+  _userRole = role || '';
+}
 export function setCurrentCompanyContext({ apiKey, model, id, name } = {}) {
   _companyKey = apiKey || '';
   _companyModel = model || '';
@@ -50,24 +59,37 @@ export function getCurrentCompanyMeta() { return _companyMeta; }
 
 // The "effective" key/model:
 //   1. The current user's company key (if assigned and admin has set one).
-//   2. Fallback: their personal localStorage key — kept for backward
-//      compatibility and so superadmins can still test with their own key.
+//   2. Personal localStorage key fallback — superadmins only. Regular
+//      users get an empty key here, which causes UI gates and callClaude()
+//      itself to refuse the call. This is intentional: admins control AI
+//      access exclusively via company keys.
 export function getEffectiveApiKey() {
-  return _companyKey || getApiKey();
+  if (_companyKey) return _companyKey;
+  if (_userRole === 'superadmin') return getApiKey();
+  return '';
 }
 export function getEffectiveModel() {
-  return _companyModel || getModel();
+  if (_companyModel) return _companyModel;
+  // Same fallback policy as the key — regular users never use the
+  // localStorage model either.
+  if (_userRole === 'superadmin') return getModel();
+  return '';
 }
 export function isUsingCompanyKey() { return !!_companyKey; }
 
 export async function callClaude({ system, user, maxTokens = 2048 }) {
   const apiKey = getEffectiveApiKey();
   if (!apiKey) {
-    const err = new Error(
-      _companyMeta
-        ? `No Anthropic API key set for company "${_companyMeta.name}". Ask an admin to add one in Settings → Companies.`
-        : 'No Anthropic API key available. Ask an admin to assign you to a company with a key, or (superadmin only) set one in Settings → AI.'
-    );
+    let msg;
+    if (_companyMeta) {
+      // Assigned to a company, but the company has no key set.
+      msg = `AI is disabled — your company "${_companyMeta.name}" doesn't have an Anthropic API key set. Ask an admin to add one in Settings → Companies.`;
+    } else if (_userRole === 'superadmin') {
+      msg = 'No Anthropic API key available. Assign yourself to a company with a key, or set a personal fallback in Settings → AI.';
+    } else {
+      msg = "AI is disabled — you haven't been assigned to a company yet. Ask an admin to assign you in Settings → User Management.";
+    }
+    const err = new Error(msg);
     err.code = 'no-api-key';
     throw err;
   }
