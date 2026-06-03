@@ -232,6 +232,23 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource);
     }
 
+    // ─── Companies (billing/admin construct that owns an Anthropic key) ────
+    // Each user belongs to at most one company (users/{uid}.companyId). AI
+    // calls made by any company member use the company's API key, so an
+    // admin can budget Anthropic spend per company. Only superadmins can
+    // create / edit / delete companies; company members can read just their
+    // own company doc (to fetch the shared key client-side).
+    function isMyCompany(companyId) {
+      return request.auth != null
+          && companyId is string
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId;
+    }
+    match /companies/{companyId} {
+      allow read:   if isApprovedSuperadmin() || isMyCompany(companyId);
+      allow create, update, delete: if isApprovedSuperadmin();
+    }
+
     // ─── Users (approval-gated access control) ──────────────────────────────
     // Each authenticated user has a doc at users/{uid} carrying their status
     // (pending | approved | rejected) and role (user | superadmin).

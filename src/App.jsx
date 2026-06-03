@@ -3,6 +3,7 @@
 import { lazy, Suspense } from 'react';
 import { useAuth, useProjects } from './hooks/useTasks';
 import { useWorkspaces, useSyncMyMemberProfile } from './hooks/useWorkspace';
+import { useMyCompany } from './hooks/useCompany';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import AppShell, { useRoute } from './components/AppShell';
@@ -91,6 +92,9 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
   const { projects } = useProjects();
   const { workspaces } = useWorkspaces();
   useSyncMyMemberProfile(workspaces);
+  // Pipe the user's company's Anthropic key into the AI client so every AI
+  // call this user makes is billed to that company's budget.
+  useMyCompany(profile);
   useOverdueScan();
 
   return (

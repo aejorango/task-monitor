@@ -214,6 +214,76 @@ export async function setUserRole(targetUid, role) {
   await updateDoc(doc(usersRef, targetUid), { role });
 }
 
+// Assign a user to a company. companyId may be null/'' to unassign.
+export async function setUserCompany(targetUid, companyId) {
+  await updateDoc(doc(usersRef, targetUid), {
+    companyId: companyId || null,
+  });
+}
+
+// ─── Companies ──────────────────────────────────────────────────────────────
+// Each "company" is a billing/admin construct that owns a shared Anthropic
+// API key. Users are assigned to at most one company; AI calls made by any
+// user in the company use the company's key (their token budget). Only
+// superadmins can create/edit companies. Company members can read their own
+// company doc (so the client can pull the key for AI calls).
+const companiesRef = collection(db, 'companies');
+
+const DEFAULT_AI_MODEL = 'claude-sonnet-4-5-20250929';
+
+export async function addCompany(creatorUid, company) {
+  const ref = doc(companiesRef);
+  const data = {
+    name: company.name?.trim() || 'New company',
+    anthropicApiKey: (company.anthropicApiKey || '').trim(),
+    anthropicModel:  (company.anthropicModel  || DEFAULT_AI_MODEL).trim(),
+    createdByUserId: creatorUid,
+    deleted: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, data);
+  return { id: ref.id, ...data };
+}
+
+export async function updateCompany(companyId, updates) {
+  const patch = { ...updates, updatedAt: serverTimestamp() };
+  if (typeof patch.anthropicApiKey === 'string') patch.anthropicApiKey = patch.anthropicApiKey.trim();
+  if (typeof patch.anthropicModel  === 'string') patch.anthropicModel  = patch.anthropicModel.trim();
+  if (typeof patch.name            === 'string') patch.name            = patch.name.trim();
+  await updateDoc(doc(companiesRef, companyId), patch);
+}
+
+export async function softDeleteCompany(companyId) {
+  await updateDoc(doc(companiesRef, companyId), {
+    deleted: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Superadmin-wide list of all companies (firestore rules restrict reads).
+export function subscribeToCompanies(callback) {
+  return onSnapshot(companiesRef, (snap) => {
+    const list = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => !c.deleted)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(list);
+  });
+}
+
+// Subscribe to a single company doc (e.g. the one the current user belongs
+// to). Safe for non-superadmin members via the read rule.
+export function subscribeToCompany(companyId, callback) {
+  if (!companyId) {
+    callback(null);
+    return () => {};
+  }
+  return onSnapshot(doc(companiesRef, companyId), (snap) => {
+    callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+  });
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function todayLocal() {

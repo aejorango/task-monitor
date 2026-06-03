@@ -5191,3 +5191,54 @@ a:hover { text-decoration: underline; }
   .gantt-date-inputs { width: 100%; }
   .gantt-date-inputs .input-sm { flex: 1; min-width: 0; }
 }
+
+/* ─── Companies management (Settings) ─────────────────────── */
+.company-create-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 4px;
+}
+.company-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.company-row {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.company-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.company-row-head .input { flex: 1; min-width: 180px; }
+.company-row-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .company-row-fields { grid-template-columns: 1fr; }
+}
+
+/* Per-user "Company" dropdown inside User Management rows */
+.um-company-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.um-company-row .select-sm {
+  min-width: 160px;
+  max-width: 240px;
+}

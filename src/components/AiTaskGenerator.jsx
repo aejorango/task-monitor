@@ -2,7 +2,7 @@
 // description, let the user edit/accept/reject each, then bulk-create.
 
 import { useState } from 'react';
-import { generateTaskDrafts, getApiKey } from '../services/anthropic';
+import { generateTaskDrafts, getEffectiveApiKey as getApiKey } from '../services/anthropic';
 import { useAuth } from '../hooks/useTasks';
 import { addTask } from '../services/firebase';
 

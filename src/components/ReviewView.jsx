@@ -7,7 +7,7 @@ import {
   summarizeWeek,
   suggestNextTask,
   draftStatusUpdate,
-  getApiKey,
+  getEffectiveApiKey as getApiKey,
 } from '../services/anthropic';
 import Markdown from './Markdown';
 

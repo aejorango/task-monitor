@@ -9,7 +9,9 @@
 
 const STORAGE_KEY = 'task-monitor.anthropic-api-key.v1';
 const MODEL_KEY   = 'task-monitor.anthropic-model.v1';
+const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
+// ─── Personal (localStorage) key — legacy / superadmin fallback ───────────
 export function getApiKey() {
   try { return localStorage.getItem(STORAGE_KEY) || ''; } catch { return ''; }
 }
@@ -20,20 +22,56 @@ export function setApiKey(key) {
   } catch {}
 }
 export function getModel() {
-  try { return localStorage.getItem(MODEL_KEY) || 'claude-sonnet-4-5-20250929'; } catch { return 'claude-sonnet-4-5-20250929'; }
+  try { return localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; }
 }
 export function setModel(model) {
   try { localStorage.setItem(MODEL_KEY, model); } catch {}
 }
 
+// ─── Company key (in-memory; pushed by the useMyCompany hook) ─────────────
+// AI calls made by ANY user assigned to a company use this key so the
+// admin can budget Anthropic spend per company. We keep it in-memory only —
+// it lives in the company Firestore doc and is fetched on demand.
+let _companyKey = '';
+let _companyModel = '';
+let _companyMeta = null;  // { id, name } for diagnostics
+
+export function setCurrentCompanyContext({ apiKey, model, id, name } = {}) {
+  _companyKey = apiKey || '';
+  _companyModel = model || '';
+  _companyMeta = (id || name) ? { id: id || null, name: name || '' } : null;
+}
+export function clearCurrentCompanyContext() {
+  _companyKey = '';
+  _companyModel = '';
+  _companyMeta = null;
+}
+export function getCurrentCompanyMeta() { return _companyMeta; }
+
+// The "effective" key/model:
+//   1. The current user's company key (if assigned and admin has set one).
+//   2. Fallback: their personal localStorage key — kept for backward
+//      compatibility and so superadmins can still test with their own key.
+export function getEffectiveApiKey() {
+  return _companyKey || getApiKey();
+}
+export function getEffectiveModel() {
+  return _companyModel || getModel();
+}
+export function isUsingCompanyKey() { return !!_companyKey; }
+
 export async function callClaude({ system, user, maxTokens = 2048 }) {
-  const apiKey = getApiKey();
+  const apiKey = getEffectiveApiKey();
   if (!apiKey) {
-    const err = new Error('No Anthropic API key set. Add one in Settings → AI.');
+    const err = new Error(
+      _companyMeta
+        ? `No Anthropic API key set for company "${_companyMeta.name}". Ask an admin to add one in Settings → Companies.`
+        : 'No Anthropic API key available. Ask an admin to assign you to a company with a key, or (superadmin only) set one in Settings → AI.'
+    );
     err.code = 'no-api-key';
     throw err;
   }
-  const model = getModel();
+  const model = getEffectiveModel();
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {

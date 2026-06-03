@@ -9,7 +9,7 @@ import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, auth } from '../services/firebase';
-import { suggestNextTask, getApiKey } from '../services/anthropic';
+import { suggestNextTask, getEffectiveApiKey as getApiKey } from '../services/anthropic';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';

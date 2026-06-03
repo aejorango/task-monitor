@@ -4,7 +4,17 @@ import { useState, useEffect } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
-import { addWorkspaceMember, removeWorkspaceMember, updateWorkspaceMemberRole } from '../services/firebase';
+import {
+  addWorkspaceMember,
+  removeWorkspaceMember,
+  updateWorkspaceMemberRole,
+  addCompany,
+  updateCompany,
+  softDeleteCompany,
+  setUserCompany,
+  subscribeToCompany,
+} from '../services/firebase';
+import { useAllCompanies } from '../hooks/useCompany';
 import WorkspaceEditor from './WorkspaceEditor';
 import { WorkspaceIcon } from './WorkspaceSwitcher';
 import {
@@ -214,54 +224,60 @@ export default function SettingsView() {
         </p>
       </section>
 
+      {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
 
-      <section className="review-section">
-        <h2 className="review-h2">AI (Anthropic API)</h2>
-        <p className="muted small" style={{ marginTop: 0 }}>
-          Used by the ✨ <strong>Generate tasks from description</strong> feature on each project.
-          Get a key at <a className="table-link" href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a>.
-          Stored only in this browser.
-        </p>
-        <div className="field">
-          <label className="label">Anthropic API key</label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input
-              type={aiKeyVisible ? 'text' : 'password'}
-              className="input"
-              value={anthroKey}
-              onChange={(e) => setAnthroKey(e.target.value)}
-              placeholder="sk-ant-…"
-              autoComplete="off"
-            />
-            <button type="button" className="btn btn-sm" onClick={() => setAiKeyVisible(!aiKeyVisible)}>
-              {aiKeyVisible ? 'Hide' : 'Show'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                setAnthropicKey(anthroKey.trim());
-                setAnthropicModel(anthroModel.trim() || 'claude-sonnet-4-5-20250929');
-                alert(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
-              }}
-            >Save</button>
-          </div>
-        </div>
-        <div className="field">
-          <label className="label">Model</label>
-          <input
-            type="text"
-            className="input"
-            value={anthroModel}
-            onChange={(e) => setAnthroModel(e.target.value)}
-            placeholder="claude-sonnet-4-5-20250929"
-          />
-          <p className="muted small" style={{ marginTop: 4 }}>
-            Default: <span className="mono">claude-sonnet-4-5-20250929</span>. Change if you want a different GenAI model.
+      {!isSuperadmin && <MyCompanyAiStatus profile={profile} />}
+
+      {isSuperadmin && (
+        <section className="review-section">
+          <h2 className="review-h2">AI (Anthropic API) — superadmin fallback</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Personal, browser-only key used <strong>only when no company key is
+            available</strong> (e.g. you haven't assigned yourself to a company yet).
+            All other users' AI calls are billed to their assigned company's key.
+            Get one at <a className="table-link" href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a>.
           </p>
-        </div>
-      </section>
+          <div className="field">
+            <label className="label">Anthropic API key</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type={aiKeyVisible ? 'text' : 'password'}
+                className="input"
+                value={anthroKey}
+                onChange={(e) => setAnthroKey(e.target.value)}
+                placeholder="sk-ant-…"
+                autoComplete="off"
+              />
+              <button type="button" className="btn btn-sm" onClick={() => setAiKeyVisible(!aiKeyVisible)}>
+                {aiKeyVisible ? 'Hide' : 'Show'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setAnthropicKey(anthroKey.trim());
+                  setAnthropicModel(anthroModel.trim() || 'claude-sonnet-4-5-20250929');
+                  alert(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
+                }}
+              >Save</button>
+            </div>
+          </div>
+          <div className="field">
+            <label className="label">Model</label>
+            <input
+              type="text"
+              className="input"
+              value={anthroModel}
+              onChange={(e) => setAnthroModel(e.target.value)}
+              placeholder="claude-sonnet-4-5-20250929"
+            />
+            <p className="muted small" style={{ marginTop: 4 }}>
+              Default: <span className="mono">claude-sonnet-4-5-20250929</span>. Change if you want a different GenAI model.
+            </p>
+          </div>
+        </section>
+      )}
 
       <section className="review-section">
         <h2 className="review-h2">Notifications</h2>
@@ -702,6 +718,16 @@ function UserManagementSection({ currentUid }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');  // 'pending' | 'approved' | 'rejected' | 'all'
   const [busyUid, setBusyUid] = useState(null);
+  // Companies are needed for the per-user "Company" dropdown. Superadmin
+  // only — and this section already only renders for superadmins.
+  const { companies } = useAllCompanies(true);
+
+  const handleAssignCompany = async (uid, companyId) => {
+    setBusyUid(uid);
+    try { await setUserCompany(uid, companyId || null); }
+    catch (err) { alert('Failed to assign company: ' + (err.message || err)); }
+    finally { setBusyUid(null); }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -792,6 +818,25 @@ function UserManagementSection({ currentUid }) {
                   )}
                 </div>
                 <div className="um-email">{u.email}</div>
+                {u.status === 'approved' && (
+                  <div className="um-company-row">
+                    <label className="small muted" style={{ marginRight: 6 }}>Company:</label>
+                    <select
+                      className="select select-sm"
+                      value={u.companyId || ''}
+                      disabled={busyUid === u.id}
+                      onChange={(e) => handleAssignCompany(u.id, e.target.value)}
+                      title="Assign this user to a company (their AI calls bill to that company's API key)"
+                    >
+                      <option value="">— Unassigned —</option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}{c.anthropicApiKey ? '' : ' (no key)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <span
                 className={`badge badge-soft-${
@@ -854,6 +899,244 @@ function UserManagementSection({ currentUid }) {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+// ─── Companies management (superadmin only) ─────────────────────────────────
+// One row per company. Inline-editable name + Anthropic API key + model.
+// Save commits to Firestore. Soft-delete (archives) on Delete.
+
+function CompaniesManagementSection() {
+  const { companies, loading } = useAllCompanies(true);
+  const { userId } = useAuth();
+  const [creatingName, setCreatingName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleCreate = async () => {
+    const name = creatingName.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      await addCompany(userId, { name });
+      setCreatingName('');
+    } catch (err) {
+      alert('Failed to create company: ' + (err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">Companies</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Each company has its own Anthropic API key. Users you assign to a
+        company use that company's key for all AI features — so you can
+        budget Anthropic token spend per company.
+      </p>
+
+      <div className="company-create-row">
+        <input
+          type="text"
+          className="input"
+          value={creatingName}
+          onChange={(e) => setCreatingName(e.target.value)}
+          placeholder="New company name…"
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+        />
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={handleCreate}
+          disabled={busy || !creatingName.trim()}
+        >
+          + Create company
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="muted small" style={{ marginTop: 12 }}>Loading companies…</p>
+      ) : companies.length === 0 ? (
+        <p className="muted small" style={{ marginTop: 12 }}>
+          No companies yet. Create one above, then assign users to it from User Management.
+        </p>
+      ) : (
+        <div className="company-list">
+          {companies.map((c) => <CompanyRow key={c.id} company={c} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CompanyRow({ company }) {
+  const [name, setName]     = useState(company.name || '');
+  const [apiKey, setApiKey] = useState(company.anthropicApiKey || '');
+  const [model, setModel]   = useState(company.anthropicModel  || 'claude-sonnet-4-5-20250929');
+  const [showKey, setShowKey] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+
+  // Resync local editable state with the prop when Firestore pushes an
+  // external change to this company doc. This is the controlled-input sync
+  // pattern — necessary because the same admin's *other* device could edit
+  // the same row concurrently. Linter flags setState-in-effect but it's
+  // intentional and self-contained here.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setName(company.name || ''); }, [company.name]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setApiKey(company.anthropicApiKey || ''); }, [company.anthropicApiKey]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setModel(company.anthropicModel || 'claude-sonnet-4-5-20250929'); }, [company.anthropicModel]);
+
+  const dirty =
+    name.trim() !== (company.name || '') ||
+    apiKey.trim() !== (company.anthropicApiKey || '') ||
+    model.trim() !== (company.anthropicModel || 'claude-sonnet-4-5-20250929');
+
+  const save = async () => {
+    if (!name.trim()) { alert('Company name cannot be empty.'); return; }
+    setBusy(true);
+    try {
+      await updateCompany(company.id, {
+        name: name.trim(),
+        anthropicApiKey: apiKey,
+        anthropicModel:  model || 'claude-sonnet-4-5-20250929',
+      });
+      setSavedAt(Date.now());
+      setTimeout(() => setSavedAt(null), 2500);
+    } catch (err) {
+      alert('Failed to save: ' + (err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(`Delete company "${company.name}"? Users assigned to it will fall back to unassigned. This is a soft delete.`)) return;
+    setBusy(true);
+    try { await softDeleteCompany(company.id); }
+    catch (err) { alert('Failed to delete: ' + (err.message || err)); }
+    finally { setBusy(false); }
+  };
+
+  const keyStatus = (company.anthropicApiKey || '').trim()
+    ? <span className="badge badge-soft-success">key set</span>
+    : <span className="badge badge-soft-warn">no key</span>;
+
+  return (
+    <div className="company-row">
+      <div className="company-row-head">
+        <input
+          type="text"
+          className="input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Company name"
+        />
+        {keyStatus}
+        <div style={{ flex: 1 }} />
+        {savedAt && <span className="badge badge-soft-success">✓ Saved</span>}
+        <button className="btn btn-sm" onClick={save} disabled={busy || !dirty}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button className="btn btn-sm btn-ghost link-danger" onClick={remove} disabled={busy}>
+          Delete
+        </button>
+      </div>
+
+      <div className="company-row-fields">
+        <div className="field">
+          <label className="label">Anthropic API key</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type={showKey ? 'text' : 'password'}
+              className="input"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-ant-…"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button type="button" className="btn btn-sm" onClick={() => setShowKey(!showKey)}>
+              {showKey ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Stored in Firestore; readable only by superadmins and members of this company.
+          </p>
+        </div>
+
+        <div className="field">
+          <label className="label">Model</label>
+          <input
+            type="text"
+            className="input"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="claude-sonnet-4-5-20250929"
+          />
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Default: <span className="mono">claude-sonnet-4-5-20250929</span>.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Non-admin AI status card ───────────────────────────────────────────────
+// Replaces the AI section for regular users. Tells them, plainly, whose
+// budget they're using and what to do if AI features fail.
+
+function MyCompanyAiStatus({ profile }) {
+  const companyId = profile?.companyId || null;
+  // Read from the companies list to show the name. Non-superadmin can read
+  // exactly their own company via the security rule (isMyCompany). We use
+  // the single-doc subscription via subscribeToCompany.
+  const [rawCompany, setCompany] = useState(null);
+  // Derive: if no companyId, force null so stale data never leaks through
+  // (avoids a synchronous setState in the effect body).
+  const company = companyId ? rawCompany : null;
+
+  useEffect(() => {
+    if (!companyId) return;
+    const unsub = subscribeToCompany(companyId, setCompany);
+    return () => unsub();
+  }, [companyId]);
+
+  if (!companyId) {
+    return (
+      <section className="review-section">
+        <h2 className="review-h2">AI access</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          You haven't been assigned to a company yet, so the AI features
+          (✨ task generation, subtask suggestions, weekly summaries) are
+          disabled. Ask an admin to assign you to a company in User Management.
+        </p>
+      </section>
+    );
+  }
+
+  const hasKey = !!(company?.anthropicApiKey || '').trim();
+  return (
+    <section className="review-section">
+      <h2 className="review-h2">AI access</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Your AI usage is billed to <strong>{company?.name || 'your company'}</strong>'s
+        Anthropic API key.
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className={`badge badge-soft-${hasKey ? 'success' : 'warn'}`}>
+          {hasKey ? 'AI enabled' : 'No API key on company'}
+        </span>
+        {!hasKey && (
+          <span className="muted small">
+            Ask your admin to add a key to {company?.name || 'your company'} so AI features start working.
+          </span>
+        )}
+      </div>
     </section>
   );
 }

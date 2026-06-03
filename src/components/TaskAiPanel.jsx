@@ -6,7 +6,7 @@ import { useState } from 'react';
 import {
   generateSubtasks,
   generateClaudePrompt,
-  getApiKey,
+  getEffectiveApiKey as getApiKey,
 } from '../services/anthropic';
 import Markdown from './Markdown';
 
