@@ -4359,7 +4359,17 @@ a:hover { text-decoration: underline; }
   text-align: left;
   color: var(--c-text);
 }
-.htu-concept-icon { font-size: 18px; }
+.htu-concept-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
 .htu-concept-name { font-size: 15px; font-weight: 700; flex: 1; }
 .htu-concept-toggle { color: var(--c-text-3); font-size: 12px; }
 .htu-concept-oneline {
@@ -4397,6 +4407,9 @@ a:hover { text-decoration: underline; }
   color: var(--c-text-3);
   margin-bottom: 4px;
 }
+.htu-pane-label svg { vertical-align: -2px; margin-right: 2px; }
+.htu-pane-label-do   { color: var(--c-emerald, #10b981); }
+.htu-pane-label-dont { color: var(--c-danger,  #ef4444); }
 .htu-pane-do    { border-left: 3px solid var(--c-emerald, #10b981); }
 .htu-pane-dont  { border-left: 3px solid var(--c-danger,  #ef4444); }
 
@@ -4594,6 +4607,9 @@ a:hover { text-decoration: underline; }
   color: var(--c-text);
   margin-bottom: 6px;
 }
+.htu-ap-icon { vertical-align: -3px; margin-right: 4px; }
+.htu-ap-icon-bad  { color: var(--c-danger,  #ef4444); }
+.htu-ap-icon-good { color: var(--c-emerald, #10b981); }
 .htu-antipattern-why {
   font-size: 13px;
   color: var(--c-text-2);

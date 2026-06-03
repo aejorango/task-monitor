@@ -4,6 +4,122 @@
 
 import { useState } from 'react';
 
+// ─── Icon set ────────────────────────────────────────────────
+// Inline stroke SVGs (Lucide-style) so the guide matches the app's
+// monochrome, professional aesthetic instead of colorful emoji.
+// Every glyph inherits `currentColor`, so theming is automatic.
+
+const ICON_PATHS = {
+  workspace: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="1.5" />
+      <path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" />
+    </>
+  ),
+  project: (
+    <>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </>
+  ),
+  phase: (
+    <>
+      <path d="m12 2 9 5-9 5-9-5 9-5z" />
+      <path d="m3 12 9 5 9-5" />
+      <path d="m3 17 9 5 9-5" />
+    </>
+  ),
+  task: (
+    <>
+      <path d="m9 11 3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </>
+  ),
+  subtask: (
+    <>
+      <path d="m3 17 2 2 4-4" />
+      <path d="m3 7 2 2 4-4" />
+      <path d="M13 6h8" />
+      <path d="M13 12h8" />
+      <path d="M13 18h8" />
+    </>
+  ),
+  activity: (
+    <>
+      <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z" />
+      <circle cx="7.5" cy="7.5" r="1.2" />
+    </>
+  ),
+  dependency: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+      <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+    </>
+  ),
+  recurring: (
+    <>
+      <path d="m17 2 4 4-4 4" />
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="m7 22-4-4 4-4" />
+      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </>
+  ),
+  template: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M12 11h4M12 16h4M8 11h.01M8 16h.01" />
+    </>
+  ),
+  check: <path d="M20 6 9 17l-5-5" />,
+  ban: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m4.9 4.9 14.2 14.2" />
+    </>
+  ),
+  xCircle: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m15 9-6 6M9 9l6 6" />
+    </>
+  ),
+  checkCircle: (
+    <>
+      <path d="M21.8 10A10 10 0 1 1 17 3.3" />
+      <path d="m9 11 3 3L22 4" />
+    </>
+  ),
+};
+
+function Icon({ name, size = 18, className }) {
+  const path = ICON_PATHS[name];
+  if (!path) return null;
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {path}
+    </svg>
+  );
+}
+
 const SECTIONS = [
   { id: 'overview',    label: 'Overview' },
   { id: 'hierarchy',   label: 'The Hierarchy' },
@@ -203,7 +319,7 @@ function HierarchyArrow() {
 const CONCEPTS = [
   {
     name: 'Workspace',
-    icon: '🏢',
+    icon: 'workspace',
     oneLine: 'A separate world. Members of a workspace share everything inside it; people outside see nothing.',
     useWhen: [
       'You need a hard boundary between audiences (e.g. work vs. personal).',
@@ -224,7 +340,7 @@ const CONCEPTS = [
   },
   {
     name: 'Project',
-    icon: '📦',
+    icon: 'project',
     oneLine: 'A real-world initiative with an outcome — something you can declare "done" or "shipped".',
     useWhen: [
       'There\'s a deliverable, launch, or measurable end state.',
@@ -247,7 +363,7 @@ const CONCEPTS = [
   },
   {
     name: 'Phase',
-    icon: '📐',
+    icon: 'phase',
     oneLine: 'A stage a Project moves through. Use phases when the project has clearly different "modes" of work.',
     useWhen: [
       'The project has distinct stages (Discovery → Build → Launch).',
@@ -269,7 +385,7 @@ const CONCEPTS = [
   },
   {
     name: 'Task',
-    icon: '✅',
+    icon: 'task',
     oneLine: 'A unit of work that one person owns end-to-end. Has a status (todo · doing · done) and ideally a due date.',
     useWhen: [
       'Someone has to actively work on it for between ~15 minutes and a few days.',
@@ -292,7 +408,7 @@ const CONCEPTS = [
   },
   {
     name: 'Subtask',
-    icon: '☑️',
+    icon: 'subtask',
     oneLine: 'A checklist item inside a task. Cheap, lightweight, no due date of its own.',
     useWhen: [
       'A task has 2–10 small steps you want to track without spawning a whole new task.',
@@ -312,7 +428,7 @@ const CONCEPTS = [
   },
   {
     name: 'Activity',
-    icon: '📝',
+    icon: 'activity',
     oneLine: 'A time-stamped record of work performed against a task. This is your timesheet + journal in one.',
     useWhen: [
       'You spent meaningful time on a task and want to log it.',
@@ -333,7 +449,7 @@ const CONCEPTS = [
   },
   {
     name: 'Tag',
-    icon: '🏷️',
+    icon: 'tag',
     oneLine: 'A cross-cutting label that ignores project boundaries. Slice the universe sideways.',
     useWhen: [
       'You want to filter across many projects (e.g. all <code>#blocker</code> tasks, all <code>#client-x</code> work).',
@@ -352,7 +468,7 @@ const CONCEPTS = [
   },
   {
     name: 'Dependency',
-    icon: '🔗',
+    icon: 'dependency',
     oneLine: 'A link saying "Task B can\'t start until Task A is done."',
     useWhen: [
       'There\'s a real ordering — B is blocked on A.',
@@ -371,7 +487,7 @@ const CONCEPTS = [
   },
   {
     name: 'Recurring Task',
-    icon: '🔁',
+    icon: 'recurring',
     oneLine: 'A task that respawns itself on a schedule when you mark it done.',
     useWhen: [
       'The work happens on a cadence (weekly review, monthly invoice, daily standup notes).',
@@ -389,7 +505,7 @@ const CONCEPTS = [
   },
   {
     name: 'Template',
-    icon: '📋',
+    icon: 'template',
     oneLine: 'A reusable blueprint for a Task or a whole Project, so you don\'t rebuild the same shape every time.',
     useWhen: [
       'You\'ve done this kind of work 3+ times.',
@@ -428,7 +544,7 @@ function ConceptCard({ concept }) {
   return (
     <div className={`htu-concept-card ${open ? 'open' : ''}`}>
       <button className="htu-concept-header" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="htu-concept-icon">{concept.icon}</span>
+        <span className="htu-concept-icon"><Icon name={concept.icon} size={17} /></span>
         <span className="htu-concept-name">{concept.name}</span>
         <span className="htu-concept-toggle">{open ? '▾' : '▸'}</span>
       </button>
@@ -438,13 +554,13 @@ function ConceptCard({ concept }) {
         <div className="htu-concept-body">
           <div className="htu-twocol">
             <div className="htu-twocol-pane htu-pane-do">
-              <div className="htu-pane-label">✅ Use it when…</div>
+              <div className="htu-pane-label htu-pane-label-do"><Icon name="check" size={13} /> Use it when…</div>
               <ul className="htu-list">
                 {concept.useWhen.map((u, i) => <li key={i}>{u}</li>)}
               </ul>
             </div>
             <div className="htu-twocol-pane htu-pane-dont">
-              <div className="htu-pane-label">🚫 Don't use it when…</div>
+              <div className="htu-pane-label htu-pane-label-dont"><Icon name="ban" size={13} /> Don't use it when…</div>
               <ul className="htu-list">
                 {concept.dontUseWhen.map((u, i) => <li key={i}>{u}</li>)}
               </ul>
@@ -857,9 +973,9 @@ function AntiPatterns() {
       <div className="htu-antipattern-list">
         {ANTIPATTERNS.map((a, i) => (
           <div key={i} className="htu-antipattern">
-            <div className="htu-antipattern-bad">❌ <strong>{a.bad}</strong></div>
+            <div className="htu-antipattern-bad"><Icon name="xCircle" size={15} className="htu-ap-icon htu-ap-icon-bad" /> <strong>{a.bad}</strong></div>
             <div className="htu-antipattern-why"><strong>Why it bites:</strong> {a.why}</div>
-            <div className="htu-antipattern-instead">✅ <strong>Instead:</strong> {a.instead}</div>
+            <div className="htu-antipattern-instead"><Icon name="checkCircle" size={15} className="htu-ap-icon htu-ap-icon-good" /> <strong>Instead:</strong> {a.instead}</div>
           </div>
         ))}
       </div>
