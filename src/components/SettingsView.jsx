@@ -219,6 +219,26 @@ export default function SettingsView() {
             <button className="btn" onClick={handleSignOut}>Sign out</button>
           </div>
         </div>
+
+        {userId && (
+          <div className="field" style={{ marginTop: 12 }}>
+            <label className="label">Your Account ID</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                className="input input-sm mono"
+                value={userId}
+                readOnly
+                onFocus={(e) => e.target.select()}
+                style={{ flex: 1 }}
+              />
+              <CopyButton value={userId} />
+            </div>
+            <p className="muted small" style={{ marginTop: 6 }}>
+              Share this ID with a workspace owner so they can add you as a member.
+            </p>
+          </div>
+        )}
+
         <p className="muted small" style={{ marginTop: 8 }}>
           Your data syncs across any device where you sign in with this Google account.
         </p>
@@ -378,6 +398,25 @@ export default function SettingsView() {
         </p>
       </section>
     </>
+  );
+}
+
+// Small copy-to-clipboard button with transient "Copied" feedback.
+function CopyButton({ value, label = '⎘ Copy' }) {
+  const [ok, setOk] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setOk(true);
+      setTimeout(() => setOk(false), 1500);
+    } catch (err) {
+      console.error('clipboard copy failed', err);
+    }
+  };
+  return (
+    <button type="button" className="btn btn-sm" onClick={copy} style={{ whiteSpace: 'nowrap' }}>
+      {ok ? '✓ Copied' : label}
+    </button>
   );
 }
 
@@ -621,7 +660,9 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
     finally { setBusy(false); }
   };
   const remove = async (uid) => {
-    if (!confirm(`Remove member ${uid}?`)) return;
+    const prof = workspace.memberProfiles?.[uid];
+    const who = prof?.displayName || prof?.email || uid;
+    if (!confirm(`Remove member ${who}?`)) return;
     setBusy(true);
     try { await removeWorkspaceMember(workspace, uid); }
     catch (err) { console.error(err); alert('Could not remove member: ' + (err.message || '')); }
@@ -639,21 +680,36 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
         <h3 className="modal-title">{workspace.name} — members</h3>
         <p className="modal-sub">
-          Members can see and edit everything in this workspace. Owners can add/remove members and change roles. Email invites are coming; for now, share by Firebase UID.
+          Members can see and edit everything in this workspace. Owners can add/remove members and change roles. Ask a member for their Account ID (Settings → Account) and add them below.
         </p>
 
         <div className="ws-members-list">
           {(workspace.members || []).map((uid) => {
             const role = workspace.acl?.[uid] || 'editor';
             const isMe = uid === currentUid;
+            const prof = workspace.memberProfiles?.[uid];
+            const primary = prof?.displayName || prof?.email || `${uid.slice(0, 8)}…`;
+            const secondary = prof?.displayName ? prof?.email : null;
             return (
               <div key={uid} className="ws-member-row">
-                <span className="account-avatar fallback" style={{ width: 28, height: 28, fontSize: 12 }}>
-                  {uid.slice(0, 1).toUpperCase()}
-                </span>
+                {prof?.photoURL ? (
+                  <img src={prof.photoURL} alt="" className="account-avatar" style={{ width: 28, height: 28 }} />
+                ) : (
+                  <span className="account-avatar fallback" style={{ width: 28, height: 28, fontSize: 12 }}>
+                    {(primary[0] || '?').toUpperCase()}
+                  </span>
+                )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="mono small" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {uid}{isMe && <span className="muted"> (you)</span>}
+                  <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {primary}{isMe && <span className="muted"> (you)</span>}
+                  </div>
+                  {secondary && (
+                    <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {secondary}
+                    </div>
+                  )}
+                  <div className="mono muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {uid}
                   </div>
                 </div>
                 {isAdmin && role !== 'owner' ? (
@@ -680,13 +736,13 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
 
         {isAdmin && (
           <div className="field" style={{ marginTop: 12 }}>
-            <label className="label">Add member by UID</label>
+            <label className="label">Add member by Account ID</label>
             <div style={{ display: 'flex', gap: 6 }}>
               <input
-                className="input input-sm"
+                className="input input-sm mono"
                 value={newUid}
                 onChange={(e) => setNewUid(e.target.value)}
-                placeholder="Firebase user ID"
+                placeholder="Account ID"
                 style={{ flex: 1 }}
               />
               <select className="select select-sm" value={newRole} onChange={(e) => setNewRole(e.target.value)} style={{ width: 110 }}>
@@ -697,7 +753,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
               <button className="btn btn-sm" onClick={add} disabled={busy || !newUid.trim()}>Add</button>
             </div>
             <p className="muted small" style={{ marginTop: 6 }}>
-              The user must already have a Firebase account. They can find their UID in their <em>Settings → Account</em> page.
+              The user must have signed in at least once. They can copy their Account ID from their <em>Settings → Account</em> page. Their name and email will appear here once they next open the app.
             </p>
           </div>
         )}
