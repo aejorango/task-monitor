@@ -6,19 +6,20 @@ import { useActiveWorkspaceId, setActiveWorkspaceId, useWorkspaces } from '../ho
 import { useOnline } from '../hooks/useOnline';
 import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
+import Icon from './Icon';
 
 const VIEWS = [
-  { id: 'dashboard',      label: 'Dashboard',       icon: '◰' },
-  { id: 'projects',       label: 'Projects',         icon: '◉' },
-  { id: 'board',          label: 'Board',            icon: '▦' },
-  { id: 'calendar',       label: 'Calendar',         icon: '▤' },
-  { id: 'gantt',          label: 'Gantt',            icon: '▭' },
-  { id: 'table',          label: 'Activity Log',     icon: '☰' },
-  { id: 'work-performed', label: 'Work Performed',   icon: '⏱' },
-  { id: 'review',         label: 'Review',           icon: '◇' },
-  { id: 'analytics',      label: 'Analytics',        icon: '◢' },
-  { id: 'how-to-use',     label: 'How to Use',       icon: '?' },
-  { id: 'settings',       label: 'Settings',         icon: '⚙' },
+  { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
+  { id: 'projects',       label: 'Projects',         icon: 'projects' },
+  { id: 'board',          label: 'Board',            icon: 'board' },
+  { id: 'calendar',       label: 'Calendar',         icon: 'calendar' },
+  { id: 'gantt',          label: 'Gantt',            icon: 'gantt' },
+  { id: 'table',          label: 'Activity Log',     icon: 'list' },
+  { id: 'work-performed', label: 'Work Performed',   icon: 'clock' },
+  { id: 'review',         label: 'Review',           icon: 'review' },
+  { id: 'analytics',      label: 'Analytics',        icon: 'analytics' },
+  { id: 'how-to-use',     label: 'How to Use',       icon: 'help' },
+  { id: 'settings',       label: 'Settings',         icon: 'settings' },
 ];
 
 function parseHash() {
@@ -125,7 +126,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
               className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
               onClick={() => navigateAndClose({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
             >
-              <span className="sidebar-link-icon">{v.icon}</span>
+              <span className="sidebar-link-icon"><Icon name={v.icon} size={17} /></span>
               {v.label}
             </button>
           ))}
@@ -241,7 +242,7 @@ function SidebarSavedViews({ route, navigate }) {
             })}
             title={`${v.view}${v.tagFilter ? ` · #${v.tagFilter}` : ''}${v.statusFilter ? ` · ${v.statusFilter}` : ''}`}
           >
-            <span className="sidebar-link-icon">{v.icon || '★'}</span>
+            <span className="sidebar-link-icon">{v.icon || <Icon name="star" size={16} />}</span>
             <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {v.name}
             </span>
@@ -506,11 +507,11 @@ function GlobalSearch({ projects, navigate }) {
 // ─── Bottom nav bar (mobile only) ─────────────────────────
 
 const BOTTOM_TABS = [
-  { id: 'dashboard', label: 'Home',     icon: '◰' },
-  { id: 'board',     label: 'Board',    icon: '▦' },
-  { id: 'projects',  label: 'Projects', icon: '◉' },
-  { id: 'table',     label: 'Log',      icon: '☰' },
-  { id: 'settings',  label: 'Settings', icon: '⚙' },
+  { id: 'dashboard', label: 'Home',     icon: 'dashboard' },
+  { id: 'board',     label: 'Board',    icon: 'board' },
+  { id: 'projects',  label: 'Projects', icon: 'projects' },
+  { id: 'table',     label: 'Log',      icon: 'list' },
+  { id: 'settings',  label: 'Settings', icon: 'settings' },
 ];
 
 function BottomNav({ route, navigate }) {
@@ -523,7 +524,7 @@ function BottomNav({ route, navigate }) {
           onClick={() => navigate({ view: tab.id, savedViewId: null, tagFilter: null, statusFilter: null })}
           aria-label={tab.label}
         >
-          <span className="bottom-nav-icon">{tab.icon}</span>
+          <span className="bottom-nav-icon"><Icon name={tab.icon} size={22} /></span>
           <span>{tab.label}</span>
         </button>
       ))}
