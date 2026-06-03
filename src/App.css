@@ -3616,7 +3616,11 @@ a:hover { text-decoration: underline; }
 /* gridTemplateColumns is set inline: 140px repeat(N, minmax(220px, 1fr)) */
 .wp-swimlane {
   display: grid;
-  min-width: 360px;
+  /* Grow to fit every lane so the parent (.wp-swimlane-scroll) can scroll
+   * horizontally when there are more projects than fit the viewport.
+   * With few lanes the box still fills the container and the 1fr tracks
+   * stretch; with many lanes it overflows and becomes scrollable. */
+  min-width: max-content;
   border: 1.5px solid var(--c-border);
   border-radius: var(--r-xl);
   overflow: hidden;
