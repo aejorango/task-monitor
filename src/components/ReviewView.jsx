@@ -277,9 +277,9 @@ function ReviewAiPanel({ activities, tasks, projects }) {
       <section className="review-section">
         <h2 className="review-h2">✨ AI assist</h2>
         <p className="muted small">
-          Set your Anthropic API key in <strong>Settings → AI</strong> to enable:
-          summarize this period, suggest what to tackle today, or draft a status
-          update for a teammate.
+          The AI feature is not available on your end. To enable, contact your
+          company admin or reach out to{' '}
+          <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
         </p>
       </section>
     );

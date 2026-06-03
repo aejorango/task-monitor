@@ -23,11 +23,12 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
     return (
       <div className="auth-error">
         <div className="auth-error-head">
-          <span className="badge badge-soft-warn">API key required</span>
+          <span className="badge badge-soft-warn">AI not available</span>
         </div>
         <p className="auth-error-msg">
-          Set your Anthropic API key in <strong>Settings → AI (Anthropic API)</strong> to use AI on this task.
-          Get one at <a className="table-link" href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a>.
+          The AI feature is not available on your end. To enable it, contact
+          your company admin or reach out to{' '}
+          <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
         </p>
       </div>
     );

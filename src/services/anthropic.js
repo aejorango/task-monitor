@@ -83,11 +83,11 @@ export async function callClaude({ system, user, maxTokens = 2048 }) {
     let msg;
     if (_companyMeta) {
       // Assigned to a company, but the company has no key set.
-      msg = `AI is disabled — your company "${_companyMeta.name}" doesn't have an Anthropic API key set. Ask an admin to add one in Settings → Companies.`;
+      msg = `The AI feature is not available on your end — "${_companyMeta.name}" hasn't enabled it yet. Contact your company admin or reach out to hello@blueinnovation.ph to enable.`;
     } else if (_userRole === 'superadmin') {
-      msg = 'No Anthropic API key available. Assign yourself to a company with a key, or set a personal fallback in Settings → AI.';
+      msg = 'No AI key available. Assign yourself to a company with a key, or set a personal fallback in Settings → AI.';
     } else {
-      msg = "AI is disabled — you haven't been assigned to a company yet. Ask an admin to assign you in Settings → User Management.";
+      msg = 'The AI feature is not available on your end. To enable, contact your company admin or reach out to hello@blueinnovation.ph.';
     }
     const err = new Error(msg);
     err.code = 'no-api-key';
@@ -111,7 +111,7 @@ export async function callClaude({ system, user, maxTokens = 2048 }) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    const err = new Error(`Anthropic API error ${res.status}: ${text.slice(0, 400)}`);
+    const err = new Error(`AI API error ${res.status}: ${text.slice(0, 400)}`);
     err.code = `http-${res.status}`;
     throw err;
   }

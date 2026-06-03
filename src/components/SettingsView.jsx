@@ -251,22 +251,22 @@ export default function SettingsView() {
 
       {isSuperadmin && (
         <section className="review-section">
-          <h2 className="review-h2">AI (Anthropic API) — superadmin fallback</h2>
+          <h2 className="review-h2">AI — superadmin fallback</h2>
           <p className="muted small" style={{ marginTop: 0 }}>
             Personal, browser-only key used <strong>only when no company key is
             available</strong> (e.g. you haven't assigned yourself to a company yet).
             All other users' AI calls are billed to their assigned company's key.
-            Get one at <a className="table-link" href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a>.
+            Need a key? Contact <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
           </p>
           <div className="field">
-            <label className="label">Anthropic API key</label>
+            <label className="label">AI API key</label>
             <div style={{ display: 'flex', gap: 6 }}>
               <input
                 type={aiKeyVisible ? 'text' : 'password'}
                 className="input"
                 value={anthroKey}
                 onChange={(e) => setAnthroKey(e.target.value)}
-                placeholder="sk-ant-…"
+                placeholder="Paste API key…"
                 autoComplete="off"
               />
               <button type="button" className="btn btn-sm" onClick={() => setAiKeyVisible(!aiKeyVisible)}>
@@ -290,10 +290,10 @@ export default function SettingsView() {
               className="input"
               value={anthroModel}
               onChange={(e) => setAnthroModel(e.target.value)}
-              placeholder="claude-sonnet-4-5-20250929"
+              placeholder="Leave blank for default"
             />
             <p className="muted small" style={{ marginTop: 4 }}>
-              Default: <span className="mono">claude-sonnet-4-5-20250929</span>. Change if you want a different GenAI model.
+              Leave blank to use the default model. Override only if instructed.
             </p>
           </div>
         </section>
@@ -879,7 +879,7 @@ function UserManagementSection({ currentUid }) {
                   const aiBlocked = !u.companyId || !(assignedCompany?.anthropicApiKey || '').trim();
                   const aiBlockedReason = !u.companyId
                     ? 'Unassigned — AI disabled for this user.'
-                    : `Company "${assignedCompany?.name}" has no Anthropic key — AI disabled for this user.`;
+                    : `Company "${assignedCompany?.name}" has no AI key — AI disabled for this user.`;
                   return (
                     <div className="um-company-row">
                       <label className="small muted" style={{ marginRight: 6 }}>Company:</label>
@@ -999,9 +999,10 @@ function CompaniesManagementSection() {
     <section className="review-section">
       <h2 className="review-h2">Companies</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Each company has its own Anthropic API key. Users you assign to a
+        Each company has its own AI API key. Users you assign to a
         company use that company's key for all AI features — so you can
-        budget Anthropic token spend per company.
+        budget AI token spend per company. Need a key? Contact{' '}
+        <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
       </p>
 
       <div className="company-create-row">
@@ -1116,14 +1117,14 @@ function CompanyRow({ company }) {
 
       <div className="company-row-fields">
         <div className="field">
-          <label className="label">Anthropic API key</label>
+          <label className="label">AI API key</label>
           <div style={{ display: 'flex', gap: 6 }}>
             <input
               type={showKey ? 'text' : 'password'}
               className="input"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-ant-…"
+              placeholder="Paste API key…"
               autoComplete="off"
               spellCheck={false}
             />
@@ -1137,16 +1138,16 @@ function CompanyRow({ company }) {
         </div>
 
         <div className="field">
-          <label className="label">Model</label>
+          <label className="label">Model <span className="muted small">(optional)</span></label>
           <input
             type="text"
             className="input"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="claude-sonnet-4-5-20250929"
+            placeholder="Leave blank for default"
           />
           <p className="muted small" style={{ marginTop: 4 }}>
-            Default: <span className="mono">claude-sonnet-4-5-20250929</span>.
+            Leave blank to use the default model. Override only if instructed.
           </p>
         </div>
       </div>
@@ -1179,9 +1180,9 @@ function MyCompanyAiStatus({ profile }) {
       <section className="review-section">
         <h2 className="review-h2">AI access</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          You haven't been assigned to a company yet, so the AI features
-          (✨ task generation, subtask suggestions, weekly summaries) are
-          disabled. Ask an admin to assign you to a company in User Management.
+          The AI feature is not available on your end. To enable it, contact
+          your company admin or reach out to{' '}
+          <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
         </p>
       </section>
     );
@@ -1191,20 +1192,27 @@ function MyCompanyAiStatus({ profile }) {
   return (
     <section className="review-section">
       <h2 className="review-h2">AI access</h2>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Your AI usage is billed to <strong>{company?.name || 'your company'}</strong>'s
-        Anthropic API key.
-      </p>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className={`badge badge-soft-${hasKey ? 'success' : 'warn'}`}>
-          {hasKey ? 'AI enabled' : 'No API key on company'}
-        </span>
-        {!hasKey && (
-          <span className="muted small">
-            Ask your admin to add a key to {company?.name || 'your company'} so AI features start working.
-          </span>
-        )}
-      </div>
+      {hasKey ? (
+        <>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Your AI usage is provided by <strong>{company?.name || 'your company'}</strong>.
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="badge badge-soft-success">AI enabled</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            The AI feature is not available on your end. To enable it, contact
+            your company admin or reach out to{' '}
+            <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="badge badge-soft-warn">AI not available</span>
+          </div>
+        </>
+      )}
     </section>
   );
 }

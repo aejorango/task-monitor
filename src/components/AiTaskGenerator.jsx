@@ -173,11 +173,12 @@ export default function AiTaskGenerator({ project, onClose }) {
         {!apiKey && (
           <div className="auth-error">
             <div className="auth-error-head">
-              <span className="badge badge-soft-warn">API key required</span>
+              <span className="badge badge-soft-warn">AI not available</span>
             </div>
             <p className="auth-error-msg">
-              Set your Anthropic API key in Settings → AI before generating tasks.
-              Get one at <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a>.
+              The AI feature is not available on your end. To enable it,
+              contact your company admin or reach out to{' '}
+              <a href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
             </p>
           </div>
         )}
