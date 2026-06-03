@@ -2,6 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Security hardening for strict corporate web proxies. Static hosts
+         (GitHub Pages) can't set HTTP response headers, so these meta tags are
+         the equivalent. `upgrade-insecure-requests` forces every sub-resource
+         to HTTPS (no mixed content) without restricting any origins, so it's
+         safe for Firebase / Google sign-in / Anthropic API calls. -->
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/webp" href="blueinnov_logo.webp" />
     <link rel="shortcut icon" type="image/webp" href="blueinnov_logo.webp" />
     <link rel="manifest" href="manifest.webmanifest" />
@@ -9,7 +16,7 @@
     <link rel="apple-touch-icon" href="blueinnov_logo.webp" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Task Monitor · Blue Innovation</title>
-    <script type="module" crossorigin src="/assets/index-BQTIvdDq.js"></script>
+    <script type="module" crossorigin src="/assets/index-B02rIxBA.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-DmTE_RL6.css">
   </head>
   <body>
