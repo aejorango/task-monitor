@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 const STORAGE_KEY = 'task-monitor.settings.v1';
 
 const DEFAULTS = {
-  theme:           'system',  // 'system' | 'light' | 'dark'
+  theme:           'light',   // 'system' | 'light' | 'dark'
   defaultProject:  null,      // projectId to preselect in quick-add
   weekStart:       1,         // 0=Sun, 1=Mon
 };
