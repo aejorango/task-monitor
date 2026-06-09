@@ -405,11 +405,18 @@ function ProjectActivityLogModal({ project, onClose }) {
   const rows = activities
     .filter((a) => a.projectId === project.id)
     .map((a) => {
-      const phase = project.phases?.find((p) => p.id === a.phaseId);
+      const liveTask = taskById[a.taskId];
+      // Prefer the task's CURRENT phase so re-assigning a task to a new or
+      // edited phase is reflected here. The activity's denormalized phaseId
+      // is only a snapshot from log-time; fall back to it for tasks that have
+      // since moved out of this project or been deleted.
+      const phase =
+        (liveTask && project.phases?.find((p) => p.id === liveTask.phaseId)) ||
+        project.phases?.find((p) => p.id === a.phaseId);
       return {
         ...a,
         _phase: phase?.name || '—',
-        _task:  a.taskTitle || taskById[a.taskId]?.title || '—',
+        _task:  a.taskTitle || liveTask?.title || '—',
         _outputs: a.attachments || [],
       };
     });
