@@ -106,8 +106,11 @@ export default function WBSView({ projectFilter }) {
 
   // ── Build the tree: project → phase groups → tasks ───────────────────────
   const tree = useMemo(() => {
+    const sortTasks = (arr) =>
+      [...arr].sort((a, b) => (taskStart(a) || '9999').localeCompare(taskStart(b) || '9999'));
+
     const visible = projects.filter((p) => projectFilter === 'all' || p.id === projectFilter);
-    return visible.map((p) => {
+    const blocks = visible.map((p) => {
       const pTasks = tasks.filter((t) => t.projectId === p.id);
       const phases = [...(p.phases || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       const byPhase = {};
@@ -115,8 +118,6 @@ export default function WBSView({ projectFilter }) {
         const key = t.phaseId && phases.some((ph) => ph.id === t.phaseId) ? t.phaseId : '__unphased__';
         (byPhase[key] = byPhase[key] || []).push(t);
       });
-      const sortTasks = (arr) =>
-        [...arr].sort((a, b) => (taskStart(a) || '9999').localeCompare(taskStart(b) || '9999'));
       const groups = [
         ...phases.map((ph) => ({ id: ph.id, name: ph.name, phase: ph, tasks: sortTasks(byPhase[ph.id] || []) })),
         ...((byPhase['__unphased__'] || []).length > 0
@@ -125,6 +126,23 @@ export default function WBSView({ projectFilter }) {
       ];
       return { project: p, tasks: pTasks, groups };
     });
+
+    // Orphan bucket: tasks with no project, or whose project is archived,
+    // deleted, or otherwise not in the visible list. Without this they would
+    // silently disappear from the WBS.
+    if (projectFilter === 'all') {
+      const knownIds = new Set(projects.map((p) => p.id));
+      const orphans = tasks.filter((t) => !t.projectId || !knownIds.has(t.projectId));
+      if (orphans.length > 0) {
+        blocks.push({
+          project: { id: '__none__', name: 'Unassigned / no project', color: '#94a3b8', phases: [] },
+          tasks: orphans,
+          groups: [{ id: '__unphased__', name: 'Unphased', phase: null, tasks: sortTasks(orphans) }],
+          isOrphan: true,
+        });
+      }
+    }
+    return blocks;
   }, [projects, tasks, projectFilter]);
 
   // ── Timeline range (same approach as Gantt) ───────────────────────────────
@@ -216,16 +234,16 @@ export default function WBSView({ projectFilter }) {
           <p>No projects yet. Create one in the Projects view.</p>
         </div>
       ) : (
-        <div className="wbs">
+        <div className="wbsx" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px` }}>
           {/* Column headers */}
-          <div className="wbs-row wbs-header" style={{ gridTemplateColumns: gridCols }}>
-            <div className="wbs-cell wbs-name-cell">Project / Phase / Task</div>
-            <div className="wbs-cell num">Days</div>
-            <div className="wbs-cell">Start</div>
-            <div className="wbs-cell">End</div>
-            <div className="wbs-cell">Resource</div>
-            <div className="wbs-cell">% Done</div>
-            <div className="wbs-track" style={{ display: 'grid', gridTemplateColumns: `repeat(${range.total}, ${zoomConf.dayWidth}px)` }}>
+          <div className="wbsx-row wbsx-header" style={{ gridTemplateColumns: gridCols }}>
+            <div className="wbsx-cell wbsx-name-cell">Project / Phase / Task</div>
+            <div className="wbsx-cell num">Days</div>
+            <div className="wbsx-cell">Start</div>
+            <div className="wbsx-cell">End</div>
+            <div className="wbsx-cell">Resource</div>
+            <div className="wbsx-cell">% Done</div>
+            <div className="wbsx-track" style={{ display: 'grid', gridTemplateColumns: `repeat(${range.total}, ${zoomConf.dayWidth}px)` }}>
               {dayHeaders.map((h, i) => (
                 <div key={i} className={`gantt-day-header ${h.isWeekend ? 'weekend' : ''} ${h.isToday ? 'today' : ''}`}>
                   {h.label}
@@ -234,7 +252,7 @@ export default function WBSView({ projectFilter }) {
             </div>
           </div>
 
-          {tree.map(({ project, tasks: pTasks, groups }) => {
+          {tree.map(({ project, tasks: pTasks, groups, isOrphan }) => {
             const pKey = `p:${project.id}`;
             const pCollapsed = collapsed.has(pKey);
             const pSpan = spanOf(pTasks);
@@ -246,6 +264,7 @@ export default function WBSView({ projectFilter }) {
                 project={project}
                 pTasks={pTasks}
                 groups={groups}
+                isOrphan={!!isOrphan}
                 gridCols={gridCols}
                 pCollapsed={pCollapsed}
                 collapsed={collapsed}
@@ -287,42 +306,48 @@ export default function WBSView({ projectFilter }) {
 // ─── One project's block of rows ────────────────────────────────────────────
 
 function ProjectBlock({
-  project, pTasks, groups, gridCols, pCollapsed, collapsed, toggle, pKey,
+  project, pTasks, groups, isOrphan, gridCols, pCollapsed, collapsed, toggle, pKey,
   pSpan, pPct, barGeom, todayLeft, totalWidth, resourcesOf, resourceOf, today, onOpenLog,
 }) {
   const pBar = barGeom(pSpan);
+  // Orphan tasks have no shared projectId, so their log is scoped by task ids.
+  const openProjectLog = () => onOpenLog({
+    type: 'project',
+    project,
+    ...(isOrphan ? { taskIds: pTasks.map((t) => t.id) } : {}),
+  });
 
   return (
     <>
       {/* Project row */}
       <div
-        className="wbs-row wbs-project-row"
+        className="wbsx-row wbsx-project-row"
         style={{ gridTemplateColumns: gridCols }}
-        onClick={() => onOpenLog({ type: 'project', project })}
+        onClick={openProjectLog}
         title="Click to view this project's activity log"
       >
-        <div className="wbs-cell wbs-name-cell">
+        <div className="wbsx-cell wbsx-name-cell">
           <button
-            className="wbs-chevron"
+            className="wbsx-chevron"
             onClick={(e) => { e.stopPropagation(); toggle(pKey); }}
             aria-label={pCollapsed ? 'Expand project' : 'Collapse project'}
           >{pCollapsed ? '▸' : '▾'}</button>
           <span className="proj-dot" style={{ background: project.color }} />
-          <span className="wbs-project-name">{project.name}</span>
+          <span className="wbsx-project-name">{project.name}</span>
           <span className="muted small" style={{ marginLeft: 6 }}>
             {pTasks.length} task{pTasks.length === 1 ? '' : 's'}
           </span>
         </div>
-        <div className="wbs-cell num">{durationDays(pSpan) ?? '—'}</div>
-        <div className="wbs-cell mono small">{pSpan?.start || '—'}</div>
-        <div className="wbs-cell mono small">{pSpan?.end || '—'}</div>
-        <div className="wbs-cell small">{resourcesOf(pTasks) || '—'}</div>
+        <div className="wbsx-cell num">{durationDays(pSpan) ?? '—'}</div>
+        <div className="wbsx-cell mono small">{pSpan?.start || '—'}</div>
+        <div className="wbsx-cell mono small">{pSpan?.end || '—'}</div>
+        <div className="wbsx-cell small">{resourcesOf(pTasks) || '—'}</div>
         <PctCell pct={pPct} color={project.color} />
-        <div className="wbs-track">
+        <div className="wbsx-track">
           <div className="gantt-day-grid" />
           {pBar && (
             <div
-              className="wbs-bar wbs-bar-project"
+              className="wbsx-bar wbsx-bar-project"
               style={{ left: pBar.left, width: pBar.width }}
               title={`${pSpan.start} → ${pSpan.end}`}
             />
@@ -374,30 +399,30 @@ function PhaseGroup({
   return (
     <>
       <div
-        className={`wbs-row wbs-phase-row ${isRealPhase ? '' : 'unphased'}`}
+        className={`wbsx-row wbsx-phase-row ${isRealPhase ? '' : 'unphased'}`}
         style={{ gridTemplateColumns: gridCols }}
         onClick={isRealPhase ? () => onOpenLog({ type: 'phase', project, phase: g.phase }) : undefined}
         title={isRealPhase ? "Click to view this phase's activity log" : undefined}
       >
-        <div className="wbs-cell wbs-name-cell" style={{ paddingLeft: 26 }}>
+        <div className="wbsx-cell wbsx-name-cell" style={{ paddingLeft: 26 }}>
           <button
-            className="wbs-chevron"
+            className="wbsx-chevron"
             onClick={(e) => { e.stopPropagation(); toggle(gKey); }}
             aria-label={gCollapsed ? 'Expand phase' : 'Collapse phase'}
           >{gCollapsed ? '▸' : '▾'}</button>
           <span className="phase-tag">{g.name}</span>
           <span className="muted small" style={{ marginLeft: 6 }}>{g.tasks.length}</span>
         </div>
-        <div className="wbs-cell num">{durationDays(gSpan) ?? '—'}</div>
-        <div className="wbs-cell mono small">{gSpan?.start || '—'}</div>
-        <div className="wbs-cell mono small">{gSpan?.end || '—'}</div>
-        <div className="wbs-cell small">{resourcesOf(g.tasks) || '—'}</div>
+        <div className="wbsx-cell num">{durationDays(gSpan) ?? '—'}</div>
+        <div className="wbsx-cell mono small">{gSpan?.start || '—'}</div>
+        <div className="wbsx-cell mono small">{gSpan?.end || '—'}</div>
+        <div className="wbsx-cell small">{resourcesOf(g.tasks) || '—'}</div>
         <PctCell pct={gPct} color="var(--c-accent)" />
-        <div className="wbs-track">
+        <div className="wbsx-track">
           <div className="gantt-day-grid" />
           {gBar && (
             <div
-              className="wbs-bar wbs-bar-phase"
+              className="wbsx-bar wbsx-bar-phase"
               style={{ left: gBar.left, width: gBar.width, background: project.color }}
               title={`${gSpan.start} → ${gSpan.end}`}
             />
@@ -439,42 +464,42 @@ function TaskRows({ project, task: t, gridCols, collapsed, toggle, todayLeft, re
   return (
     <>
       <div
-        className="wbs-row wbs-task-row"
+        className="wbsx-row wbsx-task-row"
         style={{ gridTemplateColumns: gridCols }}
         onClick={() => onOpenLog({ type: 'task', project, task: t })}
         title="Click to view this task's activity log"
       >
-        <div className="wbs-cell wbs-name-cell" style={{ paddingLeft: 52 }}>
+        <div className="wbsx-cell wbsx-name-cell" style={{ paddingLeft: 52 }}>
           {subs.length > 0 ? (
             <button
-              className="wbs-chevron"
+              className="wbsx-chevron"
               onClick={(e) => { e.stopPropagation(); toggle(tKey); }}
               aria-label={tCollapsed ? 'Expand subtasks' : 'Collapse subtasks'}
             >{tCollapsed ? '▸' : '▾'}</button>
           ) : (
-            <span className="wbs-chevron-spacer" />
+            <span className="wbsx-chevron-spacer" />
           )}
-          <span className={`wbs-task-name ${t.status === 'done' ? 'done' : ''}`}>{t.title}</span>
+          <span className={`wbsx-task-name ${t.status === 'done' ? 'done' : ''}`}>{t.title}</span>
           {subs.length > 0 && (
             <span className="muted small" style={{ marginLeft: 6 }}>
               {subs.filter((s) => s.done).length}/{subs.length}
             </span>
           )}
         </div>
-        <div className="wbs-cell num">{durationDays(span) ?? '—'}</div>
-        <div className="wbs-cell mono small">{span?.start || '—'}</div>
-        <div className="wbs-cell mono small">{span?.end || '—'}</div>
-        <div className="wbs-cell small">{resourceOf(t) || '—'}</div>
+        <div className="wbsx-cell num">{durationDays(span) ?? '—'}</div>
+        <div className="wbsx-cell mono small">{span?.start || '—'}</div>
+        <div className="wbsx-cell mono small">{span?.end || '—'}</div>
+        <div className="wbsx-cell small">{resourceOf(t) || '—'}</div>
         <PctCell pct={pct} color={isOverdue ? 'var(--c-danger)' : 'var(--c-doing)'} />
-        <div className="wbs-track">
+        <div className="wbsx-track">
           <div className="gantt-day-grid" />
           {bar && (
             <div
-              className={`wbs-bar wbs-bar-task ${isOverdue ? 'overdue' : ''}`}
+              className={`wbsx-bar wbsx-bar-task ${isOverdue ? 'overdue' : ''}`}
               style={{ left: bar.left, width: bar.width, background: isOverdue ? undefined : project.color }}
               title={`${span.start} → ${span.end} · ${pct}%`}
             >
-              <div className="wbs-bar-fill" style={{ width: `${pct}%` }} />
+              <div className="wbsx-bar-fill" style={{ width: `${pct}%` }} />
             </div>
           )}
           {todayLeft != null && <div className="gantt-today-line" style={{ left: todayLeft }} />}
@@ -484,20 +509,20 @@ function TaskRows({ project, task: t, gridCols, collapsed, toggle, todayLeft, re
       {!tCollapsed && subs.map((s) => (
         <div
           key={s.id}
-          className="wbs-row wbs-subtask-row"
+          className="wbsx-row wbsx-subtask-row"
           style={{ gridTemplateColumns: gridCols }}
           onClick={() => onOpenLog({ type: 'task', project, task: t })}
         >
-          <div className="wbs-cell wbs-name-cell" style={{ paddingLeft: 78 }}>
-            <span className={`wbs-sub-check ${s.done ? 'done' : ''}`}>{s.done ? '✓' : '○'}</span>
-            <span className={`wbs-sub-name ${s.done ? 'done' : ''}`}>{s.text}</span>
+          <div className="wbsx-cell wbsx-name-cell" style={{ paddingLeft: 78 }}>
+            <span className={`wbsx-sub-check ${s.done ? 'done' : ''}`}>{s.done ? '✓' : '○'}</span>
+            <span className={`wbsx-sub-name ${s.done ? 'done' : ''}`}>{s.text}</span>
           </div>
-          <div className="wbs-cell num">—</div>
-          <div className="wbs-cell mono small">—</div>
-          <div className="wbs-cell mono small">—</div>
-          <div className="wbs-cell small">—</div>
+          <div className="wbsx-cell num">—</div>
+          <div className="wbsx-cell mono small">—</div>
+          <div className="wbsx-cell mono small">—</div>
+          <div className="wbsx-cell small">—</div>
           <PctCell pct={s.done ? 100 : 0} color="var(--c-emerald)" />
-          <div className="wbs-track">
+          <div className="wbsx-track">
             <div className="gantt-day-grid" />
             {todayLeft != null && <div className="gantt-today-line" style={{ left: todayLeft }} />}
           </div>
@@ -508,13 +533,13 @@ function TaskRows({ project, task: t, gridCols, collapsed, toggle, todayLeft, re
 }
 
 function PctCell({ pct, color }) {
-  if (pct == null) return <div className="wbs-cell small muted">—</div>;
+  if (pct == null) return <div className="wbsx-cell small muted">—</div>;
   return (
-    <div className="wbs-cell wbs-pct">
-      <div className="wbs-pct-track">
-        <div className="wbs-pct-fill" style={{ width: `${pct}%`, background: color }} />
+    <div className="wbsx-cell wbsx-pct">
+      <div className="wbsx-pct-track">
+        <div className="wbsx-pct-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className="wbs-pct-num">{pct}%</span>
+      <span className="wbsx-pct-num">{pct}%</span>
     </div>
   );
 }
@@ -540,9 +565,12 @@ function ScopedActivityLogModal({ scope, onClose }) {
     return liveTask ? (liveTask.phaseId || null) : (a.phaseId || null);
   };
 
+  const orphanIds = scope.taskIds ? new Set(scope.taskIds) : null;
+
   const rows = activities
     .filter((a) => {
-      if (scope.type === 'task')  return a.taskId === scope.task.id;
+      if (scope.type === 'task') return a.taskId === scope.task.id;
+      if (orphanIds) return orphanIds.has(a.taskId); // unassigned bucket
       if (a.projectId !== project.id) return false;
       if (scope.type === 'phase') return livePhaseId(a) === scope.phase.id;
       return true; // project scope
