@@ -25,6 +25,7 @@ const ProjectsView      = lazy(() => import('./components/ProjectsView'));
 const SettingsView      = lazy(() => import('./components/SettingsView'));
 const WorkPerformedView = lazy(() => import('./components/WorkPerformedView'));
 const HowToUseView      = lazy(() => import('./components/HowToUseView'));
+const WBSView           = lazy(() => import('./components/WBSView'));
 
 function ViewSpinner() {
   return (
@@ -121,6 +122,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'board'     && <Board    projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} initialStatusFilter={route.statusFilter} onlyMine={route.onlyMine} />}
         {route.view === 'table'     && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
+        {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} />}
         {route.view === 'calendar'  && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'review'         && <ReviewView />}
         {route.view === 'analytics'      && <AnalyticsView projectFilter={route.projectFilter} />}

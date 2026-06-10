@@ -14,6 +14,7 @@ const VIEWS = [
   { id: 'board',          label: 'Board',            icon: 'board' },
   { id: 'calendar',       label: 'Calendar',         icon: 'calendar' },
   { id: 'gantt',          label: 'Gantt',            icon: 'gantt' },
+  { id: 'wbs',            label: 'WBS',              icon: 'wbs' },
   { id: 'table',          label: 'Activity Log',     icon: 'list' },
   { id: 'work-performed', label: 'Work Performed',   icon: 'clock' },
   { id: 'review',         label: 'Review',           icon: 'review' },

@@ -81,6 +81,16 @@ const PATHS = {
     </>
   ),
   gantt: <path d="M4 5h9M4 12h14M4 19h6" />,
+  wbs: (
+    <>
+      <rect x="9" y="2" width="6" height="5" rx="1" />
+      <rect x="2" y="17" width="6" height="5" rx="1" />
+      <rect x="16" y="17" width="6" height="5" rx="1" />
+      <path d="M12 7v4" />
+      <path d="M5 17v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
+      <path d="M12 11v2" />
+    </>
+  ),
   list: (
     <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
   ),
