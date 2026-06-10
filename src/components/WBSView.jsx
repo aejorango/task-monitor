@@ -9,6 +9,8 @@ import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { todayLocal } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
+import ActivityLogger from './ActivityLogger';
+import TaskEditor from './TaskEditor';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -552,25 +554,45 @@ function PctCell({ pct, color }) {
 
 function ScopedActivityLogModal({ scope, onClose }) {
   const { activities, loading } = useAllActivities();
-  const { tasks } = useTasks();
-  const [editing, setEditing] = useState(null);
+  const { tasks, userId } = useTasks();
+  const { projects } = useProjects();
+  const [editing, setEditing] = useState(null);          // activity being edited
+  const [loggingTask, setLoggingTask] = useState(null);  // task to add a log to
+  const [editingTask, setEditingTask] = useState(null);  // task being edited
+  const [selectedTaskId, setSelectedTaskId] = useState('');
 
   const taskById = {};
   tasks.forEach((t) => { taskById[t.id] = t; });
 
   const { project } = scope;
 
+  // Tasks inside this scope — the candidates for "+ Log activity" / "Edit task".
+  // For task scope it's just the (live) task itself; project/phase scopes get a
+  // picker over their tasks.
+  const orphanScopeIds = scope.taskIds ? new Set(scope.taskIds) : null;
+  const scopeTasks =
+    scope.type === 'task'
+      ? [taskById[scope.task.id] || scope.task]
+      : tasks.filter((t) => {
+          if (orphanScopeIds) return orphanScopeIds.has(t.id);
+          if (t.projectId !== project.id) return false;
+          return scope.type === 'phase' ? t.phaseId === scope.phase.id : true;
+        });
+
+  const actionTask =
+    scope.type === 'task'
+      ? scopeTasks[0]
+      : taskById[selectedTaskId] || null;
+
   const livePhaseId = (a) => {
     const liveTask = taskById[a.taskId];
     return liveTask ? (liveTask.phaseId || null) : (a.phaseId || null);
   };
 
-  const orphanIds = scope.taskIds ? new Set(scope.taskIds) : null;
-
   const rows = activities
     .filter((a) => {
       if (scope.type === 'task') return a.taskId === scope.task.id;
-      if (orphanIds) return orphanIds.has(a.taskId); // unassigned bucket
+      if (orphanScopeIds) return orphanScopeIds.has(a.taskId); // unassigned bucket
       if (a.projectId !== project.id) return false;
       if (scope.type === 'phase') return livePhaseId(a) === scope.phase.id;
       return true; // project scope
@@ -704,11 +726,37 @@ function ScopedActivityLogModal({ scope, onClose }) {
             </div>
           )}
 
-          <div className="modal-actions">
+          <div className="modal-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
             {rows.length > 0 && (
               <button className="btn btn-sm" onClick={exportCsv}>⬇ Export CSV</button>
             )}
             <div style={{ flex: 1 }} />
+            {scope.type !== 'task' && scopeTasks.length > 0 && (
+              <select
+                className="select select-sm"
+                value={selectedTaskId}
+                onChange={(e) => setSelectedTaskId(e.target.value)}
+                style={{ maxWidth: 240 }}
+                title="Pick a task to log against or edit"
+              >
+                <option value="">— Pick a task —</option>
+                {scopeTasks.map((t) => (
+                  <option key={t.id} value={t.id}>{t.title}</option>
+                ))}
+              </select>
+            )}
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={!actionTask}
+              title={actionTask ? `Log activity on "${actionTask.title}"` : 'Pick a task first'}
+              onClick={() => setLoggingTask(actionTask)}
+            >+ Log activity</button>
+            <button
+              className="btn btn-sm"
+              disabled={!actionTask}
+              title={actionTask ? `Edit "${actionTask.title}"` : 'Pick a task first'}
+              onClick={() => setEditingTask(actionTask)}
+            >✎ Edit task</button>
             <button className="btn" onClick={onClose}>Close</button>
           </div>
         </div>
@@ -716,6 +764,22 @@ function ScopedActivityLogModal({ scope, onClose }) {
 
       {editing && (
         <ActivityEditor activity={editing} onClose={() => setEditing(null)} />
+      )}
+
+      {loggingTask && (
+        <ActivityLogger
+          task={loggingTask}
+          userId={userId}
+          onClose={() => setLoggingTask(null)}
+        />
+      )}
+
+      {editingTask && (
+        <TaskEditor
+          task={editingTask}
+          projects={projects}
+          onClose={() => setEditingTask(null)}
+        />
       )}
     </>
   );
