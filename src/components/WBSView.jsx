@@ -11,6 +11,7 @@ import { todayLocal } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
+import TaskQuickAdd from './TaskQuickAdd';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -88,6 +89,7 @@ export default function WBSView({ projectFilter }) {
   const [zoom, setZoom] = useState('week');
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [logScope, setLogScope] = useState(null); // { type, project, phase?, task? }
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
   const memberProfiles = workspaces.find((w) => w.id === activeWs)?.memberProfiles || {};
@@ -227,6 +229,9 @@ export default function WBSView({ projectFilter }) {
               onClick={() => setZoom(z.id)}
             >{z.label}</button>
           ))}
+          <button className="btn btn-primary btn-sm" onClick={() => setQuickAddOpen(true)}>
+            + New task
+          </button>
         </div>
       </div>
 
@@ -300,6 +305,14 @@ export default function WBSView({ projectFilter }) {
 
       {logScope && (
         <ScopedActivityLogModal scope={logScope} onClose={() => setLogScope(null)} />
+      )}
+
+      {quickAddOpen && (
+        <TaskQuickAdd
+          projects={projects}
+          projectFilter={projectFilter}
+          onClose={() => setQuickAddOpen(false)}
+        />
       )}
     </>
   );
