@@ -120,7 +120,7 @@ export default function ProjectsView() {
       )}
 
       <section className="review-section" style={{ marginTop: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           <h2 className="review-h2" style={{ margin: 0 }}>Templates ({templates.length})</h2>
           <span className="muted small">
             Reusable starting points. Save tasks as templates from the task editor.

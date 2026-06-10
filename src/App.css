@@ -484,6 +484,7 @@ a:hover { text-decoration: underline; }
   gap: 12px;
   box-shadow: 0 1px 6px rgba(15,23,42,0.06);
   z-index: 10;
+  position: relative;
 }
 
 .topbar-title {
@@ -3146,6 +3147,9 @@ a:hover { text-decoration: underline; }
   .modal-backdrop {
     padding: 0;
     align-items: flex-end;
+    /* Sit above the fixed bottom-nav (z-index 150) so the sheet and its
+       action footer are never covered by the nav. */
+    z-index: 200;
   }
   .modal {
     border-radius: var(--r-xl) var(--r-xl) 0 0;
@@ -3154,8 +3158,19 @@ a:hover { text-decoration: underline; }
     max-width: 100%;
     width: 100%;
     padding: 16px 14px;
+    overflow-x: hidden;
   }
   .modal-wide { max-width: 100%; }
+
+  /* ── Modal tab bar: scroll horizontally instead of overflowing the sheet ── */
+  .tabbar {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabbar::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; flex: 0 0 auto; }
 
   /* ── Page headers ── */
   .page-title { font-size: 18px; }
@@ -3225,8 +3240,18 @@ a:hover { text-decoration: underline; }
   }
   .dep-item { font-size: 12.5px; }
 
-  /* ── Modal actions: wrap on tiny screens ── */
-  .modal-actions { flex-wrap: wrap; }
+  /* ── Modal actions: pinned to the sheet bottom so Save/Cancel are
+     always reachable above the fold, full-bleed across the sheet width ── */
+  .modal-actions {
+    flex-wrap: wrap;
+    position: sticky;
+    bottom: 0;
+    background: var(--c-surface);
+    margin: 16px -14px 0;
+    padding: 12px 14px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index: 3;
+  }
   .modal-actions .btn { flex: 1 1 auto; justify-content: center; min-width: 80px; }
 
   /* ── Workspace list in settings ── */
@@ -3304,12 +3329,53 @@ a:hover { text-decoration: underline; }
   /* Page title smaller */
   .page-title { font-size: 16px; }
 
-  /* Search: icon-only mode */
-  .search-wrap { width: 36px; }
-  .search-input { padding: 6px 8px; font-size: 12px; }
+  /* Search: collapsed magnifier that expands on focus (no clipped text) */
+  .search-wrap { width: 38px; }
+  .search-wrap::before {
+    content: '🔍';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 38px;
+    text-align: center;
+    font-size: 13px;
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .search-input {
+    width: 38px;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: transparent;
+    cursor: pointer;
+  }
+  .search-input::placeholder { color: transparent; }
+  /* Expand over the topbar while focused */
+  .search-wrap:focus-within {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    z-index: 60;
+  }
+  .search-wrap:focus-within::before { display: none; }
+  .search-wrap:focus-within .search-input {
+    width: 100%;
+    color: var(--c-text);
+    cursor: text;
+  }
+  .search-wrap:focus-within .search-input::placeholder { color: var(--c-text-muted); }
 
-  /* Reduce modal padding further */
-  .modal-actions { gap: 6px; }
+  /* Reduce modal padding further; keep the sticky footer full-bleed to the
+     narrower modal padding so it doesn't introduce horizontal overflow. */
+  .modal-actions {
+    gap: 6px;
+    margin-left: -12px;
+    margin-right: -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 }
 
 /* ─── WBS Modal ────────────────────────────────────────────── */
