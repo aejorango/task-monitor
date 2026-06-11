@@ -90,6 +90,7 @@ export default function WBSView({ projectFilter }) {
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [logScope, setLogScope] = useState(null); // { type, project, phase?, task? }
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'todo' | 'doing' | 'done'
 
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
   const memberProfiles = workspaces.find((w) => w.id === activeWs)?.memberProfiles || {};
@@ -109,34 +110,42 @@ export default function WBSView({ projectFilter }) {
   };
 
   // ── Build the tree: project → phase groups → tasks ───────────────────────
+  const filterActive = statusFilter !== 'all';
   const tree = useMemo(() => {
     const sortTasks = (arr) =>
       [...arr].sort((a, b) => (taskStart(a) || '9999').localeCompare(taskStart(b) || '9999'));
 
+    // Status focus filter: show only tasks (and their subtasks) in the chosen
+    // state. Empty phases/projects are dropped while a filter is active so
+    // the table stays focused.
+    const scopedTasks = filterActive ? tasks.filter((t) => t.status === statusFilter) : tasks;
+
     const visible = projects.filter((p) => projectFilter === 'all' || p.id === projectFilter);
-    const blocks = visible.map((p) => {
-      const pTasks = tasks.filter((t) => t.projectId === p.id);
+    let blocks = visible.map((p) => {
+      const pTasks = scopedTasks.filter((t) => t.projectId === p.id);
       const phases = [...(p.phases || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       const byPhase = {};
       pTasks.forEach((t) => {
         const key = t.phaseId && phases.some((ph) => ph.id === t.phaseId) ? t.phaseId : '__unphased__';
         (byPhase[key] = byPhase[key] || []).push(t);
       });
-      const groups = [
+      let groups = [
         ...phases.map((ph) => ({ id: ph.id, name: ph.name, phase: ph, tasks: sortTasks(byPhase[ph.id] || []) })),
         ...((byPhase['__unphased__'] || []).length > 0
           ? [{ id: '__unphased__', name: 'Unphased', phase: null, tasks: sortTasks(byPhase['__unphased__']) }]
           : []),
       ];
+      if (filterActive) groups = groups.filter((g) => g.tasks.length > 0);
       return { project: p, tasks: pTasks, groups };
     });
+    if (filterActive) blocks = blocks.filter((b) => b.tasks.length > 0);
 
     // Orphan bucket: tasks with no project, or whose project is archived,
     // deleted, or otherwise not in the visible list. Without this they would
     // silently disappear from the WBS.
     if (projectFilter === 'all') {
       const knownIds = new Set(projects.map((p) => p.id));
-      const orphans = tasks.filter((t) => !t.projectId || !knownIds.has(t.projectId));
+      const orphans = scopedTasks.filter((t) => !t.projectId || !knownIds.has(t.projectId));
       if (orphans.length > 0) {
         blocks.push({
           project: { id: '__none__', name: 'Unassigned / no project', color: '#94a3b8', phases: [] },
@@ -147,7 +156,7 @@ export default function WBSView({ projectFilter }) {
       }
     }
     return blocks;
-  }, [projects, tasks, projectFilter]);
+  }, [projects, tasks, projectFilter, statusFilter, filterActive]);
 
   // ── Timeline range (same approach as Gantt) ───────────────────────────────
   const today = parseDate(todayLocal());
@@ -235,10 +244,35 @@ export default function WBSView({ projectFilter }) {
         </div>
       </div>
 
+      <div className="toolbar" style={{ marginBottom: 12 }}>
+        <span className="small muted" style={{ fontWeight: 600 }}>Show:</span>
+        {[
+          { id: 'all',   label: 'All' },
+          { id: 'todo',  label: 'To do' },
+          { id: 'doing', label: 'Ongoing' },
+          { id: 'done',  label: 'Done' },
+        ].map((s) => (
+          <button
+            key={s.id}
+            className={`chip ${statusFilter === s.id ? 'active' : ''}`}
+            onClick={() => setStatusFilter(s.id)}
+          >{s.label}</button>
+        ))}
+      </div>
+
       {tree.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">▦</div>
-          <p>No projects yet. Create one in the Projects view.</p>
+          {filterActive ? (
+            <>
+              <p>No tasks in this state.</p>
+              <p className="small">
+                Switch the filter back to <strong>All</strong> to see the full WBS.
+              </p>
+            </>
+          ) : (
+            <p>No projects yet. Create one in the Projects view.</p>
+          )}
         </div>
       ) : (
         <div className="wbsx" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px` }}>
