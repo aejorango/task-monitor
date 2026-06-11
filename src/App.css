@@ -5461,3 +5461,27 @@ a:hover { text-decoration: underline; }
 @media (max-width: 720px) {
   .wbsx-cell { font-size: 12px; padding: 6px 8px; }
 }
+
+/* WBS toolbar: date filter inputs + separator */
+.wbsx-date-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wbsx-date-inputs .input-sm {
+  width: auto;
+  min-width: 150px;
+}
+.wbsx-toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  min-height: 20px;
+  background: var(--c-border);
+  margin: 0 4px;
+}
+@media (max-width: 720px) {
+  .wbsx-date-inputs { width: 100%; }
+  .wbsx-date-inputs .input-sm { flex: 1; min-width: 0; }
+  .wbsx-toolbar-sep { display: none; }
+}

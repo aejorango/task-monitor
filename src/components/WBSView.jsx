@@ -80,6 +80,16 @@ function durationDays(span) {
   return diffDays(parseDate(span.start), parseDate(span.end)) + 1;
 }
 
+// A task's full date extent [first, last] across plan + actual (YYYY-MM-DD) or
+// null. Used by the date-period filter to test window overlap.
+function fullSpan(t) {
+  const all = [t.plan?.startDate, t.plan?.endDate, t.actual?.startDate, t.actual?.endDate]
+    .filter(Boolean)
+    .sort();
+  if (all.length === 0) return null;
+  return { first: all[0], last: all[all.length - 1] };
+}
+
 export default function WBSView({ projectFilter }) {
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects, loading: projectsLoading } = useProjects();
@@ -91,6 +101,8 @@ export default function WBSView({ projectFilter }) {
   const [logScope, setLogScope] = useState(null); // { type, project, phase?, task? }
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'todo' | 'doing' | 'done'
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo]     = useState('');
 
   const zoomConf = ZOOMS.find((z) => z.id === zoom);
   const memberProfiles = workspaces.find((w) => w.id === activeWs)?.memberProfiles || {};
@@ -110,15 +122,28 @@ export default function WBSView({ projectFilter }) {
   };
 
   // ── Build the tree: project → phase groups → tasks ───────────────────────
-  const filterActive = statusFilter !== 'all';
+  const statusActive = statusFilter !== 'all';
+  const periodActive = !!(periodFrom || periodTo);
+  const filterActive = statusActive || periodActive;
   const tree = useMemo(() => {
     const sortTasks = (arr) =>
       [...arr].sort((a, b) => (taskStart(a) || '9999').localeCompare(taskStart(b) || '9999'));
 
-    // Status focus filter: show only tasks (and their subtasks) in the chosen
-    // state. Empty phases/projects are dropped while a filter is active so
-    // the table stays focused.
-    const scopedTasks = filterActive ? tasks.filter((t) => t.status === statusFilter) : tasks;
+    // Does the task's date extent overlap the [periodFrom, periodTo] window?
+    const inPeriod = (t) => {
+      if (!periodActive) return true;
+      const span = fullSpan(t);
+      if (!span) return false;                              // no dates → out of any window
+      if (periodFrom && span.last  < periodFrom) return false; // ends before window
+      if (periodTo   && span.first > periodTo)   return false; // starts after window
+      return true;
+    };
+
+    // Focus filters: status (chosen state) + date period. Empty phases/projects
+    // are dropped while any filter is active so the table stays focused.
+    let scopedTasks = tasks;
+    if (statusActive) scopedTasks = scopedTasks.filter((t) => t.status === statusFilter);
+    if (periodActive) scopedTasks = scopedTasks.filter(inPeriod);
 
     const visible = projects.filter((p) => projectFilter === 'all' || p.id === projectFilter);
     let blocks = visible.map((p) => {
@@ -156,27 +181,45 @@ export default function WBSView({ projectFilter }) {
       }
     }
     return blocks;
-  }, [projects, tasks, projectFilter, statusFilter, filterActive]);
+  }, [projects, tasks, projectFilter, statusFilter, statusActive, periodActive, periodFrom, periodTo]);
 
   // ── Timeline range (same approach as Gantt) ───────────────────────────────
   const today = parseDate(todayLocal());
   const range = useMemo(() => {
-    let min = addDays(today, -7);
-    let max = today;
+    // Extent of the visible tasks across plan + actual dates.
+    let taskMin = null;
+    let taskMax = null;
     tree.forEach(({ tasks: pTasks }) => {
       pTasks.forEach((t) => {
         [t.plan?.startDate, t.plan?.endDate, t.actual?.startDate, t.actual?.endDate]
           .map(parseDate).filter(Boolean)
           .forEach((d) => {
-            if (d < min) min = d;
-            if (d > max) max = d;
+            if (!taskMin || d < taskMin) taskMin = d;
+            if (!taskMax || d > taskMax) taskMax = d;
           });
       });
     });
+
+    // When a period is set, the timeline window is pinned to it (each bound
+    // independently). Otherwise auto-fit the visible tasks, starting a week
+    // before today so recent context is visible.
+    if (periodActive) {
+      let min = periodFrom ? parseDate(periodFrom) : null;
+      let max = periodTo   ? parseDate(periodTo)   : null;
+      if (!min) min = taskMin || (max ? addDays(max, -30) : addDays(today, -7));
+      if (!max) max = taskMax || (min ? addDays(min, 30)  : addDays(today, 30));
+      if (max < min) max = min;
+      return { min, max, total: diffDays(min, max) + 1 };
+    }
+
+    let min = addDays(today, -7);
+    let max = today;
+    if (taskMin && taskMin < min) min = taskMin;
+    if (taskMax && taskMax > max) max = taskMax;
     max = addDays(max, 3);
     return { min, max, total: diffDays(min, max) + 1 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree]);
+  }, [tree, periodActive, periodFrom, periodTo]);
 
   const totalWidth = range.total * zoomConf.dayWidth;
   // Left columns: name | duration | start | end | resource | % complete
@@ -244,7 +287,7 @@ export default function WBSView({ projectFilter }) {
         </div>
       </div>
 
-      <div className="toolbar" style={{ marginBottom: 12 }}>
+      <div className="toolbar" style={{ marginBottom: 12, flexWrap: 'wrap', rowGap: 8 }}>
         <span className="small muted" style={{ fontWeight: 600 }}>Show:</span>
         {[
           { id: 'all',   label: 'All' },
@@ -258,6 +301,33 @@ export default function WBSView({ projectFilter }) {
             onClick={() => setStatusFilter(s.id)}
           >{s.label}</button>
         ))}
+
+        <span className="wbsx-toolbar-sep" aria-hidden="true" />
+
+        <span className="small muted" style={{ fontWeight: 600 }}>Dates:</span>
+        <span className="wbsx-date-inputs">
+          <label className="small muted">From</label>
+          <input
+            type="date"
+            className="input input-sm"
+            value={periodFrom}
+            max={periodTo || undefined}
+            onChange={(e) => setPeriodFrom(e.target.value)}
+          />
+          <label className="small muted">To</label>
+          <input
+            type="date"
+            className="input input-sm"
+            value={periodTo}
+            min={periodFrom || undefined}
+            onChange={(e) => setPeriodTo(e.target.value)}
+          />
+        </span>
+        {periodActive && (
+          <button className="btn btn-sm btn-ghost" onClick={() => { setPeriodFrom(''); setPeriodTo(''); }}>
+            ✕ Clear dates
+          </button>
+        )}
       </div>
 
       {tree.length === 0 ? (
@@ -265,9 +335,9 @@ export default function WBSView({ projectFilter }) {
           <div className="empty-state-icon">▦</div>
           {filterActive ? (
             <>
-              <p>No tasks in this state.</p>
+              <p>No tasks match the current filters.</p>
               <p className="small">
-                Switch the filter back to <strong>All</strong> to see the full WBS.
+                Widen the date range or set status back to <strong>All</strong> to see the full WBS.
               </p>
             </>
           ) : (
