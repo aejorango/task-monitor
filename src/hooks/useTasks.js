@@ -11,6 +11,7 @@ import {
   subscribeToAllActivities,
   subscribeToProjects,
   subscribeToTemplates,
+  subscribeToGoals,
   subscribeToTaskComments,
   subscribeToSavedViews,
   subscribeToWebhooks,
@@ -265,6 +266,31 @@ export function useTemplates() {
   }, [userId, ready, workspaceId]);
 
   return { templates, loading, userId, workspaceId };
+}
+
+// ─── useGoals ───────────────────────────────────────────────────────────────
+
+export function useGoals() {
+  const { userId, ready } = useAuth();
+  const workspaceId = useActiveWorkspaceId();
+  const [goals, setGoals] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId || !workspaceId) {
+      setGoals([]);
+      setLoading(workspaceId ? true : false);
+      return;
+    }
+    setLoading(true);
+    const unsub = subscribeToGoals(workspaceId, (data) => {
+      setGoals(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId, ready, workspaceId]);
+
+  return { goals, loading, userId, workspaceId };
 }
 
 // ─── useRecentActivities ───────────────────────────────────────────────────

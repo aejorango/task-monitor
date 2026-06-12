@@ -5485,3 +5485,177 @@ a:hover { text-decoration: underline; }
   .wbsx-date-inputs .input-sm { flex: 1; min-width: 0; }
   .wbsx-toolbar-sep { display: none; }
 }
+
+/* ─── Goals (strategic-plan one-pager cards) ─────────────────────────────── */
+.goals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.goal-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Title banner */
+.goal-banner {
+  position: relative;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e2a52;
+}
+.goal-banner-title {
+  margin: 0;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-align: center;
+  line-height: 1.15;
+}
+.goal-edit-btn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--r-md);
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.goal-edit-btn:hover { background: rgba(255, 255, 255, 0.28); }
+
+/* Body sits on the dark banner color, tinted; panels are cream */
+.goal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #1e2a52; /* navy slide backdrop; overridden inline per goal color */
+}
+
+/* Yellow label chip + cream panel rows (INITIATIVES, KPI) */
+.goal-srow {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.goal-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: #f6d976;
+  color: #1a1a1a;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  border: 1px solid #e6c34f;
+}
+.goal-panel {
+  background: #fbf3d6;
+  color: #2a2a2a;
+  border: 1px solid #ecdca6;
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.goal-muted { color: #9a8f6a; }
+
+/* Three-column headers + bodies */
+.goal-cols-head,
+.goal-cols-body {
+  display: grid;
+  grid-template-columns: 220px 1fr 1fr;
+  gap: 12px;
+}
+.goal-cols-body { align-items: start; }
+.goal-chip-head { justify-content: center; }
+.goal-col { min-height: 120px; }
+
+/* FROM → TO blocks */
+.goal-ft-label {
+  font-weight: 800;
+  font-size: 13px;
+  color: #2a2a2a;
+}
+.goal-ft-text { font-size: 14px; line-height: 1.45; }
+.goal-divider {
+  height: 1px;
+  background: #d8c890;
+  margin: 14px 0;
+}
+
+/* Deliverables */
+.goal-deliv-row { display: flex; gap: 8px; }
+.goal-deliv-num { font-weight: 700; }
+.goal-deliv-text { flex: 1; }
+
+/* Target/status */
+.goal-target-text { font-size: 14px; line-height: 1.5; }
+
+/* Editor: repeatable rows */
+.goal-edit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.goal-edit-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--c-text-3);
+  font-size: 13px;
+}
+.goal-edit-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.goal-del { color: var(--c-danger); }
+
+/* Banner color swatches */
+.goal-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.goal-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--c-border);
+  cursor: pointer;
+  padding: 0;
+}
+.goal-swatch.active {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 820px) {
+  .goal-srow { grid-template-columns: 1fr; }
+  .goal-cols-head { display: none; }
+  .goal-cols-body { grid-template-columns: 1fr; }
+  .goal-col { min-height: 0; }
+  .goal-banner-title { font-size: 20px; }
+}

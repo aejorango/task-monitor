@@ -303,6 +303,7 @@ const tasksRef = collection(db, 'tasks');
 const activitiesRef = collection(db, 'activities');
 const projectsRef = collection(db, 'projects');
 const templatesRef = collection(db, 'templates');
+const goalsRef = collection(db, 'goals');
 const taskCommentsRef = collection(db, 'taskComments');
 const savedViewsRef = collection(db, 'savedViews');
 const presenceRef   = collection(db, 'presence');
@@ -1131,6 +1132,60 @@ export function subscribeToTemplates(workspaceId, callback) {
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((t) => !t.deleted)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(data);
+  });
+}
+
+// ─── GOALS (strategic plan one-pagers) ──────────────────────────────────────
+// A goal mirrors the strategic-plan card: code + title, an Initiative line, a
+// KPI, a Change Agenda (FROM→TO pairs), and Deliverables — each deliverable
+// carrying its own target date + status so the Deliverables and Target Date
+// columns stay row-aligned.
+
+export async function addGoal(userId, goal) {
+  if (!goal.workspaceId) throw new Error('addGoal requires goal.workspaceId');
+  return await addDoc(goalsRef, {
+    userId,
+    workspaceId:  goal.workspaceId,
+    code:         goal.code || '',
+    title:        goal.title || '',
+    initiative:   goal.initiative || '',
+    kpi:          goal.kpi || '',
+    color:        goal.color || '#1e2a52',
+    changeAgenda: goal.changeAgenda || [],   // [{ id, from, to }]
+    deliverables: goal.deliverables || [],   // [{ id, text, targetDate, status }]
+    order:        goal.order ?? Date.now(),
+    archived:     false,
+    deleted:      false,
+    createdAt:    serverTimestamp(),
+    updatedAt:    serverTimestamp(),
+  });
+}
+
+export async function updateGoal(goalId, updates) {
+  return await updateDoc(doc(db, 'goals', goalId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function archiveGoal(goalId, archived = true) {
+  return await updateGoal(goalId, { archived });
+}
+
+export async function softDeleteGoal(goalId) {
+  return await updateGoal(goalId, { deleted: true });
+}
+
+export function subscribeToGoals(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(goalsRef, where('workspaceId', '==', workspaceId));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((g) => !g.deleted)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+        || (a.code || '').localeCompare(b.code || ''));
     callback(data);
   });
 }

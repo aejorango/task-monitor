@@ -194,6 +194,14 @@ service cloud.firestore {
       allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
+    // ─── Goals (strategic-plan one-pagers, workspace-scoped) ────────────────
+    match /goals/{goalId} {
+      allow read:   if isOwner(resource) || isWorkspaceMember(resource.data.workspaceId);
+      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      allow update: if isOwner(resource) || canEditWorkspace(resource.data.workspaceId);
+      allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
+    }
+
     // ─── Task comments ──────────────────────────────────────────────────────
     match /taskComments/{commentId} {
       allow read:   if isOwner(resource) || isWorkspaceMember(resource.data.workspaceId);
