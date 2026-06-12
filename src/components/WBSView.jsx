@@ -223,8 +223,8 @@ export default function WBSView({ projectFilter }) {
 
   const totalWidth = range.total * zoomConf.dayWidth;
   // Left columns: name | duration | start | end | resource | % complete
-  const gridCols = `280px 60px 92px 92px 120px 92px ${totalWidth}px`;
-  const labelWidth = 280 + 60 + 92 + 92 + 120 + 92;
+  const gridCols = `560px 60px 92px 92px 120px 92px ${totalWidth}px`;
+  const labelWidth = 560 + 60 + 92 + 92 + 120 + 92;
 
   const toggle = (key) => {
     setCollapsed((prev) => {
