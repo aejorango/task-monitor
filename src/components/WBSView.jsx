@@ -249,10 +249,14 @@ export default function WBSView({ projectFilter }) {
     if (!span) return null;
     const s = parseDate(span.start);
     const e = parseDate(span.end);
-    return {
-      left:  diffDays(range.min, s) * zoomConf.dayWidth,
-      width: Math.max(zoomConf.dayWidth, (diffDays(s, e) + 1) * zoomConf.dayWidth),
-    };
+    // Clamp to the visible window so a bar that starts before range.min (e.g. a
+    // period filter narrowing the window) never gets a negative left and spills
+    // over the left columns.
+    const rawLeft = diffDays(range.min, s) * zoomConf.dayWidth;
+    const rawRight = (diffDays(range.min, e) + 1) * zoomConf.dayWidth;
+    const left = Math.max(0, rawLeft);
+    const right = Math.min(totalWidth, rawRight);
+    return { left, width: Math.max(2, right - left) };
   };
 
   const todayLeft = today >= range.min && today <= range.max
