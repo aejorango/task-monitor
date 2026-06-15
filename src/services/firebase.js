@@ -29,6 +29,7 @@ import {
   serverTimestamp,
   writeBatch,
   increment,
+  arrayUnion,
 } from 'firebase/firestore';
 import {
   getStorage,
@@ -305,6 +306,8 @@ const projectsRef = collection(db, 'projects');
 const templatesRef = collection(db, 'templates');
 const goalsRef = collection(db, 'goals');
 const taskCommentsRef = collection(db, 'taskComments');
+const conversationsRef = collection(db, 'conversations');
+const messagesRef = collection(db, 'messages');
 const savedViewsRef = collection(db, 'savedViews');
 const presenceRef   = collection(db, 'presence');
 const webhooksRef   = collection(db, 'webhooks');
@@ -1381,6 +1384,151 @@ export function subscribeToTaskComments(taskId, callback) {
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);
   });
+}
+
+// ─── CHAT (conversations + messages) ────────────────────────────────────────
+// Closed-loop messaging scoped to a workspace. Two top-level collections:
+//   conversations/{id}: { workspaceId, type:'dm'|'group', name, createdByUserId,
+//     members:[uid], memberProfiles:{uid:{displayName,email,photoURL}},
+//     lastMessageText, lastMessageSenderId, lastMessageSenderName,
+//     lastMessageAt, readBy:{uid:Timestamp}, createdAt, updatedAt }
+//   messages/{id}: { conversationId, workspaceId, senderId, senderName, text,
+//     createdAt }
+// Membership (conversation.members) gates both read and write via rules.
+
+// Conversations the user participates in. Single array-contains filter (auto
+// indexed); workspace scoping + sort happen client-side so no composite index
+// is needed.
+export function subscribeToConversations(workspaceId, userId, callback) {
+  if (!workspaceId || !userId) { callback([]); return () => {}; }
+  const q = query(conversationsRef, where('members', 'array-contains', userId));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => c.workspaceId === workspaceId && !c.deleted)
+      .sort((a, b) => (b.lastMessageAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0)
+                    - (a.lastMessageAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0));
+    callback(data);
+  });
+}
+
+// Find an existing 1:1 DM between two users in a workspace, or create one.
+// `me` / `other` are { uid, displayName, email, photoURL }.
+export async function findOrCreateDM(workspaceId, me, other) {
+  // Look for an existing dm whose member set is exactly {me, other}.
+  const snap = await getDocs(query(conversationsRef, where('members', 'array-contains', me.uid)));
+  const existing = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .find((c) => c.workspaceId === workspaceId && c.type === 'dm' && !c.deleted
+      && (c.members || []).length === 2 && c.members.includes(other.uid));
+  if (existing) return existing.id;
+
+  const profile = (u) => ({ displayName: u.displayName || '', email: u.email || '', photoURL: u.photoURL || '' });
+  const ref = await addDoc(conversationsRef, {
+    workspaceId,
+    type: 'dm',
+    name: '',
+    createdByUserId: me.uid,
+    members: [me.uid, other.uid],
+    memberProfiles: { [me.uid]: profile(me), [other.uid]: profile(other) },
+    lastMessageText: '',
+    lastMessageSenderId: '',
+    lastMessageSenderName: '',
+    lastMessageAt: serverTimestamp(),
+    readBy: { [me.uid]: serverTimestamp() },
+    deleted: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+// Create a group conversation. `members` is an array of { uid, displayName,
+// email, photoURL } INCLUDING the creator.
+export async function createGroupConversation(workspaceId, me, name, members) {
+  const memberProfiles = {};
+  members.forEach((u) => {
+    memberProfiles[u.uid] = { displayName: u.displayName || '', email: u.email || '', photoURL: u.photoURL || '' };
+  });
+  const ref = await addDoc(conversationsRef, {
+    workspaceId,
+    type: 'group',
+    name: String(name || '').trim() || 'New group',
+    createdByUserId: me.uid,
+    members: members.map((u) => u.uid),
+    memberProfiles,
+    lastMessageText: '',
+    lastMessageSenderId: '',
+    lastMessageSenderName: '',
+    lastMessageAt: serverTimestamp(),
+    readBy: { [me.uid]: serverTimestamp() },
+    deleted: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function renameConversation(conversationId, name) {
+  return await updateDoc(doc(db, 'conversations', conversationId), {
+    name: String(name || '').trim() || 'Group',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Messages for a conversation, oldest→newest. Single equality filter; sort +
+// cap client-side (no composite index needed).
+export function subscribeToMessages(conversationId, callback) {
+  if (!conversationId) { callback([]); return () => {}; }
+  const q = query(messagesRef, where('conversationId', '==', conversationId));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((m) => !m.deleted)
+      .sort((a, b) => (a.createdAt?.toMillis?.() ?? Infinity) - (b.createdAt?.toMillis?.() ?? Infinity))
+      .slice(-400);
+    callback(data);
+  });
+}
+
+// Send a message: write the message and update the conversation's denormalized
+// last-message preview + the sender's own read marker, atomically.
+export async function sendMessage(conversation, sender, text) {
+  const body = String(text || '').trim();
+  if (!body) return;
+  const batch = writeBatch(db);
+  const msgRef = doc(messagesRef);
+  batch.set(msgRef, {
+    conversationId: conversation.id,
+    workspaceId:    conversation.workspaceId,
+    senderId:       sender.uid,
+    senderName:     sender.displayName || sender.email || 'Someone',
+    text:           body,
+    deleted:        false,
+    createdAt:      serverTimestamp(),
+  });
+  batch.update(doc(db, 'conversations', conversation.id), {
+    lastMessageText:       body.slice(0, 140),
+    lastMessageSenderId:   sender.uid,
+    lastMessageSenderName: sender.displayName || sender.email || 'Someone',
+    lastMessageAt:         serverTimestamp(),
+    [`readBy.${sender.uid}`]: serverTimestamp(),
+    updatedAt:             serverTimestamp(),
+  });
+  return await batch.commit();
+}
+
+// Mark a conversation read up to now for this user (clears the unread badge).
+export async function markConversationRead(conversationId, userId) {
+  if (!conversationId || !userId) return;
+  try {
+    await updateDoc(doc(db, 'conversations', conversationId), {
+      [`readBy.${userId}`]: serverTimestamp(),
+    });
+  } catch (err) {
+    // Non-fatal: a read marker failing shouldn't break the UI.
+    console.warn('markConversationRead failed:', err);
+  }
 }
 
 // ─── SAVED VIEWS ────────────────────────────────────────────────────────────
