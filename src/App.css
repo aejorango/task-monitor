@@ -5663,14 +5663,19 @@ a:hover { text-decoration: underline; }
   .goal-banner-title { font-size: 20px; }
 }
 
-/* Goal deliverable → linked-project progress pill */
+/* Goal deliverable → linked-project progress pills (one per project) */
+.goal-deliv-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 9px;
+  margin-left: 22px;
+}
 .goal-deliv-pill {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 9px;
-  margin-left: 22px;
   height: 22px;
   padding: 0 10px;
   border-radius: var(--r-pill);
@@ -5713,4 +5718,60 @@ a:hover { text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+/* Goal editor — linked-project chips + custom color swatch */
+.goal-proj-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.goal-proj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-pill);
+  padding: 3px 6px 3px 9px;
+  font-size: 12px;
+  color: var(--c-text);
+  max-width: 100%;
+}
+.goal-proj-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.goal-proj-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--c-text-3);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+.goal-proj-chip-x:hover { color: var(--c-danger); background: var(--c-border); }
+
+.goal-swatch-custom {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.goal-swatch-custom input[type="color"] {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
 }

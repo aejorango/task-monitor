@@ -5,11 +5,19 @@
 // a modal editor.
 
 import { useState, useMemo } from 'react';
-import { useGoals, useProjects, useTasks, useAuth } from '../hooks/useTasks';
-import { useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useGoals, useAllWorkspaceProjects, useAllWorkspaceTasks, useAuth } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addGoal, updateGoal, softDeleteGoal, archiveGoal, uid } from '../services/firebase';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
+const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
+
+// Normalize a deliverable's linked projects to an array of ids, accepting the
+// legacy single `projectId` shape.
+function deliverableProjectIds(d) {
+  if (Array.isArray(d.projectIds)) return d.projectIds.filter(Boolean);
+  return d.projectId ? [d.projectId] : [];
+}
 
 const emptyGoal = () => ({
   code: '',
@@ -17,8 +25,9 @@ const emptyGoal = () => ({
   initiative: '',
   kpi: '',
   color: BANNER_COLORS[0],
+  bgColor: BANNER_COLORS[0],
   changeAgenda: [{ id: uid(), from: '', to: '' }],
-  deliverables: [{ id: uid(), text: '', targetDate: '', status: '', projectId: '' }],
+  deliverables: [{ id: uid(), text: '', targetDate: '', status: '', projectIds: [] }],
 });
 
 // Per-task completion (mirrors the WBS): done → 100, else subtask ratio, else
@@ -33,20 +42,42 @@ function taskPct(t) {
 
 export default function GoalsView() {
   const { goals, loading } = useGoals();
-  const { projects } = useProjects();
-  const { tasks } = useTasks();
+  const { projects } = useAllWorkspaceProjects();   // across every member workspace
+  const { tasks } = useAllWorkspaceTasks();
+  const { workspaces } = useWorkspaces();
   const [editing, setEditing] = useState(null); // goal object or 'new'
 
-  // Completion per project: average of its tasks' % complete.
+  const wsNameById = useMemo(() => {
+    const m = {};
+    workspaces.forEach((w) => { m[w.id] = w.name || 'Workspace'; });
+    return m;
+  }, [workspaces]);
+
+  // Completion per project: average of its tasks' % complete. Keyed by project
+  // id (globally unique), so cross-workspace links resolve too.
   const projectStats = useMemo(() => {
     const m = {};
     projects.forEach((p) => {
       const pts = tasks.filter((t) => t.projectId === p.id);
       const pct = pts.length ? Math.round(pts.reduce((s, t) => s + taskPct(t), 0) / pts.length) : 0;
-      m[p.id] = { id: p.id, name: p.name, color: p.color, pct, taskCount: pts.length };
+      m[p.id] = {
+        id: p.id, name: p.name, color: p.color, pct, taskCount: pts.length,
+        workspaceId: p.workspaceId, workspaceName: wsNameById[p.workspaceId] || 'Workspace',
+      };
     });
     return m;
-  }, [projects, tasks]);
+  }, [projects, tasks, wsNameById]);
+
+  // Project options grouped by workspace for the editor picker.
+  const projectsByWorkspace = useMemo(() => {
+    const groups = {};
+    projects.forEach((p) => {
+      const wsName = wsNameById[p.workspaceId] || 'Workspace';
+      (groups[wsName] = groups[wsName] || []).push(p);
+    });
+    Object.values(groups).forEach((arr) => arr.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [projects, wsNameById]);
 
   return (
     <>
@@ -83,7 +114,8 @@ export default function GoalsView() {
       {editing && (
         <GoalEditor
           goal={editing === 'new' ? null : editing}
-          projects={projects}
+          projectsByWorkspace={projectsByWorkspace}
+          projectStats={projectStats}
           onClose={() => setEditing(null)}
         />
       )}
@@ -108,7 +140,7 @@ function GoalCard({ goal, projectStats = {}, onEdit }) {
         </button>
       </div>
 
-      <div className="goal-body" style={{ background: goal.color || '#1e2a52' }}>
+      <div className="goal-body" style={{ background: goal.bgColor || goal.color || '#1e2a52' }}>
         {/* INITIATIVES */}
         <div className="goal-srow">
           <div className="goal-chip"><GoalIcon name="initiatives" /> INITIATIVES</div>
@@ -146,7 +178,9 @@ function GoalCard({ goal, projectStats = {}, onEdit }) {
           {/* Deliverables: numbered, with a per-project progress pill */}
           <div className="goal-panel goal-col">
             {deliverables.length === 0 ? <span className="goal-muted">—</span> : deliverables.map((d, i) => {
-              const proj = d.projectId ? projectStats[d.projectId] : null;
+              const linkedProjects = deliverableProjectIds(d)
+                .map((pid) => projectStats[pid])
+                .filter(Boolean);
               return (
                 <div key={d.id || i} className="goal-deliv">
                   {i > 0 && <div className="goal-divider" />}
@@ -154,14 +188,19 @@ function GoalCard({ goal, projectStats = {}, onEdit }) {
                     <span className="goal-deliv-num">{i + 1}.</span>
                     <span className="goal-deliv-text">{d.text || <span className="goal-muted">—</span>}</span>
                   </div>
-                  {proj && (
-                    <div
-                      className="goal-deliv-pill"
-                      title={`${proj.name} — ${proj.pct}% complete (${proj.taskCount} task${proj.taskCount === 1 ? '' : 's'})`}
-                    >
-                      <div className="goal-deliv-pill-fill" style={{ width: `${proj.pct}%`, background: proj.color }} />
-                      <span className="goal-deliv-pill-label">{proj.name}</span>
-                      <span className="goal-deliv-pill-pct">{proj.pct}%</span>
+                  {linkedProjects.length > 0 && (
+                    <div className="goal-deliv-pills">
+                      {linkedProjects.map((proj) => (
+                        <div
+                          key={proj.id}
+                          className="goal-deliv-pill"
+                          title={`${proj.name} (${proj.workspaceName}) — ${proj.pct}% complete · ${proj.taskCount} task${proj.taskCount === 1 ? '' : 's'}`}
+                        >
+                          <div className="goal-deliv-pill-fill" style={{ width: `${proj.pct}%`, background: proj.color }} />
+                          <span className="goal-deliv-pill-label">{proj.name}</span>
+                          <span className="goal-deliv-pill-pct">{proj.pct}%</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -193,7 +232,7 @@ function GoalCard({ goal, projectStats = {}, onEdit }) {
 
 // ─── Editor modal ───────────────────────────────────────────────────────────
 
-function GoalEditor({ goal, projects = [], onClose }) {
+function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose }) {
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [form, setForm] = useState(() =>
@@ -204,10 +243,11 @@ function GoalEditor({ goal, projects = [], onClose }) {
           initiative: goal.initiative || '',
           kpi: goal.kpi || '',
           color: goal.color || BANNER_COLORS[0],
+          bgColor: goal.bgColor || goal.color || BANNER_COLORS[0],
           changeAgenda: (goal.changeAgenda?.length ? goal.changeAgenda : [{ id: uid(), from: '', to: '' }])
             .map((a) => ({ id: a.id || uid(), from: a.from || '', to: a.to || '' })),
-          deliverables: (goal.deliverables?.length ? goal.deliverables : [{ id: uid(), text: '', targetDate: '', status: '', projectId: '' }])
-            .map((d) => ({ id: d.id || uid(), text: d.text || '', targetDate: d.targetDate || '', status: d.status || '', projectId: d.projectId || '' })),
+          deliverables: (goal.deliverables?.length ? goal.deliverables : [{ id: uid(), text: '', targetDate: '', status: '', projectIds: [] }])
+            .map((d) => ({ id: d.id || uid(), text: d.text || '', targetDate: d.targetDate || '', status: d.status || '', projectIds: deliverableProjectIds(d) })),
         }
       : emptyGoal()
   );
@@ -223,11 +263,27 @@ function GoalEditor({ goal, projects = [], onClose }) {
     set({ changeAgenda: form.changeAgenda.filter((a) => a.id !== id) });
 
   // Deliverable row helpers
-  const addDeliv = () => set({ deliverables: [...form.deliverables, { id: uid(), text: '', targetDate: '', status: '', projectId: '' }] });
+  const addDeliv = () => set({ deliverables: [...form.deliverables, { id: uid(), text: '', targetDate: '', status: '', projectIds: [] }] });
   const setDeliv = (id, patch) =>
     set({ deliverables: form.deliverables.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
   const delDeliv = (id) =>
     set({ deliverables: form.deliverables.filter((d) => d.id !== id) });
+  const addProjectToDeliv = (id, projectId) => {
+    if (!projectId) return;
+    setForm((f) => ({
+      ...f,
+      deliverables: f.deliverables.map((d) =>
+        d.id === id && !d.projectIds.includes(projectId)
+          ? { ...d, projectIds: [...d.projectIds, projectId] }
+          : d),
+    }));
+  };
+  const removeProjectFromDeliv = (id, projectId) =>
+    setForm((f) => ({
+      ...f,
+      deliverables: f.deliverables.map((d) =>
+        d.id === id ? { ...d, projectIds: d.projectIds.filter((p) => p !== projectId) } : d),
+    }));
 
   const save = async () => {
     if (!form.title.trim()) return;
@@ -238,7 +294,9 @@ function GoalEditor({ goal, projects = [], onClose }) {
       title: form.title.trim(),
       code: form.code.trim(),
       changeAgenda: form.changeAgenda.filter((a) => a.from.trim() || a.to.trim()),
-      deliverables: form.deliverables.filter((d) => d.text.trim() || d.targetDate.trim() || d.status.trim() || d.projectId),
+      deliverables: form.deliverables
+        .filter((d) => d.text.trim() || d.targetDate.trim() || d.status.trim() || d.projectIds.length)
+        .map((d) => ({ ...d, projectIds: d.projectIds })),
     };
     try {
       if (goal) await updateGoal(goal.id, payload);
@@ -279,16 +337,36 @@ function GoalEditor({ goal, projects = [], onClose }) {
             </div>
           </div>
 
-          <div className="field">
-            <label className="label">Banner color</label>
-            <div className="goal-swatches">
-              {BANNER_COLORS.map((c) => (
-                <button key={c} type="button"
-                  className={`goal-swatch ${form.color === c ? 'active' : ''}`}
-                  style={{ background: c }}
-                  onClick={() => set({ color: c })}
-                  aria-label={`Color ${c}`} />
-              ))}
+          <div className="field-row">
+            <div className="field">
+              <label className="label">Banner color</label>
+              <div className="goal-swatches">
+                {BANNER_COLORS.map((c) => (
+                  <button key={c} type="button"
+                    className={`goal-swatch ${form.color === c ? 'active' : ''}`}
+                    style={{ background: c }}
+                    onClick={() => set({ color: c })}
+                    aria-label={`Banner color ${c}`} />
+                ))}
+                <label className="goal-swatch goal-swatch-custom" title="Custom banner color" style={{ background: form.color }}>
+                  <input type="color" value={form.color} onChange={(e) => set({ color: e.target.value })} />
+                </label>
+              </div>
+            </div>
+            <div className="field">
+              <label className="label">Card background</label>
+              <div className="goal-swatches">
+                {BG_COLORS.map((c) => (
+                  <button key={c} type="button"
+                    className={`goal-swatch ${form.bgColor === c ? 'active' : ''}`}
+                    style={{ background: c }}
+                    onClick={() => set({ bgColor: c })}
+                    aria-label={`Background color ${c}`} />
+                ))}
+                <label className="goal-swatch goal-swatch-custom" title="Custom background color" style={{ background: form.bgColor }}>
+                  <input type="color" value={form.bgColor} onChange={(e) => set({ bgColor: e.target.value })} />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -328,7 +406,7 @@ function GoalEditor({ goal, projects = [], onClose }) {
 
           {/* Deliverables */}
           <div className="field">
-            <label className="label">Deliverables (with target date, status &amp; project)</label>
+            <label className="label">Deliverables (target date, status &amp; one or more projects)</label>
             {form.deliverables.map((d, i) => (
               <div key={d.id} className="goal-edit-row">
                 <span className="goal-edit-num">{i + 1}</span>
@@ -341,14 +419,43 @@ function GoalEditor({ goal, projects = [], onClose }) {
                     <input className="input input-sm" value={d.status} placeholder="Status: completed as scheduled"
                       onChange={(e) => setDeliv(d.id, { status: e.target.value })} />
                   </div>
-                  <select className="select select-sm" value={d.projectId || ''}
-                    title="Link a project — its completion shows as a progress pill on the card"
-                    onChange={(e) => setDeliv(d.id, { projectId: e.target.value })}>
-                    <option value="">— Link a project (optional) —</option>
-                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+
+                  {/* Linked-project chips */}
+                  {d.projectIds.length > 0 && (
+                    <div className="goal-proj-chips">
+                      {d.projectIds.map((pid) => {
+                        const proj = projectStats[pid];
+                        return (
+                          <span key={pid} className="goal-proj-chip">
+                            <span className="goal-proj-chip-dot" style={{ background: proj?.color || '#888' }} />
+                            {proj ? `${proj.name} · ${proj.workspaceName}` : 'Unknown project'}
+                            <button type="button" className="goal-proj-chip-x" title="Remove project"
+                              onClick={() => removeProjectFromDeliv(d.id, pid)}>
+                              <GoalIcon name="x" size={11} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add-project picker (grouped by workspace) */}
+                  <select className="select select-sm" value=""
+                    title="Add a project (any workspace) — its completion shows as a progress pill"
+                    onChange={(e) => { addProjectToDeliv(d.id, e.target.value); e.target.value = ''; }}>
+                    <option value="">+ Add project…</option>
+                    {projectsByWorkspace.map(([wsName, projs]) => (
+                      <optgroup key={wsName} label={wsName}>
+                        {projs.map((p) => (
+                          <option key={p.id} value={p.id} disabled={d.projectIds.includes(p.id)}>
+                            {p.name}{d.projectIds.includes(p.id) ? ' ✓' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                 </div>
-                <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delDeliv(d.id)}>
+                <button className="btn btn-sm btn-ghost" title="Remove deliverable" onClick={() => delDeliv(d.id)}>
                   <GoalIcon name="x" size={14} />
                 </button>
               </div>

@@ -1093,6 +1093,50 @@ export function subscribeToActivitiesAcrossWorkspaces(workspaceIds, sinceDate, c
   return () => unsubs.forEach((u) => u && u());
 }
 
+// Projects across every workspace the user belongs to. One listener per
+// workspace, merged. Each project keeps its workspaceId so callers can group /
+// label by workspace. Used by Goals, where a deliverable can link projects
+// from other workspaces.
+export function subscribeToProjectsAcrossWorkspaces(workspaceIds, callback) {
+  if (!workspaceIds || workspaceIds.length === 0) { callback([]); return () => {}; }
+  const byWs = {};
+  const seenInitial = new Set();
+  const fire = () => {
+    if (seenInitial.size < workspaceIds.length) return;
+    callback(Object.values(byWs).flat());
+  };
+  const unsubs = workspaceIds.map((wsId) => {
+    const q = query(projectsRef, where('workspaceId', '==', wsId));
+    return onSnapshot(q, (snap) => {
+      byWs[wsId] = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => !p.deleted);
+      seenInitial.add(wsId);
+      fire();
+    });
+  });
+  return () => unsubs.forEach((u) => u && u());
+}
+
+// Tasks across every workspace the user belongs to — used to compute project
+// completion for cross-workspace deliverable links.
+export function subscribeToTasksAcrossWorkspaces(workspaceIds, callback) {
+  if (!workspaceIds || workspaceIds.length === 0) { callback([]); return () => {}; }
+  const byWs = {};
+  const seenInitial = new Set();
+  const fire = () => {
+    if (seenInitial.size < workspaceIds.length) return;
+    callback(Object.values(byWs).flat());
+  };
+  const unsubs = workspaceIds.map((wsId) => {
+    const q = query(tasksRef, where('workspaceId', '==', wsId));
+    return onSnapshot(q, (snap) => {
+      byWs[wsId] = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((t) => !t.deleted && !t.archived);
+      seenInitial.add(wsId);
+      fire();
+    });
+  });
+  return () => unsubs.forEach((u) => u && u());
+}
+
 // ─── TEMPLATES ──────────────────────────────────────────────────────────────
 // A template is a reusable starting point for either a task or a project.
 //   kind: 'task' | 'project'
@@ -1151,9 +1195,10 @@ export async function addGoal(userId, goal) {
     title:        goal.title || '',
     initiative:   goal.initiative || '',
     kpi:          goal.kpi || '',
-    color:        goal.color || '#1e2a52',
+    color:        goal.color || '#1e2a52',   // banner color
+    bgColor:      goal.bgColor || goal.color || '#1e2a52',  // card background
     changeAgenda: goal.changeAgenda || [],   // [{ id, from, to }]
-    deliverables: goal.deliverables || [],   // [{ id, text, targetDate, status }]
+    deliverables: goal.deliverables || [],   // [{ id, text, targetDate, status, projectIds }]
     order:        goal.order ?? Date.now(),
     archived:     false,
     deleted:      false,

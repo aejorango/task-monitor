@@ -10,6 +10,8 @@ import {
   subscribeToRecentActivities,
   subscribeToAllActivities,
   subscribeToProjects,
+  subscribeToProjectsAcrossWorkspaces,
+  subscribeToTasksAcrossWorkspaces,
   subscribeToTemplates,
   subscribeToGoals,
   subscribeToTaskComments,
@@ -18,7 +20,7 @@ import {
   migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
-import { useActiveWorkspaceId } from './useWorkspace';
+import { useActiveWorkspaceId, useWorkspaces } from './useWorkspace';
 
 // ─── useAuth ────────────────────────────────────────────────────────────────
 
@@ -291,6 +293,51 @@ export function useGoals() {
   }, [userId, ready, workspaceId]);
 
   return { goals, loading, userId, workspaceId };
+}
+
+// ─── Cross-workspace projects & tasks ───────────────────────────────────────
+// Span every workspace the signed-in user belongs to (security rules already
+// gate reads to member workspaces). Used by Goals, where a deliverable may link
+// projects from other workspaces and we compute each project's completion.
+
+export function useAllWorkspaceProjects() {
+  const { workspaces } = useWorkspaces();
+  const wsKey = workspaces.map((w) => w.id).sort().join(',');
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const ids = wsKey ? wsKey.split(',') : [];
+    if (ids.length === 0) { setProjects([]); setLoading(false); return; }
+    setLoading(true);
+    const unsub = subscribeToProjectsAcrossWorkspaces(ids, (data) => {
+      setProjects(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [wsKey]);
+
+  return { projects, loading };
+}
+
+export function useAllWorkspaceTasks() {
+  const { workspaces } = useWorkspaces();
+  const wsKey = workspaces.map((w) => w.id).sort().join(',');
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const ids = wsKey ? wsKey.split(',') : [];
+    if (ids.length === 0) { setTasks([]); setLoading(false); return; }
+    setLoading(true);
+    const unsub = subscribeToTasksAcrossWorkspaces(ids, (data) => {
+      setTasks(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [wsKey]);
+
+  return { tasks, loading };
 }
 
 // ─── useRecentActivities ───────────────────────────────────────────────────
