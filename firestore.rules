@@ -131,7 +131,14 @@ service cloud.firestore {
       allow read:   if isOwner(resource)
                     || isWorkspaceMember(resource.data.workspaceId)
                     || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
-      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      // Create allowed when the creator is a workspace member of the target
+      // workspace, OR is a member of the project the task is being added to.
+      // The project-member branch is what lets a recipient of a SHARED
+      // project add tasks even though they're not in the project's workspace.
+      allow create: if isCreatingOwn()
+                    && (isWorkspaceMember(request.resource.data.workspaceId)
+                        || (request.resource.data.projectId is string
+                            && isProjectMember(request.resource.data.projectId)));
       allow update: if isOwner(resource)
                     || canEditWorkspace(resource.data.workspaceId)
                     || (resource.data.projectId is string && canEditProject(resource.data.projectId));
@@ -145,7 +152,11 @@ service cloud.firestore {
       allow read:   if isOwner(resource)
                     || isWorkspaceMember(resource.data.workspaceId)
                     || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
-      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      // Same as tasks: workspace member OR project member of the target.
+      allow create: if isCreatingOwn()
+                    && (isWorkspaceMember(request.resource.data.workspaceId)
+                        || (request.resource.data.projectId is string
+                            && isProjectMember(request.resource.data.projectId)));
       allow update: if isOwner(resource)
                     || canEditWorkspace(resource.data.workspaceId)
                     || (resource.data.projectId is string && canEditProject(resource.data.projectId));
@@ -204,8 +215,16 @@ service cloud.firestore {
 
     // ─── Task comments ──────────────────────────────────────────────────────
     match /taskComments/{commentId} {
-      allow read:   if isOwner(resource) || isWorkspaceMember(resource.data.workspaceId);
-      allow create: if isCreatingOwn() && isWorkspaceMember(request.resource.data.workspaceId);
+      // Read / create are extended to project members so recipients of a
+      // SHARED project can see and add comments on its tasks even though
+      // they're not in the project's workspace.
+      allow read:   if isOwner(resource)
+                    || isWorkspaceMember(resource.data.workspaceId)
+                    || (resource.data.projectId is string && isProjectMember(resource.data.projectId));
+      allow create: if isCreatingOwn()
+                    && (isWorkspaceMember(request.resource.data.workspaceId)
+                        || (request.resource.data.projectId is string
+                            && isProjectMember(request.resource.data.projectId)));
       allow update: if isOwner(resource);
       allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }

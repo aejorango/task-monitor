@@ -80,6 +80,13 @@ export default function ProjectsView() {
                 <div className="project-card-head">
                   <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
                   <h3 className="project-name">{p.name}</h3>
+                  {p._shared && (
+                    <span
+                      className="badge badge-soft-info"
+                      title="This project lives in a different workspace and was shared with you."
+                      style={{ marginLeft: 'auto' }}
+                    >Shared</span>
+                  )}
                 </div>
                 <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
                 <ProjectAssigneeStrip project={p} />

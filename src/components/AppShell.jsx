@@ -580,6 +580,13 @@ function ProjectPicker({ projects, value, onChange }) {
             >
               <span className="proj-dot" style={{ background: p.color }} />
               {p.name}
+              {p._shared && (
+                <span
+                  className="badge badge-soft-info"
+                  style={{ marginLeft: 'auto', fontSize: '10px' }}
+                  title="Shared project from another workspace"
+                >Shared</span>
+              )}
             </button>
           ))}
         </div>

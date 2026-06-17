@@ -213,8 +213,13 @@ export default function CsvImporter({ onClose }) {
             if (createdTaskByKey[key]) {
               task = createdTaskByKey[key];
             } else {
+              // If the target project lives in a different workspace (shared
+              // project), the task must inherit the project's workspaceId so
+              // it lands in the project's home — not orphaned in the
+              // importer's active workspace.
+              const targetWorkspaceId = row.project?.workspaceId || workspaceId;
               const ref = await addTask(userId, {
-                workspaceId,
+                workspaceId: targetWorkspaceId,
                 title: row.taskTitle,
                 category: row.project?.name || row.projectName || 'Personal',
                 projectId: row.project?.id || null,
@@ -223,7 +228,7 @@ export default function CsvImporter({ onClose }) {
               });
               task = {
                 id: ref.id,
-                workspaceId,
+                workspaceId: targetWorkspaceId,
                 title: row.taskTitle,
                 category: row.project?.name || row.projectName || 'Personal',
                 projectId: row.project?.id || null,

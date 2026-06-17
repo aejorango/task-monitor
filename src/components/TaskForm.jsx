@@ -71,8 +71,15 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
       const mergedPriority = priority || parsed.priority || 'medium';
       const mergedPlanEnd  = planEnd   || parsed.plan?.endDate || null;
 
+      // When adding to a shared project that lives in another workspace, the
+      // task must inherit the PROJECT's workspaceId — not the user's active
+      // workspace. Otherwise the create is rejected (the user isn't a member
+      // of their own workspace's project), and even if accepted the task
+      // would land orphaned outside the project's home.
+      const targetWorkspaceId = selectedProject?.workspaceId || workspaceId;
+
       await addTask(userId, {
-        workspaceId,
+        workspaceId: targetWorkspaceId,
         title: (parsed.title || title).trim(),
         description: description.trim(),
         category: selectedProject?.name || 'Personal',

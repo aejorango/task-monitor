@@ -26,8 +26,10 @@ export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
     if (!title.trim()) return;
     setSaving(true);
     try {
+      // Inherit the project's workspaceId so tasks added to a SHARED project
+      // (which lives in a different workspace) land in the right home.
       await addTask(userId, {
-        workspaceId,
+        workspaceId: project?.workspaceId || workspaceId,
         title: title.trim(),
         category: project?.name || 'Personal',
         projectId: projectId || null,

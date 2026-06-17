@@ -739,6 +739,74 @@ export function migrateLegacyCategories() {
   return Promise.resolve({ migrated: false, reason: 'obsolete (superseded by workspace model)' });
 }
 
+// Subscribe to projects where the current user appears in `members` regardless
+// of workspace — i.e. projects that were SHARED with them. Recipient could be
+// in a totally different workspace; this is how that shared project shows up
+// in their app at all. Caller dedupes against their workspace-scoped list.
+export function subscribeToSharedProjects(userId, callback) {
+  if (!userId) { callback([]); return () => {}; }
+  const q = query(projectsRef, where('members', 'array-contains', userId));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((p) => !p.deleted);
+    callback(data);
+  }, listenerError('sharedProjects', () => callback([])));
+}
+
+// Subscribe to all non-deleted tasks across the given projectIds, in chunks of
+// 30 (Firestore `in`-query limit). Used so a user who's a project member of a
+// SHARED project can see its tasks even when the project lives in a workspace
+// they're not part of.
+export function subscribeToTasksByProjects(projectIds, callback) {
+  if (!projectIds || projectIds.length === 0) { callback([]); return () => {}; }
+  const chunks = [];
+  for (let i = 0; i < projectIds.length; i += 30) chunks.push(projectIds.slice(i, i + 30));
+
+  const byChunk = {};
+  const seenInitial = new Set();
+  const fire = () => {
+    if (seenInitial.size < chunks.length) return;
+    callback(Object.values(byChunk).flat());
+  };
+  const unsubs = chunks.map((chunk, idx) => {
+    const q = query(tasksRef, where('projectId', 'in', chunk));
+    return onSnapshot(q, (snap) => {
+      byChunk[idx] = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((t) => !t.deleted && !t.archived);
+      seenInitial.add(idx);
+      fire();
+    }, listenerError('tasksByProjects', () => { byChunk[idx] = []; seenInitial.add(idx); fire(); }));
+  });
+  return () => unsubs.forEach((u) => u && u());
+}
+
+// Same shape, for activities under shared projects.
+export function subscribeToActivitiesByProjects(projectIds, callback) {
+  if (!projectIds || projectIds.length === 0) { callback([]); return () => {}; }
+  const chunks = [];
+  for (let i = 0; i < projectIds.length; i += 30) chunks.push(projectIds.slice(i, i + 30));
+
+  const byChunk = {};
+  const seenInitial = new Set();
+  const fire = () => {
+    if (seenInitial.size < chunks.length) return;
+    callback(Object.values(byChunk).flat());
+  };
+  const unsubs = chunks.map((chunk, idx) => {
+    const q = query(activitiesRef, where('projectId', 'in', chunk));
+    return onSnapshot(q, (snap) => {
+      byChunk[idx] = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => !a.deleted);
+      seenInitial.add(idx);
+      fire();
+    }, listenerError('activitiesByProjects', () => { byChunk[idx] = []; seenInitial.add(idx); fire(); }));
+  });
+  return () => unsubs.forEach((u) => u && u());
+}
+
 // ─── TASKS ──────────────────────────────────────────────────────────────────
 
 export async function addTask(userId, task) {
@@ -1426,6 +1494,10 @@ export async function addTaskComment(userId, task, body) {
   return await addDoc(taskCommentsRef, {
     userId,
     workspaceId: taskObj.workspaceId,
+    // Denormalize projectId so the security rule can grant project members
+    // (recipients of SHARED projects) permission to comment, even when
+    // they're not a member of the parent task's workspace.
+    projectId:   taskObj.projectId || null,
     taskId,
     body: String(body || ''),
     createdAt: serverTimestamp(),
