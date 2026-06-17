@@ -646,7 +646,8 @@ function ProjectSharing({ project }) {
     setCreatingInvite(true);
     setError(null);
     try {
-      const me = (await import('../services/firebase')).auth.currentUser;
+      const me = auth.currentUser;
+      if (!me) throw new Error('You appear to be signed out. Reload and sign in again.');
       const ref = await createInvite(me.uid, {
         projectId: project.id,
         role: inviteRole,
