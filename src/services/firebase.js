@@ -446,6 +446,45 @@ export async function addWorkspaceMember(workspace, memberUserId, role = 'editor
   await updateDoc(ref, updates);
 }
 
+// Best-effort read of several users' public profile fields. Only the slots the
+// caller is allowed to read (their own, or any when superadmin) come back.
+export async function fetchUserProfiles(uids) {
+  const out = {};
+  await Promise.all((uids || []).map(async (uid) => {
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) {
+        const u = snap.data();
+        out[uid] = { displayName: u.displayName || '', email: u.email || '', photoURL: u.photoURL || '' };
+      }
+    } catch { /* not readable */ }
+  }));
+  return out;
+}
+
+// Fill in memberProfiles for any members missing a name/email (e.g. added
+// before profile-snapshotting, or whose profile wasn't readable at add time).
+// Persists what it can so every member benefits. Returns the resolved map for
+// immediate display. Safe to call on modal open; a no-op when nothing's missing.
+export async function backfillWorkspaceMemberProfiles(workspace) {
+  const missing = (workspace.members || []).filter((uid) => {
+    const p = workspace.memberProfiles?.[uid];
+    return !p || (!p.displayName && !p.email);
+  });
+  if (missing.length === 0) return {};
+  const fetched = await fetchUserProfiles(missing);
+  const updates = {};
+  Object.entries(fetched).forEach(([uid, prof]) => {
+    if (prof.displayName || prof.email) updates[`memberProfiles.${uid}`] = prof;
+  });
+  if (Object.keys(updates).length > 0) {
+    try {
+      await updateDoc(doc(db, 'workspaces', workspace.id), { ...updates, updatedAt: serverTimestamp() });
+    } catch { /* read-only viewer — display still works from the returned map */ }
+  }
+  return fetched;
+}
+
 export async function removeWorkspaceMember(workspace, memberUserId) {
   // Don't allow removing the owner via this API
   if (workspace.acl?.[memberUserId] === 'owner') {

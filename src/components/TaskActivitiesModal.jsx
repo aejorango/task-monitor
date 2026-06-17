@@ -38,7 +38,12 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      // Close only when the backdrop itself is clicked — not when a click
+      // bubbles up, and not from a stray trailing event right after opening.
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div
         className="modal modal-wide"
         onClick={(e) => e.stopPropagation()}

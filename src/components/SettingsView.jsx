@@ -8,6 +8,7 @@ import {
   addWorkspaceMember,
   removeWorkspaceMember,
   updateWorkspaceMemberRole,
+  backfillWorkspaceMemberProfiles,
   addCompany,
   updateCompany,
   softDeleteCompany,
@@ -651,6 +652,15 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
   const [newUid, setNewUid] = useState('');
   const [newRole, setNewRole] = useState('editor');
   const [busy, setBusy] = useState(false);
+  // Resolve names for members whose profile isn't denormalized yet (added
+  // before profile-snapshotting). Best-effort; persists what it can.
+  const [resolved, setResolved] = useState({});
+  useEffect(() => {
+    let alive = true;
+    backfillWorkspaceMemberProfiles(workspace).then((map) => { if (alive) setResolved(map); }).catch(() => {});
+    return () => { alive = false; };
+  }, [workspace.id, (workspace.members || []).join(',')]);
+  const profOf = (uid) => workspace.memberProfiles?.[uid] || resolved[uid] || null;
 
   const add = async () => {
     if (!newUid.trim()) return;
@@ -660,7 +670,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
     finally { setBusy(false); }
   };
   const remove = async (uid) => {
-    const prof = workspace.memberProfiles?.[uid];
+    const prof = profOf(uid);
     const who = prof?.displayName || prof?.email || uid;
     if (!confirm(`Remove member ${who}?`)) return;
     setBusy(true);
@@ -687,7 +697,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
           {(workspace.members || []).map((uid) => {
             const role = workspace.acl?.[uid] || 'editor';
             const isMe = uid === currentUid;
-            const prof = workspace.memberProfiles?.[uid];
+            const prof = profOf(uid);
             const primary = prof?.displayName || prof?.email || `${uid.slice(0, 8)}…`;
             const secondary = prof?.displayName ? prof?.email : null;
             return (
@@ -718,6 +728,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
                     value={role}
                     onChange={(e) => changeRole(uid, e.target.value)}
                     disabled={busy}
+                    style={{ width: 104, flexShrink: 0 }}
                   >
                     <option value="admin">admin</option>
                     <option value="editor">editor</option>

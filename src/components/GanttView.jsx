@@ -565,9 +565,10 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
 
   // Clicking the row's label area opens the activities modal. Bar drags are
   // not affected because drag handlers stopPropagation on the bar elements.
-  const handleLabelClick = () => {
+  const handleLabelClick = (e) => {
     // Only fire on direct label clicks, not on bubbling from interactive children.
     if (!onClick) return;
+    e.stopPropagation();
     onClick();
   };
 

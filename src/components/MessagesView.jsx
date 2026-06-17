@@ -2,7 +2,7 @@
 // Two-pane iMessage-style layout: conversation list on the left, thread on the
 // right. On mobile a single pane shows at a time.
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { useConversations, useMessages, useMe } from '../hooks/useChat';
 import { useWorkspaces } from '../hooks/useWorkspace';
 import {
@@ -292,7 +292,7 @@ function ChatThread({ conversation, me, onBack }) {
           const showName = !mine && conversation.type === 'group' && m.senderId !== lastSender;
           lastSender = m.senderId;
           return (
-            <div key={m.id}>
+            <Fragment key={m.id}>
               {showDay && <div className="chat-day-sep"><span>{day}</span></div>}
               <div className={`chat-msg ${mine ? 'mine' : 'theirs'}`}>
                 {showName && <div className="chat-msg-sender">{m.senderName}</div>}
@@ -301,7 +301,7 @@ function ChatThread({ conversation, me, onBack }) {
                 </div>
                 <div className="chat-msg-time">{clockTime(m.createdAt)}</div>
               </div>
-            </div>
+            </Fragment>
           );
         })}
       </div>
