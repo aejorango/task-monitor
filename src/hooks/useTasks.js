@@ -89,9 +89,14 @@ export function useProjects() {
     if (!ready || !userId) return [];
     const map = new Map();
     workspaceProjects.forEach((p) => map.set(p.id, p));
+    // A project belongs to exactly ONE workspace and must appear ONLY there.
+    // subscribeToSharedProjects spans every workspace the user is a project
+    // member of, so we scope it to the ACTIVE workspace — otherwise projects
+    // from other workspaces (e.g. BSP) bled into the current one (e.g. Blue
+    // Innovation) with a "Shared" badge.
     sharedProjects.forEach((p) => {
-      if (!map.has(p.id)) {
-        map.set(p.id, { ...p, _shared: p.workspaceId !== workspaceId });
+      if (p.workspaceId === workspaceId && !map.has(p.id)) {
+        map.set(p.id, p);
       }
     });
     // Latest first by createdAt, matching the underlying subscribers' sort.
@@ -143,12 +148,14 @@ export function useTasks() {
     return () => unsub();
   }, [userId, ready]);
 
-  // Tasks under shared projects that live in a DIFFERENT workspace than the
-  // user's active one — these wouldn't be reached by the workspace-scoped
-  // query above. We key the effect by a stable join of the project ids so we
-  // don't tear down + re-create subscriptions on unrelated re-renders.
+  // Tasks under projects in the ACTIVE workspace that the user reaches via
+  // per-project membership (rather than workspace membership). Scoped to the
+  // active workspace so tasks from OTHER workspaces' shared projects never
+  // bleed into the current workspace's task list. We key the effect by a stable
+  // join of the project ids so we don't tear down + re-create subscriptions on
+  // unrelated re-renders.
   const sharedProjectIds = useMemo(
-    () => sharedProjects.filter((p) => p.workspaceId !== workspaceId).map((p) => p.id),
+    () => sharedProjects.filter((p) => p.workspaceId === workspaceId).map((p) => p.id),
     [sharedProjects, workspaceId],
   );
   const sharedProjectIdsKey = sharedProjectIds.join(',');
