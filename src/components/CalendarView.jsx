@@ -34,12 +34,15 @@ export default function CalendarView({ projectFilter }) {
   const [editing, setEditing] = useState(null);
   const { userId } = useAuth();
   const [activeDrag, setActiveDrag] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'todo' | 'doing' | 'done'
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const filtered = useMemo(() => {
-    return tasks.filter((t) => projectFilter === 'all' || t.projectId === projectFilter);
-  }, [tasks, projectFilter]);
+    return tasks
+      .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
+      .filter((t) => statusFilter === 'all' || t.status === statusFilter);
+  }, [tasks, projectFilter, statusFilter]);
 
   const grid = useMemo(() => {
     const firstOfMonth = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -127,6 +130,22 @@ export default function CalendarView({ projectFilter }) {
           <button className="btn btn-sm" onClick={next}>›</button>
           <span className="muted" style={{ marginLeft: 8 }}>{monthLabel}</span>
         </div>
+      </div>
+
+      <div className="toolbar" style={{ marginBottom: 12 }}>
+        <span className="small muted" style={{ fontWeight: 600 }}>Show:</span>
+        {[
+          { id: 'all',   label: 'All' },
+          { id: 'todo',  label: 'To do' },
+          { id: 'doing', label: 'Ongoing' },
+          { id: 'done',  label: 'Done' },
+        ].map((s) => (
+          <button
+            key={s.id}
+            className={`chip ${statusFilter === s.id ? 'active' : ''}`}
+            onClick={() => setStatusFilter(s.id)}
+          >{s.label}</button>
+        ))}
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
