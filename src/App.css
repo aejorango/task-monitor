@@ -5980,3 +5980,78 @@ a:hover { text-decoration: underline; }
   .chat-back { display: inline-block; }
   .chat-msg { max-width: 84%; }
 }
+
+/* ─── Topbar AI helper ───────────────────────────────────────────────────── */
+.topbar-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.topbar-ai-btn:hover {
+  background: var(--c-surface-2);
+  border-color: #eab308;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.18);
+}
+.topbar-ai-label { letter-spacing: 0.02em; }
+@media (max-width: 640px) {
+  .topbar-ai-label { display: none; }
+  .topbar-ai-btn { padding: 6px; }
+}
+
+.ai-helper-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.ai-helper-bulb {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: var(--r-lg);
+  background: rgba(250, 204, 21, 0.15);
+  display: grid; place-items: center;
+}
+
+.ai-sug-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.ai-sug {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  background: var(--c-surface);
+}
+.ai-sug-row { display: flex; align-items: flex-start; gap: 10px; }
+.ai-sug-rank {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--c-accent-soft); color: var(--c-accent);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 12px;
+}
+.ai-sug-body { flex: 1; min-width: 0; }
+.ai-sug-title { font-weight: 600; font-size: 14px; color: var(--c-text); }
+.ai-sug-reason { font-size: 12.5px; color: var(--c-text-2); margin-top: 2px; line-height: 1.45; }
+.ai-sug-row .btn { flex-shrink: 0; white-space: nowrap; }
+
+.ai-sug-prompt {
+  margin-top: 10px; margin-left: 34px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  overflow: hidden;
+}
+.ai-sug-prompt-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; border-bottom: 1px solid var(--c-border);
+}
+.ai-sug-prompt-text {
+  margin: 0; padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.5; color: var(--c-text);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 260px; overflow-y: auto;
+}

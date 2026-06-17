@@ -17,7 +17,6 @@ import {
   subscribeToTaskComments,
   subscribeToSavedViews,
   subscribeToWebhooks,
-  migrateLegacyCategories,
   todayLocal,
 } from '../services/firebase';
 import { useActiveWorkspaceId, useWorkspaces } from './useWorkspace';
@@ -49,18 +48,8 @@ export function useProjects() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!ready || !userId) return;
-    let cancelled = false;
-    migrateLegacyCategories(userId)
-      .then((result) => {
-        if (!cancelled && result.migrated) {
-          console.info('[migration]', result);
-        }
-      })
-      .catch((err) => console.error('[migration] failed:', err));
-    return () => { cancelled = true; };
-  }, [userId, ready]);
+  // Note: the legacy category→project migration was removed. Workspace
+  // onboarding is handled by migrateToWorkspaces() (see useWorkspaces).
 
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
@@ -127,23 +116,33 @@ export function useTasks() {
 }
 
 // ─── useActivities (one task) ───────────────────────────────────────────────
-
+// Subscribe via the workspace-scoped query and filter to this task client-side.
+// A direct `where('taskId','==',id)` query is rejected by the security rules
+// (they gate reads on workspaceId/owner/project, and "rules are not filters"),
+// which silently returned an empty list — so the activity log looked empty
+// everywhere except WBS/Table (which already use the workspace-scoped query).
 export function useActivities(taskId) {
+  const workspaceId = useActiveWorkspaceId();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!taskId) {
+    if (!taskId || !workspaceId) {
       setActivities([]);
-      setLoading(false);
+      setLoading(!!taskId && !workspaceId);
       return;
     }
-    const unsub = subscribeToActivities(taskId, (data) => {
-      setActivities(data);
+    setLoading(true);
+    const unsub = subscribeToAllActivities(workspaceId, (all) => {
+      setActivities(
+        all
+          .filter((a) => a.taskId === taskId)
+          .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+      );
       setLoading(false);
     });
     return () => unsub();
-  }, [taskId]);
+  }, [taskId, workspaceId]);
 
   return { activities, loading };
 }

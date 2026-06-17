@@ -267,6 +267,50 @@ Stay under 350 words. No emojis. No celebratory framing.`;
   return text.trim();
 }
 
+// Structured "what should I do next?" — returns the top N open tasks to tackle
+// now, each tied to a real task id (or null for a proposed new action), so the
+// caller can offer a "generate prompt" action per item.
+export async function suggestTopTasks({ tasks, projects, today, count = 3 }) {
+  const projById = {};
+  projects.forEach((p) => { projById[p.id] = p; });
+  const open = tasks.filter((t) => t.status !== 'done').slice(0, 60);
+  const lines = open.map((t) => {
+    const p = projById[t.projectId];
+    return `- id:${t.id} | ${t.title} [${t.status}/${t.priority || 'medium'}]${p ? ` · ${p.name}` : ''}${t.plan?.endDate ? ` · due ${t.plan.endDate}` : ''}${t.dependsOn?.length ? ` · blocked by ${t.dependsOn.length} task(s)` : ''}`;
+  });
+
+  const system = `You help an operator who feels stuck decide what to do next. From their open tasks, choose the ${count} MOST important to tackle right now. Weigh: due dates (sooner = higher), priority, dependencies (a task blocked by incomplete work ranks lower; one that unblocks others ranks higher), and momentum.
+
+Respond ONLY with a JSON array of exactly ${count} objects, highest priority first. Each object:
+- "taskId": the id from the list (copy it exactly), or null if you propose a brand-new action not in the list
+- "title": a short imperative action (<= 80 chars)
+- "reason": one concise sentence on why to do it now
+
+No prose, no markdown, no code fences. The response must start with [ and end with ].`;
+
+  const user = `Today is ${today}.
+Open tasks (${open.length}):
+${lines.join('\n') || '(none yet — propose sensible first actions)'}
+
+Return the top ${count} as a JSON array.`;
+
+  const text = await callClaude({ system, user, maxTokens: 700 });
+  const first = text.indexOf('[');
+  const last = text.lastIndexOf(']');
+  if (first === -1 || last === -1) throw new Error(`Could not find JSON in response:\n${text.slice(0, 300)}`);
+  let parsed;
+  try { parsed = JSON.parse(text.slice(first, last + 1)); }
+  catch (e) { throw new Error(`Could not parse suggestions: ${e.message}`); }
+  if (!Array.isArray(parsed)) throw new Error('Model did not return a JSON array.');
+  const known = new Set(open.map((t) => t.id));
+  return parsed.slice(0, count).map((s, i) => ({
+    id: `sug-${i}`,
+    taskId: s.taskId && known.has(s.taskId) ? s.taskId : null,
+    title: String(s.title || '').slice(0, 160).trim() || `Suggestion ${i + 1}`,
+    reason: String(s.reason || '').slice(0, 280).trim(),
+  }));
+}
+
 // "What should I tackle today?"
 export async function suggestNextTask({ tasks, projects, today }) {
   const projById = {};

@@ -7,6 +7,7 @@ import { useOnline } from '../hooks/useOnline';
 import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import Icon from './Icon';
+import AiHelper from './AiHelper';
 
 const VIEWS = [
   { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
@@ -178,6 +179,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
             ⚡ Offline
           </span>
         )}
+        <AiHelper />
         {timerWidget}
         <GlobalSearch projects={projects} navigate={navigate} />
       </header>
