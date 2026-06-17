@@ -76,8 +76,9 @@ export default function InviteClaimView({ inviteId, navigate }) {
     );
   }
 
-  const isAnonymous = !!auth.currentUser?.isAnonymous;
-  if (isAnonymous) {
+  // Not signed in yet → prompt Google sign-in. After the popup resolves, useAuth
+  // updates `userId`, the effect loads the invite, and the accept screen shows.
+  if (!userId) {
     return (
       <div className="invite-screen">
         <div className="invite-card">

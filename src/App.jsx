@@ -71,6 +71,19 @@ export default function App() {
     return <FullPageSpinner label="Signing in…" />;
   }
 
+  // Invite links (#/invite/<id>) must be claimable regardless of account
+  // approval status — an invite grants project-level access independent of
+  // workspace approval. Render the claim screen BEFORE the approval gate so a
+  // recipient (signed out, or signed in but still pending) can accept it.
+  // InviteClaimView prompts for Google sign-in when the user isn't signed in.
+  if (route.view === 'invite') {
+    return (
+      <Suspense fallback={<FullPageSpinner label="Loading invite…" />}>
+        <InviteClaimView inviteId={route.projectFilter} navigate={navigate} />
+      </Suspense>
+    );
+  }
+
   if (!userId) {
     return <LandingView />;
   }
