@@ -2674,7 +2674,7 @@ a:hover { text-decoration: underline; }
   margin: 16px 0;
 }
 @media (max-width: 960px) {
-  .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .dash-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .dash-kpi {
   background: var(--c-surface);
@@ -2732,11 +2732,17 @@ a:hover { text-decoration: underline; }
   gap: 12px;
   margin-bottom: 12px;
 }
-.dash-row-main      { grid-template-columns: 2fr 1fr; }
-.dash-row-secondary { grid-template-columns: 1fr 1fr; }
-.dash-row-overview  { grid-template-columns: 1fr 1.4fr; margin-bottom: 16px; }
+/* minmax(0, …) lets tracks shrink below their content's min-width so a card
+   with non-wrapping content can't push the row past the viewport. */
+.dash-row-main      { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.dash-row-secondary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.dash-row-overview  { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); margin-bottom: 16px; }
 @media (max-width: 900px) {
   .dash-row-overview { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .dash-row-main,
+  .dash-row-secondary { grid-template-columns: 1fr; }
 }
 
 /* Empty-state hero */
@@ -2860,6 +2866,8 @@ a:hover { text-decoration: underline; }
   border-radius: var(--r-xl);
   padding: 18px 20px;
   box-shadow: var(--shadow-card);
+  min-width: 0;          /* allow the card to shrink inside its grid track */
+  overflow: hidden;      /* clip any stray wide child instead of overflowing the page */
 }
 .dash-card-head {
   display: flex;
@@ -4220,6 +4228,35 @@ a:hover { text-decoration: underline; }
   display: flex;
   gap: 6px;
 }
+.user-mgmt-row .um-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  min-width: 0;
+}
+.um-id-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-3);
+  flex-shrink: 0;
+}
+.um-id-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--c-text-2);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 1px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.um-id .btn { padding: 2px 8px; font-size: 11px; flex-shrink: 0; }
 @media (max-width: 600px) {
   .user-mgmt-row {
     grid-template-columns: auto 1fr;

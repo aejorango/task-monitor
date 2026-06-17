@@ -753,7 +753,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
               <button className="btn btn-sm" onClick={add} disabled={busy || !newUid.trim()}>Add</button>
             </div>
             <p className="muted small" style={{ marginTop: 6 }}>
-              The user must have signed in at least once. They can copy their Account ID from their <em>Settings → Account</em> page. Their name and email will appear here once they next open the app.
+              The user must have signed in at least once. Copy their Account ID from <em>Settings → User Management</em> (or they can copy their own from <em>Settings → Account</em>). Their name and email appear here as soon as they're added; if not yet available, it fills in once they next open the app.
             </p>
           </div>
         )}
@@ -874,6 +874,11 @@ function UserManagementSection({ currentUid }) {
                   )}
                 </div>
                 <div className="um-email">{u.email}</div>
+                <div className="um-id">
+                  <span className="um-id-label">Account ID</span>
+                  <code className="um-id-value" title={u.id}>{u.id}</code>
+                  <CopyButton value={u.id} label="⎘ Copy ID" />
+                </div>
                 {u.status === 'approved' && (() => {
                   const assignedCompany = companies.find((c) => c.id === u.companyId);
                   const aiBlocked = !u.companyId || !(assignedCompany?.anthropicApiKey || '').trim();

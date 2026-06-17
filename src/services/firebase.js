@@ -13,6 +13,8 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  terminate,
+  clearIndexedDbPersistence,
   collection,
   doc,
   addDoc,
@@ -124,8 +126,57 @@ export async function signInWithGoogle() {
   }
 }
 
+// Keys we own in localStorage that are scoped to the signed-in user (NOT
+// per-device preferences). These must be wiped on sign-out so the next account
+// on a shared browser never inherits the previous user's context.
+const PER_USER_LOCALSTORAGE_KEYS = [
+  'task-monitor.activeWorkspace.v1',
+];
+
+// Drop the Firestore IndexedDB cache. The persistent local cache is keyed per
+// Firebase project, NOT per user — so without this, account B on a shared
+// browser can read documents account A cached while it had access, even after
+// security rules would deny a fresh server read. Must terminate the client
+// first; the caller is expected to reload immediately afterward since `db`
+// becomes unusable once terminated.
+async function clearFirestoreCache() {
+  try { await terminate(_db); } catch { /* already terminated / in use */ }
+  try { await clearIndexedDbPersistence(_db); }
+  catch (err) {
+    // Fails if another tab still holds the cache open. Non-fatal: server-side
+    // rules remain the real guard; the purge will succeed once tabs close.
+    console.warn('[firestore] cache clear skipped:', err?.code || err);
+  }
+}
+
 export async function signOutUser() {
+  for (const k of PER_USER_LOCALSTORAGE_KEYS) {
+    try { localStorage.removeItem(k); } catch { /* ignored */ }
+  }
   await signOut(auth);
+  await clearFirestoreCache();
+  // Hard reload to a clean slate: no live listeners, no in-memory state, and a
+  // freshly re-initialized Firestore client with an empty cache.
+  try { window.location.reload(); } catch { /* non-browser env */ }
+}
+
+// One-time purge of any Firestore cache written BEFORE the workspace-scoped
+// security rules were deployed. Older builds (looser rules) cached other users'
+// documents in IndexedDB; those stale copies still render even though the
+// server now denies fresh reads (the console fills with permission-denied).
+// Bumping CACHE_SCHEMA_VERSION forces every browser to drop that cache once.
+// Returns true when a purge happened (caller should reload).
+const CACHE_SCHEMA_VERSION = '2026-06-17-workspace-isolation';
+const CACHE_VERSION_KEY = 'task-monitor.cacheSchema';
+export async function purgeStaleCacheOnce() {
+  let current;
+  try { current = localStorage.getItem(CACHE_VERSION_KEY); } catch { return false; }
+  if (current === CACHE_SCHEMA_VERSION) return false;
+  // Set the flag BEFORE clearing so a failed/partial clear can't cause a
+  // reload loop. Server-side rules are the real guard regardless.
+  try { localStorage.setItem(CACHE_VERSION_KEY, CACHE_SCHEMA_VERSION); } catch { /* ignored */ }
+  await clearFirestoreCache();
+  return true;
 }
 
 // ─── User profile / approval ────────────────────────────────────────────────
@@ -182,7 +233,7 @@ export function subscribeToUserProfile(uid, callback) {
   }
   return onSnapshot(doc(usersRef, uid), (snap) => {
     callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-  });
+  }, listenerError('userProfile', () => callback(null)));
 }
 
 export function subscribeToAllUsers(callback) {
@@ -191,7 +242,7 @@ export function subscribeToAllUsers(callback) {
   return onSnapshot(usersRef, (s) => {
     const list = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     callback(list);
-  });
+  }, listenerError('allUsers', () => callback([])));
 }
 
 export async function approveUser(targetUid, approverUid) {
@@ -270,7 +321,7 @@ export function subscribeToCompanies(callback) {
       .filter((c) => !c.deleted)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(list);
-  });
+  }, listenerError('companies', () => callback([])));
 }
 
 // Subscribe to a single company doc (e.g. the one the current user belongs
@@ -282,7 +333,7 @@ export function subscribeToCompany(companyId, callback) {
   }
   return onSnapshot(doc(companiesRef, companyId), (snap) => {
     callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-  });
+  }, listenerError('company', () => callback(null)));
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -372,11 +423,27 @@ export async function addWorkspaceMember(workspace, memberUserId, role = 'editor
   }
   if ((workspace.members || []).includes(memberUserId)) return;
   const ref = doc(db, 'workspaces', workspace.id);
-  await updateDoc(ref, {
+  const updates = {
     members: [...(workspace.members || []), memberUserId],
     [`acl.${memberUserId}`]: role,
     updatedAt: serverTimestamp(),
-  });
+  };
+  // Best-effort: snapshot the new member's profile into memberProfiles so their
+  // name/email/photo show immediately. The /users/{uid} read only succeeds for
+  // superadmins (per rules); otherwise we silently fall back to the existing
+  // behavior where the slot fills in when that user next opens the app.
+  try {
+    const snap = await getDoc(doc(db, 'users', memberUserId));
+    if (snap.exists()) {
+      const u = snap.data();
+      updates[`memberProfiles.${memberUserId}`] = {
+        displayName: u.displayName || '',
+        email:       u.email || '',
+        photoURL:    u.photoURL || '',
+      };
+    }
+  } catch { /* not readable — name appears once the user next signs in */ }
+  await updateDoc(ref, updates);
 }
 
 export async function removeWorkspaceMember(workspace, memberUserId) {
@@ -429,6 +496,21 @@ export async function updateMyMemberProfileInWorkspace(workspaceId, profile) {
   }
 }
 
+// Shared error handler for collection listeners. A `permission-denied` here
+// means the listener outlived the caller's access to that scope — a workspace
+// switch, a sign-out mid-flight, or a stale pre-isolation cache the server now
+// refuses. In every case we reset the bound state to empty so the UI can never
+// keep showing rows the server denies, and we stay quiet for the expected
+// permission-denied case (other errors are still surfaced).
+function listenerError(label, reset) {
+  return (err) => {
+    if (err?.code !== 'permission-denied') {
+      console.warn(`[subscribe:${label}]`, err?.code || err);
+    }
+    try { reset(); } catch { /* ignored */ }
+  };
+}
+
 // Live list of workspaces the current user belongs to.
 export function subscribeToWorkspaces(userId, callback) {
   // Single filter — array-contains plus an equality filter on a different
@@ -441,7 +523,7 @@ export function subscribeToWorkspaces(userId, callback) {
       .filter((w) => !w.deleted)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
-  });
+  }, listenerError('workspaces', () => callback([])));
 }
 
 // ─── MIGRATION: existing user data → default "Personal" workspace ───────────
@@ -604,67 +686,17 @@ export function subscribeToProjects(workspaceId, callback) {
         return bt - at;
       });
     callback(data);
-  });
+  }, listenerError('projects', () => callback([])));
 }
 
-// One-time migration: seed default projects from the legacy categories
-// and link existing tasks. Idempotent — safe to call on every sign-in.
-// Module-level promise cache prevents duplicate concurrent runs (React Strict
-// Mode invokes the calling effect twice in dev, which previously caused 6 or 9
-// projects to be seeded instead of 3).
-const _migrationCache = new Map();  // userId → Promise
-export function migrateLegacyCategories(userId) {
-  if (_migrationCache.has(userId)) return _migrationCache.get(userId);
-  const p = _migrateLegacyCategoriesImpl(userId);
-  _migrationCache.set(userId, p);
-  return p;
-}
-async function _migrateLegacyCategoriesImpl(userId) {
-  const existing = await getDocs(query(projectsRef, where('userId', '==', userId), limit(1)));
-  if (!existing.empty) return { migrated: false, reason: 'projects already exist' };
-
-  const legacyCategories = ['BRIDGED', 'AIM', 'Personal'];
-  const colorByCategory = { BRIDGED: '#6366f1', AIM: '#10b981', Personal: '#f59e0b' };
-  const batch = writeBatch(db);
-  const projectIdByCategory = {};
-
-  legacyCategories.forEach((cat) => {
-    const ref = doc(projectsRef);
-    projectIdByCategory[cat] = ref.id;
-    batch.set(ref, {
-      userId,
-      name: cat,
-      description: `Migrated from legacy category "${cat}"`,
-      color: colorByCategory[cat],
-      phases: [
-        { id: uid(), name: 'Planning',  order: 0 },
-        { id: uid(), name: 'Execution', order: 1 },
-        { id: uid(), name: 'Review',    order: 2 },
-      ],
-      archived: false,
-      deleted: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  });
-
-  await batch.commit();
-
-  // Link existing tasks to their migrated project
-  const tasksSnap = await getDocs(query(tasksRef, where('userId', '==', userId)));
-  const linkBatch = writeBatch(db);
-  let linked = 0;
-  tasksSnap.forEach((d) => {
-    const t = d.data();
-    if (t.projectId) return;
-    const projectId = projectIdByCategory[t.category];
-    if (!projectId) return;
-    linkBatch.update(d.ref, { projectId, updatedAt: serverTimestamp() });
-    linked++;
-  });
-  if (linked > 0) await linkBatch.commit();
-
-  return { migrated: true, projectsCreated: legacyCategories.length, tasksLinked: linked };
+// OBSOLETE — superseded by migrateToWorkspaces(). This used to seed default
+// projects from the legacy single-user categories, but it created projects with
+// NO workspaceId. Under the workspace-scoped security rules that create is
+// always denied (permission-denied), so on first sign-in it threw and flooded
+// the console with "[migration] failed". The workspace migration now handles
+// onboarding. Kept as a no-op so any lingering import doesn't break.
+export function migrateLegacyCategories() {
+  return Promise.resolve({ migrated: false, reason: 'obsolete (superseded by workspace model)' });
 }
 
 // ─── TASKS ──────────────────────────────────────────────────────────────────
@@ -910,7 +942,7 @@ export function subscribeToTasks(workspaceId, callback) {
         return bt - at;
       });
     callback(data);
-  });
+  }, listenerError('tasks', () => callback([])));
 }
 
 // ─── ACTIVITIES ─────────────────────────────────────────────────────────────
@@ -1036,7 +1068,7 @@ export function subscribeToActivities(taskId, callback) {
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     callback(data);
-  });
+  }, listenerError('activities', () => callback([])));
 }
 
 // Cross-task activities in a workspace — single where, sort + cap client-side.
@@ -1051,7 +1083,7 @@ export function subscribeToAllActivities(workspaceId, callback) {
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, 500);
     callback(data);
-  });
+  }, listenerError('allActivities', () => callback([])));
 }
 
 export function subscribeToRecentActivities(workspaceId, sinceDate, callback) {
@@ -1064,7 +1096,7 @@ export function subscribeToRecentActivities(workspaceId, sinceDate, callback) {
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, 200);
     callback(data);
-  });
+  }, listenerError('recentActivities', () => callback([])));
 }
 
 // Subscribe to activities across multiple workspaces. One listener per
@@ -1091,7 +1123,7 @@ export function subscribeToActivitiesAcrossWorkspaces(workspaceIds, sinceDate, c
         .filter((a) => !sinceDate || (a.date || '') >= sinceDate);
       seenInitial.add(wsId);
       fire();
-    });
+    }, listenerError('activitiesAcrossWorkspaces', () => { byWs[wsId] = []; seenInitial.add(wsId); fire(); }));
   });
   return () => unsubs.forEach((u) => u && u());
 }
@@ -1114,7 +1146,7 @@ export function subscribeToProjectsAcrossWorkspaces(workspaceIds, callback) {
       byWs[wsId] = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => !p.deleted);
       seenInitial.add(wsId);
       fire();
-    });
+    }, listenerError('projectsAcrossWorkspaces', () => { byWs[wsId] = []; seenInitial.add(wsId); fire(); }));
   });
   return () => unsubs.forEach((u) => u && u());
 }
@@ -1135,7 +1167,7 @@ export function subscribeToTasksAcrossWorkspaces(workspaceIds, callback) {
       byWs[wsId] = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((t) => !t.deleted && !t.archived);
       seenInitial.add(wsId);
       fire();
-    });
+    }, listenerError('tasksAcrossWorkspaces', () => { byWs[wsId] = []; seenInitial.add(wsId); fire(); }));
   });
   return () => unsubs.forEach((u) => u && u());
 }
@@ -1180,7 +1212,7 @@ export function subscribeToTemplates(workspaceId, callback) {
       .filter((t) => !t.deleted)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
-  });
+  }, listenerError('templates', () => callback([])));
 }
 
 // ─── GOALS (strategic plan one-pagers) ──────────────────────────────────────
@@ -1235,7 +1267,7 @@ export function subscribeToGoals(workspaceId, callback) {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
         || (a.code || '').localeCompare(b.code || ''));
     callback(data);
-  });
+  }, listenerError('goals', () => callback([])));
 }
 
 // Save the structural shape of a task as a template (no dates, IDs, counters).
@@ -1383,7 +1415,7 @@ export function subscribeToTaskComments(taskId, callback) {
       .filter((c) => !c.deleted)
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);
-  });
+  }, listenerError('taskComments', () => callback([])));
 }
 
 // ─── CHAT (conversations + messages) ────────────────────────────────────────
@@ -1409,7 +1441,7 @@ export function subscribeToConversations(workspaceId, userId, callback) {
       .sort((a, b) => (b.lastMessageAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0)
                     - (a.lastMessageAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0));
     callback(data);
-  });
+  }, listenerError('conversations', () => callback([])));
 }
 
 // Find an existing 1:1 DM between two users in a workspace, or create one.
@@ -1488,7 +1520,7 @@ export function subscribeToMessages(conversationId, callback) {
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? Infinity) - (b.createdAt?.toMillis?.() ?? Infinity))
       .slice(-400);
     callback(data);
-  });
+  }, listenerError('messages', () => callback([])));
 }
 
 // Send a message: write the message and update the conversation's denormalized
@@ -1579,7 +1611,7 @@ export function subscribeToSavedViews(workspaceId, userId, callback) {
       .filter((v) => v.userId === userId && !v.deleted)
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);
-  });
+  }, listenerError('savedViews', () => callback([])));
 }
 
 // ─── PRESENCE ───────────────────────────────────────────────────────────────
@@ -1615,7 +1647,7 @@ export function subscribeToPresence(taskId, callback) {
         return now - ts < 60_000;  // 60s freshness window
       });
     callback(fresh);
-  });
+  }, listenerError('presence', () => callback([])));
 }
 
 // ─── WEBHOOKS ───────────────────────────────────────────────────────────────
@@ -1654,7 +1686,7 @@ export function subscribeToWebhooks(workspaceId, callback) {
       .filter((h) => !h.deleted)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     callback(data);
-  });
+  }, listenerError('webhooks', () => callback([])));
 }
 
 // ─── INVITES (v9 multi-user) ────────────────────────────────────────────────
@@ -1697,7 +1729,7 @@ export function subscribeToInvitesForProject(projectId, callback) {
       return bt - at;
     });
     callback(data);
-  });
+  }, listenerError('invitesForProject', () => callback([])));
 }
 
 // Claim an invite — record the claim on the invite + add self to the
