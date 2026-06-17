@@ -10,6 +10,7 @@ import { useSettings } from '../hooks/useSettings';
 import { updateTask } from '../services/firebase';
 import TaskEditor from './TaskEditor';
 import TaskActivitiesModal from './TaskActivitiesModal';
+import TaskQuickAdd from './TaskQuickAdd';
 
 function parseISO(str) {
   if (!str) return null;
@@ -35,6 +36,7 @@ export default function CalendarView({ projectFilter }) {
   const { userId } = useAuth();
   const [activeDrag, setActiveDrag] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'todo' | 'doing' | 'done'
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -129,6 +131,9 @@ export default function CalendarView({ projectFilter }) {
           <button className="btn btn-sm" onClick={goToday}>Today</button>
           <button className="btn btn-sm" onClick={next}>›</button>
           <span className="muted" style={{ marginLeft: 8 }}>{monthLabel}</span>
+          <button className="btn btn-primary btn-sm" style={{ marginLeft: 8 }} onClick={() => setQuickAddOpen(true)}>
+            + New task
+          </button>
         </div>
       </div>
 
@@ -207,6 +212,14 @@ export default function CalendarView({ projectFilter }) {
           task={editing}
           projects={projects}
           onClose={() => { setEditing(null); setViewing(null); }}
+        />
+      )}
+
+      {quickAddOpen && (
+        <TaskQuickAdd
+          projects={projects}
+          projectFilter={projectFilter}
+          onClose={() => setQuickAddOpen(false)}
         />
       )}
     </>
