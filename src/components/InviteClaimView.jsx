@@ -144,10 +144,7 @@ export default function InviteClaimView({ inviteId, navigate }) {
       <div className="invite-card">
         <h1 className="invite-title">Project invitation</h1>
         <p className="muted">
-          You've been invited as <strong>{invite.role}</strong>.
-        </p>
-        <p className="muted small">
-          Project ID: <span className="mono">{invite.projectId}</span>
+          You've been invited to <strong>{invite.projectName || 'a project'}</strong> as <strong>{invite.role}</strong>.
         </p>
         {invite.revoked && (
           <div className="auth-error">

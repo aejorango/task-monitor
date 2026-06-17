@@ -1834,13 +1834,15 @@ export function subscribeToWebhooks(workspaceId, callback) {
 // A shareable link that lets the recipient join a project. The URL is the
 // secret. Each invite tracks role + optional expiry + a claims log.
 
-export async function createInvite(userId, { projectId, role, expiresInDays }) {
+export async function createInvite(userId, { projectId, projectName, role, expiresInDays }) {
   const expiresAt = expiresInDays
     ? new Date(Date.now() + expiresInDays * 86400 * 1000)
     : null;
   return await addDoc(invitesRef, {
     userId,
     projectId,
+    projectName: projectName || '',   // denormalized so the recipient (who can't
+                                      // yet read the project) can see its name
     role: role || 'viewer',
     revoked: false,
     expiresAt,
@@ -1885,31 +1887,25 @@ export async function claimInvite(inviteId, currentUser) {
     if (expiresMs < Date.now()) throw new Error('Invite has expired.');
   }
 
-  // Already a member? Just succeed.
-  const projSnap = await getDocs(query(projectsRef, where('__name__', '==', invite.projectId)));
-  const proj = projSnap.docs[0]?.data();
-  if (!proj) throw new Error('Project not found.');
-  if ((proj.members || []).includes(currentUser.uid)) {
-    return { projectId: invite.projectId, alreadyMember: true };
-  }
-
+  // NOTE: we deliberately do NOT read the project here — the recipient isn't a
+  // member yet, so a project read would be denied ("Missing or insufficient
+  // permissions"). Instead we add them with field-level transforms that need no
+  // prior read: arrayUnion is idempotent (no-op if already a member) and the
+  // acl.<uid> dot-path sets their role. The security rule (isClaimingInvite)
+  // validates the resulting document via the lastClaimInviteId side channel.
   const batch = writeBatch(db);
-  // Record claim on invite
+
   const claim = {
     uid: currentUser.uid,
     displayName: currentUser.displayName || '',
     email: currentUser.email || '',
     claimedAt: new Date(),  // serverTimestamp not allowed inside array
   };
-  batch.update(doc(db, 'invites', inviteId), { claims: [...(invite.claims || []), claim] });
+  batch.update(doc(db, 'invites', inviteId), { claims: arrayUnion(claim) });
 
-  // Add to project: members + acl. The lastClaimInviteId is a side channel
-  // the security rule reads to verify this claim is legitimate.
-  const newAcl = { ...(proj.acl || {}), [currentUser.uid]: invite.role };
-  const newMembers = [...(proj.members || []), currentUser.uid];
   batch.update(doc(db, 'projects', invite.projectId), {
-    acl: newAcl,
-    members: newMembers,
+    members: arrayUnion(currentUser.uid),
+    [`acl.${currentUser.uid}`]: invite.role,
     lastClaimInviteId: inviteId,
     updatedAt: serverTimestamp(),
   });

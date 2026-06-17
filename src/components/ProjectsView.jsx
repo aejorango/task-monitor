@@ -650,6 +650,7 @@ function ProjectSharing({ project }) {
       if (!me) throw new Error('You appear to be signed out. Reload and sign in again.');
       const ref = await createInvite(me.uid, {
         projectId: project.id,
+        projectName: project.name,
         role: inviteRole,
         expiresInDays: inviteExpires > 0 ? inviteExpires : null,
       });
