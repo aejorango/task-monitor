@@ -263,8 +263,11 @@ export function useAllActivities() {
     return () => unsub();
   }, [userId, ready]);
 
+  // Scope to the ACTIVE workspace so activities from other workspaces' shared
+  // projects never bleed into the current workspace's Work Performed / Table /
+  // activity-log views (same fix as useTasks/useProjects).
   const sharedProjectIds = useMemo(
-    () => sharedProjects.filter((p) => p.workspaceId !== workspaceId).map((p) => p.id),
+    () => sharedProjects.filter((p) => p.workspaceId === workspaceId).map((p) => p.id),
     [sharedProjects, workspaceId],
   );
   const sharedProjectIdsKey = sharedProjectIds.join(',');
