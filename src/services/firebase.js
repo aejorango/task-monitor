@@ -32,6 +32,7 @@ import {
   writeBatch,
   increment,
   arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import {
   getStorage,
@@ -1543,6 +1544,35 @@ export async function createGroupConversation(workspaceId, me, name, members) {
 export async function renameConversation(conversationId, name) {
   return await updateDoc(doc(db, 'conversations', conversationId), {
     name: String(name || '').trim() || 'Group',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Add members to a conversation. `newMembers` is an array of { uid, displayName,
+// email, photoURL }. Skips anyone already in the group.
+export async function addConversationMembers(conversation, newMembers) {
+  const existing = new Set(conversation.members || []);
+  const toAdd = (newMembers || []).filter((u) => u?.uid && !existing.has(u.uid));
+  if (toAdd.length === 0) return;
+  const updates = {
+    members: arrayUnion(...toAdd.map((u) => u.uid)),
+    updatedAt: serverTimestamp(),
+  };
+  toAdd.forEach((u) => {
+    updates[`memberProfiles.${u.uid}`] = {
+      displayName: u.displayName || '',
+      email:       u.email || '',
+      photoURL:    u.photoURL || '',
+    };
+  });
+  await updateDoc(doc(db, 'conversations', conversation.id), updates);
+}
+
+// Remove a member from a conversation (also used to "leave" by passing your own
+// uid). Allowed for any current member by the security rules.
+export async function removeConversationMember(conversationId, uid) {
+  await updateDoc(doc(db, 'conversations', conversationId), {
+    members: arrayRemove(uid),
     updatedAt: serverTimestamp(),
   });
 }

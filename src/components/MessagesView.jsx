@@ -8,6 +8,7 @@ import { useWorkspaces } from '../hooks/useWorkspace';
 import {
   findOrCreateDM, createGroupConversation, sendMessage,
   markConversationRead, renameConversation,
+  addConversationMembers, removeConversationMember,
 } from '../services/firebase';
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -173,6 +174,7 @@ export default function MessagesView() {
               key={selected.id}
               conversation={selected}
               me={me}
+              activeWs={activeWs}
               onBack={() => setActiveId(null)}
             />
           ) : (
@@ -199,13 +201,14 @@ export default function MessagesView() {
 }
 
 /* ── Thread ──────────────────────────────────────────────── */
-function ChatThread({ conversation, me, onBack }) {
+function ChatThread({ conversation, me, activeWs, onBack }) {
   const { messages, loading } = useMessages(conversation.id);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(conversation.name || '');
+  const [membersOpen, setMembersOpen] = useState(false);
 
   // Auto-scroll to newest on mount and when messages change.
   useEffect(() => {
@@ -275,7 +278,27 @@ function ChatThread({ conversation, me, onBack }) {
           )}
           {subtitle && <span className="chat-thread-sub">{subtitle}</span>}
         </div>
+        {conversation.type === 'group' && (
+          <button
+            className="chat-members-btn"
+            onClick={() => setMembersOpen(true)}
+            title="Manage members"
+            aria-label="Manage members"
+          >
+            <GroupGlyph size={18} />
+          </button>
+        )}
       </header>
+
+      {membersOpen && (
+        <ChatMembersModal
+          conversation={conversation}
+          me={me}
+          activeWs={activeWs}
+          onClose={() => setMembersOpen(false)}
+          onLeft={() => { setMembersOpen(false); onBack(); }}
+        />
+      )}
 
       <div className="chat-messages" ref={scrollRef}>
         {loading ? (
@@ -416,6 +439,131 @@ function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
           <button className="btn btn-primary" onClick={create} disabled={busy || !canCreate}>
             {busy ? 'Starting…' : mode === 'dm' ? 'Start chat' : 'Create group'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Group members modal (add / remove) ──────────────────── */
+function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
+  const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(new Set());
+
+  const memberUids = conversation.members || [];
+
+  // Workspace members not already in the group → candidates to add.
+  const candidates = useMemo(() => {
+    const profiles = activeWs?.memberProfiles || {};
+    const inGroup = new Set(memberUids);
+    return (activeWs?.members || [])
+      .filter((uid) => !inGroup.has(uid))
+      .map((uid) => ({ uid, ...(profiles[uid] || {}) }))
+      .sort((a, b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+  }, [activeWs, conversation.members]);
+
+  const toggleAdd = (uid) => {
+    setAdding((prev) => {
+      const next = new Set(prev);
+      next.has(uid) ? next.delete(uid) : next.add(uid);
+      return next;
+    });
+  };
+
+  const addSelected = async () => {
+    if (adding.size === 0) return;
+    setBusy(true);
+    try {
+      const chosen = candidates.filter((c) => adding.has(c.uid));
+      await addConversationMembers(conversation, chosen);
+      setAdding(new Set());
+    } catch (err) {
+      console.error(err);
+      alert('Could not add members. Check console.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeMember = async (uid) => {
+    const isMe = uid === me?.uid;
+    const prof = conversation.memberProfiles?.[uid];
+    const who = isMe ? 'yourself' : (prof?.displayName || prof?.email || 'this member');
+    if (!confirm(isMe ? 'Leave this group?' : `Remove ${who} from the group?`)) return;
+    setBusy(true);
+    try {
+      await removeConversationMember(conversation.id, uid);
+      if (isMe) { onLeft(); return; }
+    } catch (err) {
+      console.error(err);
+      alert('Could not remove member. Check console.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+        <h3 className="modal-title">{conversation.name || 'Group'} — members</h3>
+        <p className="modal-sub">{memberUids.length} member{memberUids.length === 1 ? '' : 's'}. Anyone in the group can add or remove people.</p>
+
+        <div className="chat-member-list" style={{ marginTop: 8 }}>
+          {memberUids.map((uid) => {
+            const prof = conversation.memberProfiles?.[uid] || {};
+            const isMe = uid === me?.uid;
+            const name = prof.displayName || prof.email || `${uid.slice(0, 8)}…`;
+            return (
+              <div key={uid} className="chat-member" style={{ cursor: 'default' }}>
+                <Avatar photoURL={prof.photoURL} name={name} size={32} />
+                <div className="chat-member-body">
+                  <span className="chat-member-name">{name}{isMe && <span className="muted"> (you)</span>}</span>
+                  {prof.email && prof.displayName && <span className="chat-member-email">{prof.email}</span>}
+                </div>
+                <button
+                  className="btn btn-sm btn-ghost link-danger"
+                  onClick={() => removeMember(uid)}
+                  disabled={busy}
+                  title={isMe ? 'Leave group' : 'Remove from group'}
+                >{isMe ? 'Leave' : '✕'}</button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="field" style={{ marginTop: 14 }}>
+          <label className="label">Add people</label>
+          {candidates.length === 0 ? (
+            <p className="muted small">Everyone in this workspace is already in the group.</p>
+          ) : (
+            <>
+              <div className="chat-member-list">
+                {candidates.map((c) => {
+                  const on = adding.has(c.uid);
+                  return (
+                    <button key={c.uid} className={`chat-member ${on ? 'on' : ''}`} onClick={() => toggleAdd(c.uid)}>
+                      <Avatar photoURL={c.photoURL} name={c.displayName || c.email} size={32} />
+                      <div className="chat-member-body">
+                        <span className="chat-member-name">{c.displayName || c.email || 'Member'}</span>
+                        {c.email && c.displayName && <span className="chat-member-email">{c.email}</span>}
+                      </div>
+                      <span className={`chat-check ${on ? 'on' : ''}`}>{on ? '✓' : ''}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {adding.size > 0 && (
+                <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={addSelected} disabled={busy}>
+                  {busy ? 'Adding…' : `Add ${adding.size} ${adding.size === 1 ? 'person' : 'people'}`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Done</button>
         </div>
       </div>
     </div>
