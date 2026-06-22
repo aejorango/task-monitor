@@ -7,6 +7,17 @@ import { useMinutes, useProjects, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addMinute, updateMinute, softDeleteMinute, uid, todayLocal } from '../services/firebase';
 
+function PriorityIcon() {
+  // Clean monochrome flag/pin — inherits currentColor.
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 22V4" />
+      <path d="M4 4h12l-2.5 4L16 12H4" />
+    </svg>
+  );
+}
+
 function fmtDate(s) {
   if (!s) return '';
   const [y, m, d] = s.split('-').map(Number);
@@ -146,27 +157,31 @@ function MinuteCard({ minute, project, onEdit }) {
             <aside className="minute-body-side">
               <div className="minute-priority">
                 <div className="minute-priority-head">
-                  📌 THE PRIORITY{boss && <span className="minute-priority-boss">Boss: {boss}</span>}
+                  <PriorityIcon />
+                  <span className="minute-priority-title">The Priority</span>
+                  {boss && <span className="minute-priority-boss">{boss}</span>}
                 </div>
                 <div className="minute-priority-block">
                   <div className="minute-priority-label">
-                    Things {boss || 'the boss'} keeps mentioning <em>(this is important for him)</em>:
+                    Things {boss || 'the boss'} keeps mentioning
+                    <span className="minute-priority-hint">important to him</span>
                   </div>
                   {mentions.length > 0 ? (
                     <ol className="minute-priority-list">
                       {mentions.map((x) => <li key={x.id}>{x.text}</li>)}
                     </ol>
-                  ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
+                  ) : <div className="minute-priority-empty">—</div>}
                 </div>
                 <div className="minute-priority-block">
                   <div className="minute-priority-label">
-                    Things {boss || 'he'} pushed back <em>(mga binabaril nyang ideas/items)</em>:
+                    Things {boss || 'he'} pushed back
+                    <span className="minute-priority-hint">ideas/items he shot down</span>
                   </div>
                   {pushbacks.length > 0 ? (
                     <ol className="minute-priority-list">
                       {pushbacks.map((x) => <li key={x.id}>{x.text}</li>)}
                     </ol>
-                  ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
+                  ) : <div className="minute-priority-empty">—</div>}
                 </div>
               </div>
             </aside>
@@ -293,7 +308,7 @@ function MinuteEditor({ minute, projects = [], onClose }) {
 
           {/* THE PRIORITY — boss-focused */}
           <div className="field minute-priority-edit">
-            <label className="label">📌 The priority</label>
+            <label className="label">The Priority</label>
             <input className="input" value={form.bossName} placeholder="Boss's name (e.g. Mr. Reyes)"
               onChange={(e) => set({ bossName: e.target.value })} />
 

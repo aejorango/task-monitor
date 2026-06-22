@@ -6152,41 +6152,60 @@ a:hover { text-decoration: underline; }
 .minute-edit-check.done { background: var(--c-emerald); border-color: var(--c-emerald); }
 .minute-edit-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
-/* Minutes — "THE PRIORITY" callout */
+/* Minutes — "The Priority" panel (clean, document-like) */
 .minute-priority {
   border: 1px solid var(--c-border);
-  border-left: 3px solid var(--c-accent);
   border-radius: var(--r-md);
-  background: var(--c-surface-2);
-  padding: 12px 14px;
+  background: var(--c-surface);
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  overflow: hidden;
 }
 .minute-priority-head {
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0.03em;
-  color: var(--c-text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+  padding: 9px 14px;
+  background: var(--c-surface-2);
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-2);
+}
+.minute-priority-title {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--c-text-2);
 }
 .minute-priority-boss {
   margin-left: auto;
   font-weight: 600;
   font-size: 11.5px;
-  color: var(--c-text-2);
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-pill);
-  padding: 1px 9px;
+  color: var(--c-text);
   letter-spacing: 0;
 }
-.minute-priority-label { font-size: 13px; font-weight: 600; color: var(--c-text); margin-bottom: 4px; }
-.minute-priority-label em { font-weight: 400; color: var(--c-text-3); }
-.minute-priority-list { margin: 0; padding-left: 28px; display: flex; flex-direction: column; gap: 3px; }
-.minute-priority-list li { font-size: 14px; color: var(--c-text-2); line-height: 1.45; }
+.minute-priority-block { padding: 11px 14px; }
+.minute-priority-block + .minute-priority-block { border-top: 1px solid var(--c-border); }
+.minute-priority-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.minute-priority-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--c-text-3);
+  font-style: italic;
+}
+.minute-priority-list { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.minute-priority-list li { font-size: 13.5px; color: var(--c-text-2); line-height: 1.5; padding-left: 2px; }
+.minute-priority-empty { color: var(--c-text-3); font-size: 13px; padding-left: 2px; }
 
 /* Minutes editor — priority groups */
 .minute-priority-edit { gap: 4px; }
