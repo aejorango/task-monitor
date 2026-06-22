@@ -357,6 +357,7 @@ const activitiesRef = collection(db, 'activities');
 const projectsRef = collection(db, 'projects');
 const templatesRef = collection(db, 'templates');
 const goalsRef = collection(db, 'goals');
+const minutesRef = collection(db, 'minutes');
 const taskCommentsRef = collection(db, 'taskComments');
 const conversationsRef = collection(db, 'conversations');
 const messagesRef = collection(db, 'messages');
@@ -1376,6 +1377,55 @@ export function subscribeToGoals(workspaceId, callback) {
         || (a.code || '').localeCompare(b.code || ''));
     callback(data);
   }, listenerError('goals', () => callback([])));
+}
+
+// ─── MINUTES (meeting minutes) ──────────────────────────────────────────────
+// minutes/{id}: { userId, workspaceId, title, date (YYYY-MM-DD), attendees,
+//   location, projectId, notes, decisions, actionItems:[{id,text,owner,due,done}],
+//   archived, deleted, createdAt, updatedAt }
+
+export async function addMinute(userId, minute) {
+  if (!minute.workspaceId) throw new Error('addMinute requires minute.workspaceId');
+  return await addDoc(minutesRef, {
+    userId,
+    workspaceId: minute.workspaceId,
+    title:       minute.title || '',
+    date:        minute.date || todayLocal(),
+    attendees:   minute.attendees || '',
+    location:    minute.location || '',
+    projectId:   minute.projectId || null,
+    notes:       minute.notes || '',
+    decisions:   minute.decisions || '',
+    actionItems: minute.actionItems || [],   // [{ id, text, owner, due, done }]
+    archived:    false,
+    deleted:     false,
+    createdAt:   serverTimestamp(),
+    updatedAt:   serverTimestamp(),
+  });
+}
+
+export async function updateMinute(minuteId, updates) {
+  return await updateDoc(doc(db, 'minutes', minuteId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function softDeleteMinute(minuteId) {
+  return await updateMinute(minuteId, { deleted: true });
+}
+
+export function subscribeToMinutes(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(minutesRef, where('workspaceId', '==', workspaceId));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((m) => !m.deleted)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '')   // newest meeting first
+        || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+    callback(data);
+  }, listenerError('minutes', () => callback([])));
 }
 
 // Save the structural shape of a task as a template (no dates, IDs, counters).

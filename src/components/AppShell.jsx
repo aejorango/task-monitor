@@ -18,6 +18,7 @@ const VIEWS = [
   { id: 'wbs',            label: 'WBS',              icon: 'wbs' },
   { id: 'goals',          label: 'Goals',            icon: 'goals' },
   { id: 'messages',       label: 'Messages',         icon: 'messages' },
+  { id: 'minutes',        label: 'Minutes',          icon: 'minutes' },
   { id: 'table',          label: 'Activity Log',     icon: 'list' },
   { id: 'work-performed', label: 'Work Performed',   icon: 'clock' },
   { id: 'review',         label: 'Review',           icon: 'review' },
@@ -552,6 +553,12 @@ function ProjectPicker({ projects, value, onChange }) {
     ? { name: 'All projects', color: '#a1a1aa' }
     : projects.find((p) => p.id === value);
 
+  // Sort projects alphabetically by name for the dropdown.
+  const sortedProjects = useMemo(
+    () => [...projects].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
+    [projects],
+  );
+
   return (
     <div className="dropdown" ref={ref}>
       <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -572,7 +579,7 @@ function ProjectPicker({ projects, value, onChange }) {
             <span className="proj-dot" style={{ background: '#a1a1aa' }} />
             All projects
           </button>
-          {projects.map((p) => (
+          {sortedProjects.map((p) => (
             <button
               key={p.id}
               className={`dropdown-item ${value === p.id ? 'selected' : ''}`}

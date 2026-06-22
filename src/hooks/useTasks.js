@@ -17,6 +17,7 @@ import {
   subscribeToActivitiesByProjects,
   subscribeToTemplates,
   subscribeToGoals,
+  subscribeToMinutes,
   subscribeToTaskComments,
   subscribeToSavedViews,
   subscribeToWebhooks,
@@ -413,6 +414,31 @@ export function useGoals() {
   }, [userId, ready, workspaceId]);
 
   return { goals, loading, userId, workspaceId };
+}
+
+// ─── useMinutes ─────────────────────────────────────────────────────────────
+
+export function useMinutes() {
+  const { userId, ready } = useAuth();
+  const workspaceId = useActiveWorkspaceId();
+  const [minutes, setMinutes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !userId || !workspaceId) {
+      setMinutes([]);
+      setLoading(workspaceId ? true : false);
+      return;
+    }
+    setLoading(true);
+    const unsub = subscribeToMinutes(workspaceId, (data) => {
+      setMinutes(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId, ready, workspaceId]);
+
+  return { minutes, loading, userId, workspaceId };
 }
 
 // ─── Cross-workspace projects & tasks ───────────────────────────────────────
