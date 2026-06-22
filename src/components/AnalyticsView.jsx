@@ -577,6 +577,13 @@ export default function AnalyticsView({ projectFilter }) {
         </div>
       </div>
 
+      {/* Hero: total work performed (hours logged) per day, stacked by project */}
+      <WorkPerformedHero
+        activities={activities}
+        projectById={projectById}
+        projectFilter={projectFilter}
+      />
+
       {/* Burndown */}
       <section className="review-section">
         <h2 className="review-h2">Burndown — open tasks remaining</h2>
@@ -683,6 +690,154 @@ export default function AnalyticsView({ projectFilter }) {
         <WorkspacePulse rows={pulse} activeId={activeWorkspaceId} loading={pulseLoading} />
       </section>
     </>
+  );
+}
+
+// ─── Hero: Work performed (logged hours/day, stacked by project) ───────────
+
+const HERO_RANGES = [
+  { id: 7,  label: '7 days' },
+  { id: 15, label: '15 days' },
+  { id: 30, label: '30 days' },
+];
+
+function niceCeil(v) {
+  if (v <= 1) return 1;
+  if (v <= 2) return 2;
+  if (v <= 5) return Math.ceil(v);
+  if (v <= 10) return Math.ceil(v / 2) * 2;
+  return Math.ceil(v / 5) * 5;
+}
+function fmtHours(v) {
+  return `${Number.isInteger(v) ? v : v.toFixed(1)}h`;
+}
+
+function WorkPerformedHero({ activities, projectById, projectFilter }) {
+  const [days, setDays] = useState(7);
+
+  const todayStr = todayLocal();
+  const dates = useMemo(() => {
+    const today = parseISO(todayStr);
+    const arr = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      arr.push(isoOf(d));
+    }
+    return arr;
+  }, [days, todayStr]);
+
+  const scoped = projectFilter === 'all'
+    ? activities
+    : activities.filter((a) => a.projectId === projectFilter);
+
+  const { perDate, projOrder, projColor, projTotal, niceMax, grandTotal } = useMemo(() => {
+    const dateSet = new Set(dates);
+    const perDate = {};
+    dates.forEach((d) => { perDate[d] = {}; });
+    const projColor = {};
+    const projTotal = {};
+    scoped.forEach((a) => {
+      if (!a.date || !dateSet.has(a.date)) return;
+      const h = Number(a.hoursSpent) || 0;
+      if (h <= 0) return;
+      const proj = projectById[a.projectId];
+      const name = proj?.name || a.taskCategory || 'No project';
+      projColor[name] = proj?.color || '#a1a1aa';
+      perDate[a.date][name] = (perDate[a.date][name] || 0) + h;
+      projTotal[name] = (projTotal[name] || 0) + h;
+    });
+    const projOrder = Object.keys(projTotal).sort((a, b) => projTotal[b] - projTotal[a]);
+    const maxTotal = Math.max(0, ...dates.map((d) => Object.values(perDate[d]).reduce((s, x) => s + x, 0)));
+    const grandTotal = Object.values(projTotal).reduce((s, x) => s + x, 0);
+    return { perDate, projOrder, projColor, projTotal, niceMax: niceCeil(maxTotal), grandTotal };
+  }, [scoped, dates, projectById]);
+
+  // Y-axis ticks (top→bottom).
+  const ticks = [1, 0.75, 0.5, 0.25, 0].map((f) => +(niceMax * f).toFixed(2));
+  // Thin out x labels when the window is wide.
+  const labelStep = days <= 15 ? 1 : 3;
+
+  return (
+    <section className="review-section wp-hero">
+      <div className="wp-hero-head">
+        <div>
+          <h2 className="review-h2" style={{ margin: 0 }}>Work performed</h2>
+          <p className="muted small" style={{ margin: '2px 0 0' }}>
+            Hours logged per day, stacked by project · <strong>{fmtHours(+grandTotal.toFixed(1))}</strong> in {days} days
+          </p>
+        </div>
+        <div className="page-actions">
+          {HERO_RANGES.map((r) => (
+            <button
+              key={r.id}
+              className={`chip ${days === r.id ? 'active' : ''}`}
+              onClick={() => setDays(r.id)}
+            >{r.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {grandTotal <= 0 ? (
+        <div className="empty-state" style={{ padding: '36px 16px' }}>
+          <div className="empty-state-icon">◢</div>
+          <p>No hours logged in the last {days} days.</p>
+          <p className="small muted">Log activities with hours on your tasks to see them here.</p>
+        </div>
+      ) : (
+        <>
+          <div className="wp-hero-chart">
+            <div className="wp-hero-yaxis">
+              {ticks.map((t, i) => (
+                <div key={i} className="wp-hero-ytick"><span>{fmtHours(t)}</span></div>
+              ))}
+            </div>
+            <div className="wp-hero-plot-wrap">
+              <div className="wp-hero-plot">
+                {ticks.map((t, i) => <div key={i} className="wp-hero-grid" />)}
+                <div className="wp-hero-bars">
+                  {dates.map((d) => {
+                    const segs = perDate[d];
+                    const total = Object.values(segs).reduce((s, x) => s + x, 0);
+                    return (
+                      <div key={d} className="wp-hero-col" title={`${d} · ${fmtHours(+total.toFixed(1))}`}>
+                        <div className="wp-hero-bar" style={{ height: `${(total / niceMax) * 100}%` }}>
+                          {projOrder.filter((p) => segs[p]).map((p) => (
+                            <div
+                              key={p}
+                              className="wp-hero-seg"
+                              style={{ height: `${(segs[p] / total) * 100}%`, background: projColor[p] }}
+                              title={`${p} · ${fmtHours(+segs[p].toFixed(2))} · ${d}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="wp-hero-xaxis">
+                {dates.map((d, i) => (
+                  <div key={d} className="wp-hero-xtick">
+                    {(i % labelStep === 0 || i === dates.length - 1) ? d.slice(5) : ''}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="wp-hero-legend">
+            {projOrder.map((p) => (
+              <span key={p} className="wp-hero-legend-item" title={`${p}: ${fmtHours(+projTotal[p].toFixed(1))}`}>
+                <span className="legend-swatch" style={{ background: projColor[p] }} />
+                {p}
+                <span className="muted">{fmtHours(+projTotal[p].toFixed(1))}</span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
