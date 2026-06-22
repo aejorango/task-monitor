@@ -6284,13 +6284,33 @@ a:hover { text-decoration: underline; }
   flex-direction: column;
   justify-content: flex-end;
 }
+.wp-hero-bar-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 2px;
+  transition: height 0.18s ease;
+}
+.wp-hero-bar-total {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  right: -2px;
+  margin-bottom: 3px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .wp-hero-bar {
+  height: 100%;
   display: flex;
   flex-direction: column-reverse;  /* first project segment at the bottom */
   border-radius: 4px 4px 0 0;
   overflow: hidden;
   min-height: 2px;
-  transition: height 0.18s ease;
 }
 .wp-hero-seg {
   width: 100%;

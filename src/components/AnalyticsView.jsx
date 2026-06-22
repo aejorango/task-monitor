@@ -801,15 +801,20 @@ function WorkPerformedHero({ activities, projectById, projectFilter }) {
                     const total = Object.values(segs).reduce((s, x) => s + x, 0);
                     return (
                       <div key={d} className="wp-hero-col" title={`${d} · ${fmtHours(+total.toFixed(1))}`}>
-                        <div className="wp-hero-bar" style={{ height: `${(total / niceMax) * 100}%` }}>
-                          {projOrder.filter((p) => segs[p]).map((p) => (
-                            <div
-                              key={p}
-                              className="wp-hero-seg"
-                              style={{ height: `${(segs[p] / total) * 100}%`, background: projColor[p] }}
-                              title={`${p} · ${fmtHours(+segs[p].toFixed(2))} · ${d}`}
-                            />
-                          ))}
+                        <div className="wp-hero-bar-wrap" style={{ height: `${(total / niceMax) * 100}%` }}>
+                          {total > 0 && (
+                            <span className="wp-hero-bar-total">{fmtHours(+total.toFixed(1))}</span>
+                          )}
+                          <div className="wp-hero-bar">
+                            {projOrder.filter((p) => segs[p]).map((p) => (
+                              <div
+                                key={p}
+                                className="wp-hero-seg"
+                                style={{ height: `${(segs[p] / total) * 100}%`, background: projColor[p] }}
+                                title={`${p} · ${fmtHours(+segs[p].toFixed(2))} · ${d}`}
+                              />
+                            ))}
+                          </div>
                         </div>
                       </div>
                     );
