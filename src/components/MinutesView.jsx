@@ -101,72 +101,76 @@ function MinuteCard({ minute, project, onEdit }) {
       </button>
 
       {open && (
-        <div className="minute-card-body">
-          {minute.attendees && (
-            <div className="minute-section">
-              <div className="minute-section-label">Attendees</div>
-              <div className="minute-section-text">{minute.attendees}</div>
+        <div className={`minute-card-body ${hasPriority ? 'has-priority' : ''}`}>
+          <div className="minute-body-main">
+            {minute.attendees && (
+              <div className="minute-section">
+                <div className="minute-section-label">Attendees</div>
+                <div className="minute-section-text">{minute.attendees}</div>
+              </div>
+            )}
+            {minute.notes && (
+              <div className="minute-section">
+                <div className="minute-section-label">Notes</div>
+                <div className="minute-section-text pre">{minute.notes}</div>
+              </div>
+            )}
+            {minute.decisions && (
+              <div className="minute-section">
+                <div className="minute-section-label">Decisions</div>
+                <div className="minute-section-text pre">{minute.decisions}</div>
+              </div>
+            )}
+
+            {items.length > 0 && (
+              <div className="minute-section">
+                <div className="minute-section-label">Action items</div>
+                <ul className="minute-actions">
+                  {items.map((it) => (
+                    <li key={it.id} className={`minute-action ${it.done ? 'done' : ''}`}>
+                      <span className="minute-action-check">{it.done ? '✓' : '○'}</span>
+                      <span className="minute-action-text">{it.text || <span className="muted">—</span>}</span>
+                      {it.owner && <span className="minute-action-owner">{it.owner}</span>}
+                      {it.due && <span className="minute-action-due">{it.due}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="minute-card-actions">
+              <button className="btn btn-sm" onClick={onEdit}>✎ Edit</button>
             </div>
-          )}
-          {minute.notes && (
-            <div className="minute-section">
-              <div className="minute-section-label">Notes</div>
-              <div className="minute-section-text pre">{minute.notes}</div>
-            </div>
-          )}
-          {minute.decisions && (
-            <div className="minute-section">
-              <div className="minute-section-label">Decisions</div>
-              <div className="minute-section-text pre">{minute.decisions}</div>
-            </div>
-          )}
+          </div>
 
           {hasPriority && (
-            <div className="minute-priority">
-              <div className="minute-priority-head">
-                📌 THE PRIORITY{boss && <span className="minute-priority-boss">Boss: {boss}</span>}
-              </div>
-              <div className="minute-priority-block">
-                <div className="minute-priority-label">
-                  Things {boss || 'the boss'} keeps mentioning <em>(this is important for him)</em>:
+            <aside className="minute-body-side">
+              <div className="minute-priority">
+                <div className="minute-priority-head">
+                  📌 THE PRIORITY{boss && <span className="minute-priority-boss">Boss: {boss}</span>}
                 </div>
-                {mentions.length > 0 ? (
-                  <ol className="minute-priority-list">
-                    {mentions.map((x) => <li key={x.id}>{x.text}</li>)}
-                  </ol>
-                ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
-              </div>
-              <div className="minute-priority-block">
-                <div className="minute-priority-label">
-                  Things {boss || 'he'} pushed back <em>(mga binabaril nyang ideas/items)</em>:
+                <div className="minute-priority-block">
+                  <div className="minute-priority-label">
+                    Things {boss || 'the boss'} keeps mentioning <em>(this is important for him)</em>:
+                  </div>
+                  {mentions.length > 0 ? (
+                    <ol className="minute-priority-list">
+                      {mentions.map((x) => <li key={x.id}>{x.text}</li>)}
+                    </ol>
+                  ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
                 </div>
-                {pushbacks.length > 0 ? (
-                  <ol className="minute-priority-list">
-                    {pushbacks.map((x) => <li key={x.id}>{x.text}</li>)}
-                  </ol>
-                ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
+                <div className="minute-priority-block">
+                  <div className="minute-priority-label">
+                    Things {boss || 'he'} pushed back <em>(mga binabaril nyang ideas/items)</em>:
+                  </div>
+                  {pushbacks.length > 0 ? (
+                    <ol className="minute-priority-list">
+                      {pushbacks.map((x) => <li key={x.id}>{x.text}</li>)}
+                    </ol>
+                  ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
+                </div>
               </div>
-            </div>
+            </aside>
           )}
-
-          {items.length > 0 && (
-            <div className="minute-section">
-              <div className="minute-section-label">Action items</div>
-              <ul className="minute-actions">
-                {items.map((it) => (
-                  <li key={it.id} className={`minute-action ${it.done ? 'done' : ''}`}>
-                    <span className="minute-action-check">{it.done ? '✓' : '○'}</span>
-                    <span className="minute-action-text">{it.text || <span className="muted">—</span>}</span>
-                    {it.owner && <span className="minute-action-owner">{it.owner}</span>}
-                    {it.due && <span className="minute-action-due">{it.due}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div className="minute-card-actions">
-            <button className="btn btn-sm" onClick={onEdit}>✎ Edit</button>
-          </div>
         </div>
       )}
     </div>
