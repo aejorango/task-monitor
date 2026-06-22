@@ -1397,6 +1397,10 @@ export async function addMinute(userId, minute) {
     notes:       minute.notes || '',
     decisions:   minute.decisions || '',
     actionItems: minute.actionItems || [],   // [{ id, text, owner, due, done }]
+    // "The priority" — what the boss keeps emphasizing vs. what he pushed back.
+    bossName:       minute.bossName || '',
+    bossMentions:   minute.bossMentions || [],   // [{ id, text }]
+    bossPushbacks:  minute.bossPushbacks || [],  // [{ id, text }]
     archived:    false,
     deleted:     false,
     createdAt:   serverTimestamp(),

@@ -23,6 +23,9 @@ const emptyMinute = () => ({
   notes: '',
   decisions: '',
   actionItems: [{ id: uid(), text: '', owner: '', due: '', done: false }],
+  bossName: '',
+  bossMentions: [{ id: uid(), text: '' }],
+  bossPushbacks: [{ id: uid(), text: '' }],
 });
 
 export default function MinutesView() {
@@ -73,6 +76,10 @@ function MinuteCard({ minute, project, onEdit }) {
   const [open, setOpen] = useState(false);
   const items = minute.actionItems || [];
   const doneCount = items.filter((i) => i.done).length;
+  const mentions = (minute.bossMentions || []).filter((x) => x.text?.trim());
+  const pushbacks = (minute.bossPushbacks || []).filter((x) => x.text?.trim());
+  const hasPriority = minute.bossName || mentions.length || pushbacks.length;
+  const boss = minute.bossName?.trim();
 
   return (
     <div className="minute-card">
@@ -113,6 +120,35 @@ function MinuteCard({ minute, project, onEdit }) {
               <div className="minute-section-text pre">{minute.decisions}</div>
             </div>
           )}
+
+          {hasPriority && (
+            <div className="minute-priority">
+              <div className="minute-priority-head">
+                📌 THE PRIORITY{boss && <span className="minute-priority-boss">Boss: {boss}</span>}
+              </div>
+              <div className="minute-priority-block">
+                <div className="minute-priority-label">
+                  Things {boss || 'the boss'} keeps mentioning <em>(this is important for him)</em>:
+                </div>
+                {mentions.length > 0 ? (
+                  <ol className="minute-priority-list">
+                    {mentions.map((x) => <li key={x.id}>{x.text}</li>)}
+                  </ol>
+                ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
+              </div>
+              <div className="minute-priority-block">
+                <div className="minute-priority-label">
+                  Things {boss || 'he'} pushed back <em>(mga binabaril nyang ideas/items)</em>:
+                </div>
+                {pushbacks.length > 0 ? (
+                  <ol className="minute-priority-list">
+                    {pushbacks.map((x) => <li key={x.id}>{x.text}</li>)}
+                  </ol>
+                ) : <div className="muted small" style={{ marginLeft: 18 }}>—</div>}
+              </div>
+            </div>
+          )}
+
           {items.length > 0 && (
             <div className="minute-section">
               <div className="minute-section-label">Action items</div>
@@ -152,6 +188,11 @@ function MinuteEditor({ minute, projects = [], onClose }) {
           decisions: minute.decisions || '',
           actionItems: (minute.actionItems?.length ? minute.actionItems : [{ id: uid(), text: '', owner: '', due: '', done: false }])
             .map((it) => ({ id: it.id || uid(), text: it.text || '', owner: it.owner || '', due: it.due || '', done: !!it.done })),
+          bossName: minute.bossName || '',
+          bossMentions: (minute.bossMentions?.length ? minute.bossMentions : [{ id: uid(), text: '' }])
+            .map((x) => ({ id: x.id || uid(), text: x.text || '' })),
+          bossPushbacks: (minute.bossPushbacks?.length ? minute.bossPushbacks : [{ id: uid(), text: '' }])
+            .map((x) => ({ id: x.id || uid(), text: x.text || '' })),
         }
       : emptyMinute()
   );
@@ -162,6 +203,11 @@ function MinuteEditor({ minute, projects = [], onClose }) {
   const setItem = (id, patch) => set({ actionItems: form.actionItems.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
   const delItem = (id) => set({ actionItems: form.actionItems.filter((it) => it.id !== id) });
 
+  // Priority list helpers (key = 'bossMentions' | 'bossPushbacks')
+  const addPri = (key) => set({ [key]: [...form[key], { id: uid(), text: '' }] });
+  const setPri = (key, id, text) => set({ [key]: form[key].map((x) => (x.id === id ? { ...x, text } : x)) });
+  const delPri = (key, id) => set({ [key]: form[key].filter((x) => x.id !== id) });
+
   const save = async () => {
     if (!form.title.trim()) return;
     setSaving(true);
@@ -170,6 +216,9 @@ function MinuteEditor({ minute, projects = [], onClose }) {
       title: form.title.trim(),
       projectId: form.projectId || null,
       actionItems: form.actionItems.filter((it) => it.text.trim() || it.owner.trim() || it.due),
+      bossName: form.bossName.trim(),
+      bossMentions: form.bossMentions.filter((x) => x.text.trim()),
+      bossPushbacks: form.bossPushbacks.filter((x) => x.text.trim()),
     };
     try {
       if (minute) await updateMinute(minute.id, payload);
@@ -236,6 +285,39 @@ function MinuteEditor({ minute, projects = [], onClose }) {
           <div className="field">
             <label className="label">Decisions</label>
             <textarea className="input" rows={3} value={form.decisions} placeholder="What was decided" onChange={(e) => set({ decisions: e.target.value })} />
+          </div>
+
+          {/* THE PRIORITY — boss-focused */}
+          <div className="field minute-priority-edit">
+            <label className="label">📌 The priority</label>
+            <input className="input" value={form.bossName} placeholder="Boss's name (e.g. Mr. Reyes)"
+              onChange={(e) => set({ bossName: e.target.value })} />
+
+            <div className="minute-pri-group">
+              <div className="minute-pri-group-label">Things the boss keeps mentioning <span className="muted">(important for him)</span></div>
+              {form.bossMentions.map((x, i) => (
+                <div key={x.id} className="minute-edit-row">
+                  <span className="minute-pri-num">{i + 1}</span>
+                  <input className="input input-sm" value={x.text} placeholder="What he keeps bringing up"
+                    onChange={(e) => setPri('bossMentions', x.id, e.target.value)} />
+                  <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delPri('bossMentions', x.id)}>✕</button>
+                </div>
+              ))}
+              <button className="btn btn-sm" onClick={() => addPri('bossMentions')}>+ Add</button>
+            </div>
+
+            <div className="minute-pri-group">
+              <div className="minute-pri-group-label">Things he pushed back <span className="muted">(ideas/items he shot down)</span></div>
+              {form.bossPushbacks.map((x, i) => (
+                <div key={x.id} className="minute-edit-row">
+                  <span className="minute-pri-num">{i + 1}</span>
+                  <input className="input input-sm" value={x.text} placeholder="What he rejected / resisted"
+                    onChange={(e) => setPri('bossPushbacks', x.id, e.target.value)} />
+                  <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delPri('bossPushbacks', x.id)}>✕</button>
+                </div>
+              ))}
+              <button className="btn btn-sm" onClick={() => addPri('bossPushbacks')}>+ Add</button>
+            </div>
           </div>
 
           <div className="field">
