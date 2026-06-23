@@ -979,6 +979,25 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
   const me = auth.currentUser;
   const fallbackLabels = me?.uid ? { [me.uid]: me.displayName || me.email || `${me.uid.slice(0, 6)}…` } : {};
 
+  // Saved project templates — let the user start a new project from one
+  // directly inside this modal.
+  const { templates } = useTemplates();
+  const projectTemplates = useMemo(
+    () => templates.filter((t) => t.kind === 'project'),
+    [templates],
+  );
+  const [templateId, setTemplateId] = useState(fromTemplate?.id || '');
+  const applyTemplate = (id) => {
+    setTemplateId(id);
+    const tpl = projectTemplates.find((t) => t.id === id);
+    const pl = tpl?.payload;
+    if (!pl) return;
+    setName(pl.name || '');
+    setDescription(pl.description || '');
+    setColor(pl.color || COLORS[0]);
+    setPhases((pl.phases || []).map((p) => ({ id: uid(), name: p.name, order: p.order })));
+  };
+
   const addPhase = () => setPhases([...phases, { id: uid(), name: 'New phase', order: phases.length }]);
   const updatePhase = (id, name) => setPhases(phases.map((p) => p.id === id ? { ...p, name } : p));
   const removePhase = (id) => setPhases(phases.filter((p) => p.id !== id));
@@ -1039,6 +1058,27 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">{isNew ? 'New project' : 'Edit project'}</h3>
+
+        {isNew && projectTemplates.length > 0 && (
+          <div className="field">
+            <label className="label">Start from a saved template</label>
+            <select
+              className="select"
+              value={templateId}
+              onChange={(e) => applyTemplate(e.target.value)}
+            >
+              <option value="">— Blank project —</option>
+              {projectTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.payload?.phases?.length || 0} phases)
+                </option>
+              ))}
+            </select>
+            <p className="muted small" style={{ marginTop: 4 }}>
+              Picking a template fills in the name, description, color and phases below — tweak anything before saving.
+            </p>
+          </div>
+        )}
 
         <div className="field">
           <label className="label">Name</label>
