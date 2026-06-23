@@ -39,10 +39,16 @@ const emptyMinute = () => ({
   bossPushbacks: [{ id: uid(), text: '' }],
 });
 
-export default function MinutesView() {
+export default function MinutesView({ projectFilter = 'all' }) {
   const { minutes, loading } = useMinutes();
   const { projects, byId: projectById } = useProjects();
   const [editing, setEditing] = useState(null); // minute object or 'new'
+
+  // Respect the topbar project picker — show only minutes for the selected
+  // project unless "All projects" is chosen.
+  const visibleMinutes = projectFilter === 'all'
+    ? minutes
+    : minutes.filter((m) => m.projectId === projectFilter);
 
   return (
     <>
@@ -58,15 +64,24 @@ export default function MinutesView() {
 
       {loading ? (
         <p className="muted">Loading minutes…</p>
-      ) : minutes.length === 0 ? (
+      ) : visibleMinutes.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">📝</div>
-          <p>No meeting minutes yet.</p>
-          <p className="small">Click <strong>+ New minutes</strong> to record your first meeting.</p>
+          {minutes.length === 0 ? (
+            <>
+              <p>No meeting minutes yet.</p>
+              <p className="small">Click <strong>+ New minutes</strong> to record your first meeting.</p>
+            </>
+          ) : (
+            <>
+              <p>No minutes for this project.</p>
+              <p className="small">Switch to <strong>All projects</strong> to see them all, or add new minutes for this project.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="minutes-list">
-          {minutes.map((m) => (
+          {visibleMinutes.map((m) => (
             <MinuteCard key={m.id} minute={m} project={projectById[m.projectId]} onEdit={() => setEditing(m)} />
           ))}
         </div>
@@ -75,6 +90,7 @@ export default function MinutesView() {
       {editing && (
         <MinuteEditor
           minute={editing === 'new' ? null : editing}
+          defaultProjectId={projectFilter !== 'all' ? projectFilter : ''}
           projects={projects}
           onClose={() => setEditing(null)}
         />
@@ -192,7 +208,7 @@ function MinuteCard({ minute, project, onEdit }) {
   );
 }
 
-function MinuteEditor({ minute, projects = [], onClose }) {
+function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose }) {
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [form, setForm] = useState(() =>
@@ -213,7 +229,7 @@ function MinuteEditor({ minute, projects = [], onClose }) {
           bossPushbacks: (minute.bossPushbacks?.length ? minute.bossPushbacks : [{ id: uid(), text: '' }])
             .map((x) => ({ id: x.id || uid(), text: x.text || '' })),
         }
-      : emptyMinute()
+      : { ...emptyMinute(), projectId: defaultProjectId || '' }
   );
   const [saving, setSaving] = useState(false);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));

@@ -141,7 +141,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} />}
         {route.view === 'goals'     && <GoalsView />}
         {route.view === 'messages'  && <MessagesView />}
-        {route.view === 'minutes'   && <MinutesView />}
+        {route.view === 'minutes'   && <MinutesView projectFilter={route.projectFilter} />}
         {route.view === 'calendar'  && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'review'         && <ReviewView />}
         {route.view === 'analytics'      && <AnalyticsView projectFilter={route.projectFilter} />}
