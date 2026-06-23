@@ -138,6 +138,7 @@ export default function GoalsView() {
         <WbsModal
           project={projectById[wbsProjectId]}
           tasks={tasks}
+          projects={projects}
           onClose={() => setWbsProjectId(null)}
         />
       )}

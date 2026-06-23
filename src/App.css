@@ -3497,6 +3497,8 @@ a:hover { text-decoration: underline; }
   transition: background 0.12s;
 }
 .wbs-task-row:hover { background: var(--c-surface-2); }
+.wbs-task-row-clickable { cursor: pointer; }
+.wbs-task-row-clickable:hover { background: var(--c-accent-soft); }
 
 .wbs-status-icon {
   font-size: 13px;

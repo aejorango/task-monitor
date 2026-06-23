@@ -200,6 +200,7 @@ export default function ProjectsView() {
       {wbsFor && (
         <WbsModal
           project={wbsFor}
+          projects={projects}
           onClose={() => setWbsFor(null)}
         />
       )}

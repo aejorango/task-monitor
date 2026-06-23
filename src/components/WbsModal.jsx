@@ -1,14 +1,31 @@
 // src/components/WbsModal.jsx — Work Breakdown Structure popup for a single
 // project: Project → Phase → Task → Subtask tree with progress + CSV export.
 // Used from the Projects view and from Goals deliverable pills.
+//
+// Click a task row to open its activity log (log / edit task / edit each
+// activity), or use the footer to add a new task or log activity.
 
-import { useTasks } from '../hooks/useTasks';
+import { useState } from 'react';
+import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
+import TaskQuickAdd from './TaskQuickAdd';
+import TaskActivitiesModal from './TaskActivitiesModal';
+import ActivityLogger from './ActivityLogger';
+import TaskEditor from './TaskEditor';
 
-export default function WbsModal({ project, tasks: tasksProp, onClose }) {
+export default function WbsModal({ project, tasks: tasksProp, projects: projectsProp, onClose }) {
   const { tasks: wsTasks } = useTasks();
+  const { projects: wsProjects } = useProjects();
+  const { userId } = useAuth();
   // Callers may pass tasks explicitly (e.g. Goals links a project from another
   // workspace, whose tasks aren't in the active-workspace useTasks()).
   const tasks = tasksProp || wsTasks;
+  const projects = projectsProp || wsProjects;
+
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [viewingTask, setViewingTask] = useState(null);   // → TaskActivitiesModal
+  const [editingTask, setEditingTask] = useState(null);   // → TaskEditor
+  const [loggingTask, setLoggingTask] = useState(null);   // → ActivityLogger
+  const [selectedTaskId, setSelectedTaskId] = useState('');
 
   // Only live tasks for this project
   const projectTasks = tasks.filter(
@@ -34,6 +51,9 @@ export default function WbsModal({ project, tasks: tasksProp, onClose }) {
   const totalTasks = projectTasks.length;
   const doneTasks  = projectTasks.filter((t) => t.status === 'done').length;
   const pct        = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+  // Task selected in the footer picker (for "+ Log activity" / "Edit task").
+  const actionTask = projectTasks.find((t) => t.id === selectedTaskId) || null;
 
   const STATUS_ICON  = { todo: '○', doing: '◉', done: '✓', blocked: '✕' };
   const STATUS_CLS   = { todo: 'badge-soft-muted', doing: 'badge-soft-info', done: 'badge-soft-success', blocked: 'badge-soft-danger' };
@@ -134,8 +154,12 @@ export default function WbsModal({ project, tasks: tasksProp, onClose }) {
 
                   return (
                     <div key={task.id} className="wbs-task-group">
-                      {/* Task row */}
-                      <div className="wbs-task-row">
+                      {/* Task row — click to open its activity log + edit */}
+                      <div
+                        className="wbs-task-row wbs-task-row-clickable"
+                        onClick={() => setViewingTask(task)}
+                        title="Open activity log · log activity · edit task"
+                      >
                         <span className="wbs-code muted">{tCode}</span>
                         <span className={`wbs-status-icon wbs-status-${task.status}`}>
                           {STATUS_ICON[task.status] || '○'}
@@ -181,14 +205,78 @@ export default function WbsModal({ project, tasks: tasksProp, onClose }) {
         </div>
 
         {/* ── Footer ── */}
-        <div className="modal-actions">
+        <div className="modal-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <button className="btn btn-sm btn-primary" onClick={() => setQuickAddOpen(true)}>
+            + New task
+          </button>
+          {projectTasks.length > 0 && (
+            <>
+              <select
+                className="select select-sm"
+                value={selectedTaskId}
+                onChange={(e) => setSelectedTaskId(e.target.value)}
+                style={{ maxWidth: 200 }}
+                title="Pick a task to log against or edit"
+              >
+                <option value="">— Pick a task —</option>
+                {projectTasks.map((t) => (
+                  <option key={t.id} value={t.id}>{t.title}</option>
+                ))}
+              </select>
+              <button
+                className="btn btn-sm"
+                disabled={!actionTask}
+                title={actionTask ? `Log activity on "${actionTask.title}"` : 'Pick a task first'}
+                onClick={() => setLoggingTask(actionTask)}
+              >+ Log activity</button>
+              <button
+                className="btn btn-sm"
+                disabled={!actionTask}
+                title={actionTask ? `Edit "${actionTask.title}"` : 'Pick a task first'}
+                onClick={() => setEditingTask(actionTask)}
+              >✎ Edit task</button>
+            </>
+          )}
           <div style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" onClick={exportCsv} disabled={totalTasks === 0}>
+          <button className="btn btn-sm" onClick={exportCsv} disabled={totalTasks === 0}>
             ⬇ Export CSV
           </button>
+          <button className="btn" onClick={onClose}>Close</button>
         </div>
       </div>
+
+      {quickAddOpen && (
+        <TaskQuickAdd
+          projects={projects}
+          projectFilter={project.id}
+          onClose={() => setQuickAddOpen(false)}
+        />
+      )}
+
+      {viewingTask && !editingTask && (
+        <TaskActivitiesModal
+          task={viewingTask}
+          userId={userId}
+          onClose={() => setViewingTask(null)}
+          onEditTask={(t) => setEditingTask(t)}
+        />
+      )}
+
+      {loggingTask && (
+        <ActivityLogger
+          task={loggingTask}
+          userId={userId}
+          onClose={() => setLoggingTask(null)}
+        />
+      )}
+
+      {editingTask && (
+        <TaskEditor
+          task={editingTask}
+          projects={projects}
+          onClose={() => { setEditingTask(null); setViewingTask(null); }}
+        />
+      )}
     </div>
   );
 }
