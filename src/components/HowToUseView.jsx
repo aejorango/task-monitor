@@ -3,6 +3,7 @@
 // to use each, plus concrete real-world scenarios with the right call.
 
 import { useState } from 'react';
+import NavIcon from './Icon';
 
 // ─── Icon set ────────────────────────────────────────────────
 // Inline stroke SVGs (Lucide-style) so the guide matches the app's
@@ -97,6 +98,31 @@ const ICON_PATHS = {
       <path d="m9 11 3 3L22 4" />
     </>
   ),
+  goal: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
+    </>
+  ),
+  minutes: (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M8 13h8M8 17h6" />
+    </>
+  ),
+  message: (
+    <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z" />
+  ),
+  wbs: (
+    <>
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <rect x="3" y="17" width="6" height="4" rx="1" />
+      <rect x="15" y="17" width="6" height="4" rx="1" />
+      <path d="M12 7v4M6 17v-2a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2" />
+    </>
+  ),
 };
 
 function Icon({ name, size = 18, className }) {
@@ -122,6 +148,7 @@ function Icon({ name, size = 18, className }) {
 
 const SECTIONS = [
   { id: 'overview',    label: 'Overview' },
+  { id: 'views',       label: 'The Views (what each page does)' },
   { id: 'hierarchy',   label: 'The Hierarchy' },
   { id: 'concepts',    label: 'Concepts (when to use what)' },
   { id: 'decision',    label: 'Decision Guide' },
@@ -169,6 +196,7 @@ export default function HowToUseView() {
 
         <div className="htu-content">
           <Overview />
+          <Views />
           <Hierarchy />
           <Concepts />
           <Decision />
@@ -218,6 +246,49 @@ function Overview() {
           <li><strong>A step inside a unit</strong> (a checkbox) → Subtask</li>
           <li><strong>A record of time spent</strong> (yesterday I…) → Activity</li>
         </ul>
+      </div>
+    </section>
+  );
+}
+
+// ─── The Views ───────────────────────────────────────────────
+
+const VIEWS_GUIDE = [
+  { icon: 'dashboard', name: 'Dashboard', text: 'Your at-a-glance home: today\'s focus, what\'s overdue, what\'s in progress, and quick stats per project.' },
+  { icon: 'projects',  name: 'Projects',  text: 'Create and manage projects + their phases. Save a project as a template, or start a New project from a saved template. Share a project via invite link, and open its WBS, Log, or AI helpers.' },
+  { icon: 'board',     name: 'Board',     text: 'Kanban — drag tasks across Todo → Doing → Done. Filter by tag, group by phase, start a timer, or quick-add from a template.' },
+  { icon: 'calendar',  name: 'Calendar',  text: 'Month grid by plan end date. Drag a task to reschedule, filter by status (All / To do / Ongoing / Done), and add a new task.' },
+  { icon: 'gantt',     name: 'Gantt',     text: 'Timeline of plan vs. actual. Drag bars to resize/move, see dependency arrows, and filter by a date period.' },
+  { icon: 'wbs',       name: 'WBS',       text: 'Work-breakdown structure: Project → Phase → Task → Subtask with duration, dates, resource, and % complete, plus a Gantt-style timeline. Click any row for its activity log; filter by status or date.' },
+  { icon: 'goals',     name: 'Goals',     text: 'Strategic-plan one-pagers — initiative, KPI, change agenda, and deliverables linked to projects for live progress. Pick your own banner + card colors.' },
+  { icon: 'messages',  name: 'Messages',  text: 'Direct and group chat with workspace members — real-time, closed to the workspace. Add or remove people from a group.' },
+  { icon: 'minutes',   name: 'Minutes',   text: 'Meeting minutes — attendees, notes, decisions, action items, and a boss-focused "Priority" panel. Filter by project from the top bar.' },
+  { icon: 'list',      name: 'Activity Log', text: 'A flat, sortable table of every logged activity, with bulk actions and CSV export.' },
+  { icon: 'clock',     name: 'Work Performed', text: 'Swimlane of activities by project over time — see who did what, when, and for how long.' },
+  { icon: 'review',    name: 'Review',    text: 'KPIs, hours-by-project, the daily-hours strip, and overdue / completed / bottleneck lists.' },
+  { icon: 'analytics', name: 'Analytics', text: 'Charts and trends — including the "Work performed" hero bar chart (hours per day, stacked by project, with totals) over 7 / 15 / 30 days.' },
+  { icon: 'settings',  name: 'Settings',  text: 'Per-device prefs (theme, default project, week start), workspaces + members, account, notifications, and data export. Admins also approve users here.' },
+];
+
+function Views() {
+  return (
+    <section id="htu-views" className="review-section htu-section">
+      <h2 className="review-h2">The Views — what each page in the sidebar does</h2>
+      <p className="muted small" style={{ marginTop: 0, marginBottom: 16 }}>
+        The same projects, tasks and activities, seen through different lenses. Two cross-cutting helpers live in the top bar:
+        the <strong>project picker</strong> (scopes most views to one project, or <em>All projects</em>) and the
+        <strong> ✨ AI button</strong> ("Stuck? Don't know what to do next?" — it suggests your top 3 next actions and can draft a prompt for each).
+      </p>
+      <div className="htu-views-grid">
+        {VIEWS_GUIDE.map((v) => (
+          <div key={v.name} className="htu-view-card">
+            <span className="htu-view-icon"><NavIcon name={v.icon} size={18} /></span>
+            <div>
+              <div className="htu-view-name">{v.name}</div>
+              <div className="htu-view-text">{v.text}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -519,6 +590,59 @@ const CONCEPTS = [
       { good: 'Task template: "Monthly invoice" (with the same subtasks every time).' },
     ],
     rule: 'Save as template the third time you copy-paste the same structure.',
+  },
+  {
+    name: 'Goal',
+    icon: 'goal',
+    oneLine: 'A strategic-plan one-pager: an initiative + KPI, a change agenda (from → to), and deliverables you can link to real projects for live progress.',
+    useWhen: [
+      'You\'re tracking a strategic objective above the day-to-day tasks (an SP/OKR-style plan).',
+      'You want one card that shows the initiative, KPI, what changes, and the deliverables.',
+      'You want each deliverable to show the live % of a linked project (even across workspaces).',
+    ],
+    dontUseWhen: [
+      'It\'s just a task or a project — Goals sit above those, summarizing outcomes.',
+      'There\'s no measurable target or change being driven.',
+    ],
+    examples: [
+      { good: '"SP3 — Enabling Data-Driven Decisions" with a KPI, change agenda, and 3 deliverables linked to projects.' },
+      { bad:  '"Finish the report" as a goal — that\'s a task.' },
+    ],
+    rule: 'A goal frames the why and the outcome; projects and tasks are how you get there. Link deliverables to projects so progress is live, not guessed.',
+  },
+  {
+    name: 'Minutes',
+    icon: 'minutes',
+    oneLine: 'A meeting record: attendees, notes, decisions, action items — plus a "Priority" panel for what the boss keeps pushing vs. pushing back on.',
+    useWhen: [
+      'You ran or attended a meeting and need a durable record.',
+      'You want decisions and follow-up action items captured in one place (optionally tagged to a project).',
+      'You want to track a boss/stakeholder\'s priorities and pushbacks for next time.',
+    ],
+    dontUseWhen: [
+      'It\'s a personal to-do — that\'s a task, not minutes.',
+    ],
+    examples: [
+      { good: 'Weekly sync minutes: attendees, 3 decisions, 2 action items (with owners + due dates), and "The Priority" filled in.' },
+    ],
+    rule: 'Capture minutes right after the meeting while it\'s fresh. Tie action items to owners so nothing is dropped. Filter Minutes by project from the top bar.',
+  },
+  {
+    name: 'Message',
+    icon: 'message',
+    oneLine: 'A direct or group chat with people in your workspace — a closed, real-time conversation, separate from task comments.',
+    useWhen: [
+      'You need a quick back-and-forth with a teammate or a small group.',
+      'The discussion isn\'t about one specific task (use task comments for that).',
+    ],
+    dontUseWhen: [
+      'It\'s feedback on a single task — comment on the task instead so it stays with the work.',
+      'It needs to be a tracked deliverable — that\'s a task.',
+    ],
+    examples: [
+      { good: 'A "Launch team" group chat to coordinate the day-of, or a DM to ask a quick question.' },
+    ],
+    rule: 'Messages are for conversation; tasks and activities are the record of work. Only workspace members can see a conversation, and group members can add/remove people.',
   },
 ];
 
