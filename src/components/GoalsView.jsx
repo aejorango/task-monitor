@@ -8,6 +8,7 @@ import { useState, useMemo } from 'react';
 import { useGoals, useAllWorkspaceProjects, useAllWorkspaceTasks, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addGoal, updateGoal, softDeleteGoal, archiveGoal, uid } from '../services/firebase';
+import WbsModal from './WbsModal';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -46,6 +47,13 @@ export default function GoalsView() {
   const { tasks } = useAllWorkspaceTasks();
   const { workspaces } = useWorkspaces();
   const [editing, setEditing] = useState(null); // goal object or 'new'
+  const [wbsProjectId, setWbsProjectId] = useState(null); // project to show WBS for
+
+  const projectById = useMemo(() => {
+    const m = {};
+    projects.forEach((p) => { m[p.id] = p; });
+    return m;
+  }, [projects]);
 
   const wsNameById = useMemo(() => {
     const m = {};
@@ -106,7 +114,13 @@ export default function GoalsView() {
       ) : (
         <div className="goals-list">
           {goals.map((g) => (
-            <GoalCard key={g.id} goal={g} projectStats={projectStats} onEdit={() => setEditing(g)} />
+            <GoalCard
+              key={g.id}
+              goal={g}
+              projectStats={projectStats}
+              onEdit={() => setEditing(g)}
+              onOpenWbs={setWbsProjectId}
+            />
           ))}
         </div>
       )}
@@ -119,13 +133,21 @@ export default function GoalsView() {
           onClose={() => setEditing(null)}
         />
       )}
+
+      {wbsProjectId && projectById[wbsProjectId] && (
+        <WbsModal
+          project={projectById[wbsProjectId]}
+          tasks={tasks}
+          onClose={() => setWbsProjectId(null)}
+        />
+      )}
     </>
   );
 }
 
 // ─── Display card (matches the SP3 template) ────────────────────────────────
 
-function GoalCard({ goal, projectStats = {}, onEdit }) {
+function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs }) {
   const agenda = goal.changeAgenda || [];
   const deliverables = goal.deliverables || [];
 
@@ -191,15 +213,17 @@ function GoalCard({ goal, projectStats = {}, onEdit }) {
                   {linkedProjects.length > 0 && (
                     <div className="goal-deliv-pills">
                       {linkedProjects.map((proj) => (
-                        <div
+                        <button
                           key={proj.id}
+                          type="button"
                           className="goal-deliv-pill"
-                          title={`${proj.name} (${proj.workspaceName}) — ${proj.pct}% complete · ${proj.taskCount} task${proj.taskCount === 1 ? '' : 's'}`}
+                          title={`${proj.name} (${proj.workspaceName}) — ${proj.pct}% complete · ${proj.taskCount} task${proj.taskCount === 1 ? '' : 's'} · click for WBS`}
+                          onClick={() => onOpenWbs?.(proj.id)}
                         >
                           <div className="goal-deliv-pill-fill" style={{ width: `${proj.pct}%`, background: proj.color }} />
                           <span className="goal-deliv-pill-label">{proj.name}</span>
                           <span className="goal-deliv-pill-pct">{proj.pct}%</span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}

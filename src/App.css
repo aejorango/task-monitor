@@ -5752,7 +5752,12 @@ a:hover { text-decoration: underline; }
   max-width: 100%;
   width: fit-content;
   min-width: 130px;
+  font: inherit;
+  cursor: pointer;
+  transition: filter 0.12s, box-shadow 0.12s;
 }
+.goal-deliv-pill:hover { filter: brightness(0.97); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08); }
+.goal-deliv-pill:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 1px; }
 .goal-deliv-pill-fill {
   position: absolute;
   left: 0; top: 0; bottom: 0;
