@@ -93,8 +93,18 @@ function fullSpan(t) {
 export default function WBSView({ projectFilter }) {
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects, loading: projectsLoading } = useProjects();
+  const { activities } = useAllActivities();
   const { workspaces } = useWorkspaces();
   const activeWs = useActiveWorkspaceId();
+
+  // Tasks that have at least one activity logged TODAY — surfaced as a green
+  // check so you can see at a glance which tasks are "moving" today.
+  const activeTodayIds = useMemo(() => {
+    const t = todayLocal();
+    const s = new Set();
+    activities.forEach((a) => { if (a.date === t && a.taskId) s.add(a.taskId); });
+    return s;
+  }, [activities]);
 
   const [zoom, setZoom] = useState('week');
   const [collapsed, setCollapsed] = useState(() => new Set());
@@ -393,6 +403,7 @@ export default function WBSView({ projectFilter }) {
                 resourcesOf={resourcesOf}
                 resourceOf={resourceOf}
                 today={today}
+                activeTodayIds={activeTodayIds}
                 onOpenLog={setLogScope}
               />
             );
@@ -406,6 +417,13 @@ export default function WBSView({ projectFilter }) {
         <span className="badge" style={{ background: 'var(--c-accent)', color: 'white', opacity: 0.65 }}>Phase span</span>
         <span className="badge" style={{ background: 'var(--c-doing)', color: 'white' }}>Task</span>
         <span className="badge" style={{ background: 'var(--c-danger)', color: 'white' }}>Overdue</span>
+        <span className="small muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
+          <span className="wbsx-today-check" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+          </span>
+          activity logged today
+        </span>
         <span className="small muted" style={{ marginLeft: 8 }}>
           % roll-up: task = subtasks / progress · phase &amp; project = average of their tasks.
         </span>
@@ -430,7 +448,7 @@ export default function WBSView({ projectFilter }) {
 
 function ProjectBlock({
   project, pTasks, groups, isOrphan, gridCols, pCollapsed, collapsed, toggle, pKey,
-  pSpan, pPct, barGeom, todayLeft, totalWidth, resourcesOf, resourceOf, today, onOpenLog,
+  pSpan, pPct, barGeom, todayLeft, totalWidth, resourcesOf, resourceOf, today, activeTodayIds, onOpenLog,
 }) {
   const pBar = barGeom(pSpan);
   // Orphan tasks have no shared projectId, so their log is scoped by task ids.
@@ -507,6 +525,7 @@ function ProjectBlock({
             resourceOf={resourceOf}
             today={today}
             barGeom={barGeom}
+            activeTodayIds={activeTodayIds}
             onOpenLog={onOpenLog}
           />
         );
@@ -517,7 +536,7 @@ function ProjectBlock({
 
 function PhaseGroup({
   project, group: g, gKey, gridCols, gCollapsed, collapsed, toggle,
-  gSpan, gBar, gPct, isRealPhase, todayLeft, resourcesOf, resourceOf, today, barGeom, onOpenLog,
+  gSpan, gBar, gPct, isRealPhase, todayLeft, resourcesOf, resourceOf, today, barGeom, activeTodayIds, onOpenLog,
 }) {
   return (
     <>
@@ -566,6 +585,7 @@ function PhaseGroup({
           resourceOf={resourceOf}
           today={today}
           barGeom={barGeom}
+          activeToday={activeTodayIds?.has(t.id)}
           onOpenLog={onOpenLog}
         />
       ))}
@@ -573,7 +593,7 @@ function PhaseGroup({
   );
 }
 
-function TaskRows({ project, task: t, gridCols, collapsed, toggle, todayLeft, resourceOf, today, barGeom, onOpenLog }) {
+function TaskRows({ project, task: t, gridCols, collapsed, toggle, todayLeft, resourceOf, today, barGeom, activeToday, onOpenLog }) {
   const tKey = `t:${t.id}`;
   const tCollapsed = collapsed.has(tKey);
   const subs = t.subtasks || [];
@@ -601,6 +621,14 @@ function TaskRows({ project, task: t, gridCols, collapsed, toggle, todayLeft, re
             >{tCollapsed ? '▸' : '▾'}</button>
           ) : (
             <span className="wbsx-chevron-spacer" />
+          )}
+          {activeToday && (
+            <span className="wbsx-today-check" title="Activity logged today — this task is moving" aria-label="Active today">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </span>
           )}
           <span className={`wbsx-task-name ${t.status === 'done' ? 'done' : ''}`}>{t.title}</span>
           {subs.length > 0 && (

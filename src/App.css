@@ -5451,6 +5451,19 @@ a:hover { text-decoration: underline; }
 .wbsx-task-row { cursor: pointer; }
 .wbsx-task-row:hover { background: var(--c-surface-2); }
 .wbsx-task-name { color: var(--c-text); }
+/* Green check — task has activity logged today ("moving"). */
+.wbsx-today-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--c-emerald-soft, #d1fae5);
+  color: var(--c-emerald, #10b981);
+  margin-right: 2px;
+}
 .wbsx-task-name.done { text-decoration: line-through; color: var(--c-text-3); }
 
 .wbsx-subtask-row { cursor: pointer; }
