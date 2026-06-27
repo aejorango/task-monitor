@@ -5,7 +5,8 @@
 import { useState } from 'react';
 import { useMinutes, useProjects, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
-import { addMinute, updateMinute, softDeleteMinute, uid, todayLocal } from '../services/firebase';
+import { addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid, todayLocal } from '../services/firebase';
+import Icon from './Icon';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -100,9 +101,54 @@ export default function MinutesView({ projectFilter = 'all' }) {
 }
 
 function MinuteCard({ minute, project, onEdit }) {
+  const { userId } = useAuth();
+  const workspaceId = useActiveWorkspaceId();
   const [open, setOpen] = useState(false);
+  const [busyId, setBusyId] = useState(null); // action-item id currently syncing to a task
   const items = minute.actionItems || [];
   const doneCount = items.filter((i) => i.done).length;
+
+  // Persist a patched action-items array back to the minute.
+  const patchItems = (nextItems) => updateMinute(minute.id, { actionItems: nextItems });
+
+  // Create a task from an action item and remember its id on the item so the
+  // card can later show "linked" state and offer to delete it again.
+  const createTaskFromItem = async (it) => {
+    if (!it.text?.trim() || busyId) return;
+    setBusyId(it.id);
+    try {
+      const ref = await addTask(userId, {
+        workspaceId,
+        title: it.text.trim(),
+        projectId: minute.projectId || null,
+        description: `From minutes: ${minute.title || 'Untitled meeting'}`,
+        plan: { endDate: it.due || null },
+        assignedToExternal: it.owner?.trim() ? [it.owner.trim()] : [],
+      });
+      await patchItems(items.map((x) => (x.id === it.id ? { ...x, taskId: ref.id } : x)));
+    } catch (err) {
+      console.error(err);
+      alert('Could not create task. Check console.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Soft-delete the linked task and clear the link on the action item.
+  const deleteTaskForItem = async (it) => {
+    if (!it.taskId || busyId) return;
+    if (!confirm('Delete the task created from this action item?')) return;
+    setBusyId(it.id);
+    try {
+      await softDeleteTask(it.taskId);
+      await patchItems(items.map((x) => (x.id === it.id ? { ...x, taskId: null } : x)));
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete task. Check console.');
+    } finally {
+      setBusyId(null);
+    }
+  };
   const mentions = (minute.bossMentions || []).filter((x) => x.text?.trim());
   const pushbacks = (minute.bossPushbacks || []).filter((x) => x.text?.trim());
   const hasPriority = minute.bossName || mentions.length || pushbacks.length;
@@ -159,6 +205,28 @@ function MinuteCard({ minute, project, onEdit }) {
                       <span className="minute-action-text">{it.text || <span className="muted">—</span>}</span>
                       {it.owner && <span className="minute-action-owner">{it.owner}</span>}
                       {it.due && <span className="minute-action-due">{it.due}</span>}
+                      {it.taskId ? (
+                        <span className="minute-action-task">
+                          <span className="minute-action-linked" title="A task was created from this action item">
+                            <Icon name="board" size={14} />
+                          </span>
+                          <button
+                            className="icon-btn link-danger"
+                            disabled={busyId === it.id}
+                            onClick={() => deleteTaskForItem(it)}
+                            title="Delete the linked task"
+                          ><Icon name="trash" size={15} /></button>
+                        </span>
+                      ) : (
+                        it.text?.trim() && (
+                          <button
+                            className="icon-btn minute-action-add"
+                            disabled={busyId === it.id}
+                            onClick={() => createTaskFromItem(it)}
+                            title="Add as task"
+                          ><Icon name="plus" size={15} /></button>
+                        )
+                      )}
                     </li>
                   ))}
                 </ul>

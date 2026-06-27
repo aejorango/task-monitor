@@ -140,6 +140,17 @@ const PATHS = {
       <path d="M8 13h8M8 17h5" />
     </>
   ),
+  // Plus — used for "add" affordances
+  plus: <path d="M12 5v14M5 12h14" />,
+  // Trash — used for delete affordances
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 18, className = '', strokeWidth = 1.7, style }) {
