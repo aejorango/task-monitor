@@ -6203,6 +6203,8 @@ a:hover { text-decoration: underline; }
 .icon-btn:hover { background: var(--c-surface-3, var(--c-surface)); color: var(--c-text); }
 .icon-btn:disabled { opacity: .5; cursor: default; }
 .icon-btn.link-danger:hover { color: var(--c-rose, #e5484d); border-color: var(--c-rose, #e5484d); }
+.minute-action-open { color: var(--c-emerald); }
+.minute-action-open:hover:not(:disabled) { color: var(--c-accent); border-color: var(--c-accent); }
 .minute-action-add { opacity: 0; transition: opacity .12s ease; }
 .minute-action:hover .minute-action-add, .minute-action-add:focus-visible { opacity: 1; }
 @media (hover: none) { .minute-action-add { opacity: 1; } }

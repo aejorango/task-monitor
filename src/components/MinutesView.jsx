@@ -2,11 +2,13 @@
 // each with attendees, notes, decisions and trackable action items. Create /
 // edit / delete via a modal.
 
-import { useState } from 'react';
-import { useMinutes, useProjects, useAuth } from '../hooks/useTasks';
+import { useState, useMemo } from 'react';
+import { useMinutes, useProjects, useAuth, useTasks } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid, todayLocal } from '../services/firebase';
 import Icon from './Icon';
+import TaskActivitiesModal from './TaskActivitiesModal';
+import TaskEditor from './TaskEditor';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -43,7 +45,15 @@ const emptyMinute = () => ({
 export default function MinutesView({ projectFilter = 'all' }) {
   const { minutes, loading } = useMinutes();
   const { projects, byId: projectById } = useProjects();
+  const { tasks } = useTasks();
+  const { userId } = useAuth();
   const [editing, setEditing] = useState(null); // minute object or 'new'
+
+  const tasksById = useMemo(() => {
+    const m = {};
+    tasks.forEach((t) => { m[t.id] = t; });
+    return m;
+  }, [tasks]);
 
   // Respect the topbar project picker — show only minutes for the selected
   // project unless "All projects" is chosen.
@@ -83,7 +93,15 @@ export default function MinutesView({ projectFilter = 'all' }) {
       ) : (
         <div className="minutes-list">
           {visibleMinutes.map((m) => (
-            <MinuteCard key={m.id} minute={m} project={projectById[m.projectId]} onEdit={() => setEditing(m)} />
+            <MinuteCard
+              key={m.id}
+              minute={m}
+              project={projectById[m.projectId]}
+              tasksById={tasksById}
+              projects={projects}
+              userId={userId}
+              onEdit={() => setEditing(m)}
+            />
           ))}
         </div>
       )}
@@ -100,11 +118,12 @@ export default function MinutesView({ projectFilter = 'all' }) {
   );
 }
 
-function MinuteCard({ minute, project, onEdit }) {
-  const { userId } = useAuth();
+function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, onEdit }) {
   const workspaceId = useActiveWorkspaceId();
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState(null); // action-item id currently syncing to a task
+  const [viewingTask, setViewingTask] = useState(null); // → TaskActivitiesModal
+  const [editingTask, setEditingTask] = useState(null); // → TaskEditor
   const items = minute.actionItems || [];
   const doneCount = items.filter((i) => i.done).length;
 
@@ -207,9 +226,12 @@ function MinuteCard({ minute, project, onEdit }) {
                       {it.due && <span className="minute-action-due">{it.due}</span>}
                       {it.taskId ? (
                         <span className="minute-action-task">
-                          <span className="minute-action-linked" title="A task was created from this action item">
-                            <Icon name="board" size={14} />
-                          </span>
+                          <button
+                            className="icon-btn minute-action-open"
+                            title={tasksById[it.taskId] ? 'Open task — log activity / edit' : 'Linked task not found in this workspace'}
+                            disabled={!tasksById[it.taskId]}
+                            onClick={() => { const t = tasksById[it.taskId]; if (t) setViewingTask(t); }}
+                          ><Icon name="board" size={15} /></button>
                           <button
                             className="icon-btn link-danger"
                             disabled={busyId === it.id}
@@ -271,6 +293,23 @@ function MinuteCard({ minute, project, onEdit }) {
             </aside>
           )}
         </div>
+      )}
+
+      {viewingTask && !editingTask && (
+        <TaskActivitiesModal
+          task={viewingTask}
+          userId={userId}
+          onClose={() => setViewingTask(null)}
+          onEditTask={(t) => setEditingTask(t)}
+        />
+      )}
+
+      {editingTask && (
+        <TaskEditor
+          task={editingTask}
+          projects={projects}
+          onClose={() => { setEditingTask(null); setViewingTask(null); }}
+        />
       )}
     </div>
   );
