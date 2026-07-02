@@ -329,7 +329,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
           notes: minute.notes || '',
           decisions: minute.decisions || '',
           actionItems: (minute.actionItems?.length ? minute.actionItems : [{ id: uid(), text: '', owner: '', due: '', done: false }])
-            .map((it) => ({ id: it.id || uid(), text: it.text || '', owner: it.owner || '', due: it.due || '', done: !!it.done })),
+            .map((it) => ({ id: it.id || uid(), text: it.text || '', owner: it.owner || '', due: it.due || '', done: !!it.done, taskId: it.taskId || null })),
           bossName: minute.bossName || '',
           bossMentions: (minute.bossMentions?.length ? minute.bossMentions : [{ id: uid(), text: '' }])
             .map((x) => ({ id: x.id || uid(), text: x.text || '' })),
@@ -357,7 +357,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
       ...form,
       title: form.title.trim(),
       projectId: form.projectId || null,
-      actionItems: form.actionItems.filter((it) => it.text.trim() || it.owner.trim() || it.due),
+      actionItems: form.actionItems.filter((it) => it.text.trim() || it.owner.trim() || it.due || it.taskId),
       bossName: form.bossName.trim(),
       bossMentions: form.bossMentions.filter((x) => x.text.trim()),
       bossPushbacks: form.bossPushbacks.filter((x) => x.text.trim()),
