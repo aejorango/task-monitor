@@ -4,8 +4,9 @@
 // Rows:    sticky lane headers → full-width date bars → per-lane activity cells.
 
 import { Fragment, useMemo, useState } from 'react';
-import { useAllActivities, useProjects, useAuth } from '../hooks/useTasks';
+import { useAllActivities, useProjects, useAuth, useTasks } from '../hooks/useTasks';
 import { todayLocal } from '../services/firebase';
+import ActivityLogger from './ActivityLogger';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function friendlyDate(s) {
@@ -32,7 +33,11 @@ const COMPLETION_COLORS = {
 export default function WorkPerformedView({ projectFilter }) {
   const { activities, loading } = useAllActivities();
   const { byId: projectById }   = useProjects();
+  const { tasks }               = useTasks();
   const { userId }              = useAuth();
+
+  const [pickerOpen, setPickerOpen]   = useState(false);   // task-picker modal
+  const [loggingTask, setLoggingTask] = useState(null);    // → ActivityLogger
 
   const [expandedId,   setExpandedId]   = useState(null);
   const [dateFrom,     setDateFrom]     = useState('');
@@ -169,6 +174,11 @@ export default function WorkPerformedView({ projectFilter }) {
             {filtered.length} activit{filtered.length === 1 ? 'y' : 'ies'}
             {totalHours > 0 && ` · ${totalHours.toFixed(1)}h total`}
           </p>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => setPickerOpen(true)}>
+            + Log activity
+          </button>
         </div>
       </div>
 
@@ -322,6 +332,82 @@ export default function WorkPerformedView({ projectFilter }) {
           </div>
         </div>
       )}
+
+      {pickerOpen && (
+        <LogActivityPicker
+          tasks={tasks}
+          projectById={projectById}
+          projectFilter={projectFilter}
+          onPick={(t) => { setPickerOpen(false); setLoggingTask(t); }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {loggingTask && (
+        <ActivityLogger
+          task={loggingTask}
+          userId={userId}
+          onClose={() => setLoggingTask(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Pick a task to log against ──────────────────────────── */
+function LogActivityPicker({ tasks, projectById, projectFilter, onPick, onClose }) {
+  const [query, setQuery] = useState('');
+  const [taskId, setTaskId] = useState('');
+
+  const candidates = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tasks
+      .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
+      .filter((t) => !q || (t.title || '').toLowerCase().includes(q))
+      .sort((a, b) => {
+        const ap = projectById[a.projectId]?.name || '￿';
+        const bp = projectById[b.projectId]?.name || '￿';
+        return ap.localeCompare(bp) || (a.title || '').localeCompare(b.title || '');
+      });
+  }, [tasks, projectById, projectFilter, query]);
+
+  const chosen = candidates.find((t) => t.id === taskId) || null;
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+        <h3 className="modal-title">Log activity</h3>
+        <p className="modal-sub">Pick the task you worked on, then record what you did.</p>
+
+        <div className="field">
+          <label className="label">Search tasks</label>
+          <input className="input" value={query} autoFocus placeholder="Filter by title…"
+            onChange={(e) => setQuery(e.target.value)} />
+        </div>
+
+        <div className="field">
+          <label className="label">Task</label>
+          <select className="select" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+            <option value="">— Select a task —</option>
+            {candidates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {projectById[t.projectId]?.name ? `${projectById[t.projectId].name} · ` : ''}{t.title}
+              </option>
+            ))}
+          </select>
+          {candidates.length === 0 && (
+            <p className="muted small" style={{ marginTop: 6 }}>No tasks match — clear the search or add a task first.</p>
+          )}
+        </div>
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!chosen} onClick={() => chosen && onPick(chosen)}>
+            Continue
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
