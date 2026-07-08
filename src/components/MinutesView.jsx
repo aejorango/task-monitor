@@ -55,11 +55,25 @@ export default function MinutesView({ projectFilter = 'all' }) {
     return m;
   }, [tasks]);
 
-  // Respect the topbar project picker — show only minutes for the selected
-  // project unless "All projects" is chosen.
-  const visibleMinutes = projectFilter === 'all'
-    ? minutes
-    : minutes.filter((m) => m.projectId === projectFilter);
+  // Left-panel selection — seeded from the topbar project filter, then driven
+  // by the project list. '__all__' | '__none__' | <projectId>.
+  const [selectedId, setSelectedId] = useState(projectFilter !== 'all' ? projectFilter : '__all__');
+
+  const sortedProjects = useMemo(
+    () => [...projects].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
+    [projects],
+  );
+  const countByProject = useMemo(() => {
+    const m = {};
+    minutes.forEach((x) => { const k = x.projectId || '__none__'; m[k] = (m[k] || 0) + 1; });
+    return m;
+  }, [minutes]);
+  const hasNoProject = (countByProject['__none__'] || 0) > 0;
+
+  const visibleMinutes =
+    selectedId === '__all__'  ? minutes
+    : selectedId === '__none__' ? minutes.filter((m) => !m.projectId)
+    : minutes.filter((m) => m.projectId === selectedId);
 
   return (
     <>
@@ -73,43 +87,80 @@ export default function MinutesView({ projectFilter = 'all' }) {
         </div>
       </div>
 
-      {loading ? (
-        <p className="muted">Loading minutes…</p>
-      ) : visibleMinutes.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">📝</div>
-          {minutes.length === 0 ? (
-            <>
-              <p>No meeting minutes yet.</p>
-              <p className="small">Click <strong>+ New minutes</strong> to record your first meeting.</p>
-            </>
+      <div className="minutes-layout">
+        {/* Project panel */}
+        <aside className="minutes-nav">
+          <div className="minutes-nav-label">Projects</div>
+          <button
+            className={`minutes-nav-link ${selectedId === '__all__' ? 'active' : ''}`}
+            onClick={() => setSelectedId('__all__')}
+          >
+            <span className="minutes-nav-name">All projects</span>
+            <span className="minutes-nav-count">{minutes.length}</span>
+          </button>
+          {sortedProjects.map((p) => (
+            <button
+              key={p.id}
+              className={`minutes-nav-link ${selectedId === p.id ? 'active' : ''}`}
+              onClick={() => setSelectedId(p.id)}
+            >
+              <span className="proj-dot" style={{ background: p.color }} />
+              <span className="minutes-nav-name">{p.name}</span>
+              {countByProject[p.id] ? <span className="minutes-nav-count">{countByProject[p.id]}</span> : null}
+            </button>
+          ))}
+          {hasNoProject && (
+            <button
+              className={`minutes-nav-link ${selectedId === '__none__' ? 'active' : ''}`}
+              onClick={() => setSelectedId('__none__')}
+            >
+              <span className="minutes-nav-name muted">No project</span>
+              <span className="minutes-nav-count">{countByProject['__none__']}</span>
+            </button>
+          )}
+        </aside>
+
+        {/* Minutes for the selected project */}
+        <div className="minutes-content">
+          {loading ? (
+            <p className="muted">Loading minutes…</p>
+          ) : visibleMinutes.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">📝</div>
+              {minutes.length === 0 ? (
+                <>
+                  <p>No meeting minutes yet.</p>
+                  <p className="small">Click <strong>+ New minutes</strong> to record your first meeting.</p>
+                </>
+              ) : (
+                <>
+                  <p>No minutes for this project.</p>
+                  <p className="small">Pick <strong>All projects</strong> on the left, or add minutes for this project.</p>
+                </>
+              )}
+            </div>
           ) : (
-            <>
-              <p>No minutes for this project.</p>
-              <p className="small">Switch to <strong>All projects</strong> to see them all, or add new minutes for this project.</p>
-            </>
+            <div className="minutes-list">
+              {visibleMinutes.map((m) => (
+                <MinuteCard
+                  key={m.id}
+                  minute={m}
+                  project={projectById[m.projectId]}
+                  tasksById={tasksById}
+                  projects={projects}
+                  userId={userId}
+                  onEdit={() => setEditing(m)}
+                />
+              ))}
+            </div>
           )}
         </div>
-      ) : (
-        <div className="minutes-list">
-          {visibleMinutes.map((m) => (
-            <MinuteCard
-              key={m.id}
-              minute={m}
-              project={projectById[m.projectId]}
-              tasksById={tasksById}
-              projects={projects}
-              userId={userId}
-              onEdit={() => setEditing(m)}
-            />
-          ))}
-        </div>
-      )}
+      </div>
 
       {editing && (
         <MinuteEditor
           minute={editing === 'new' ? null : editing}
-          defaultProjectId={projectFilter !== 'all' ? projectFilter : ''}
+          defaultProjectId={selectedId !== '__all__' && selectedId !== '__none__' ? selectedId : ''}
           projects={projects}
           onClose={() => setEditing(null)}
         />
