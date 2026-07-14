@@ -7,6 +7,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { useAllActivities, useProjects, useAuth, useTasks } from '../hooks/useTasks';
 import { todayLocal } from '../services/firebase';
 import ActivityLogger from './ActivityLogger';
+import ActivityEditor from './ActivityEditor';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function friendlyDate(s) {
@@ -38,6 +39,7 @@ export default function WorkPerformedView({ projectFilter }) {
 
   const [pickerOpen, setPickerOpen]   = useState(false);   // task-picker modal
   const [loggingTask, setLoggingTask] = useState(null);    // → ActivityLogger
+  const [editingActivity, setEditingActivity] = useState(null); // → ActivityEditor
 
   const [expandedId,   setExpandedId]   = useState(null);
   const [dateFrom,     setDateFrom]     = useState('');
@@ -318,6 +320,7 @@ export default function WorkPerformedView({ projectFilter }) {
                                   compStatus={compStatus}
                                   isOpen={isOpen}
                                   onToggle={() => setExpandedId(isOpen ? null : a.id)}
+                                  onEdit={() => setEditingActivity(a)}
                                 />
                               );
                             })
@@ -348,6 +351,13 @@ export default function WorkPerformedView({ projectFilter }) {
           task={loggingTask}
           userId={userId}
           onClose={() => setLoggingTask(null)}
+        />
+      )}
+
+      {editingActivity && (
+        <ActivityEditor
+          activity={editingActivity}
+          onClose={() => setEditingActivity(null)}
         />
       )}
     </div>
@@ -413,7 +423,7 @@ function LogActivityPicker({ tasks, projectById, projectFilter, onPick, onClose 
 }
 
 /* ── ActivityNode ────────────────────────────────────────── */
-function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle }) {
+function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle, onEdit }) {
   return (
     <button
       className={`wp-node-card${isOpen ? ' open' : ''}`}
@@ -468,6 +478,18 @@ function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle }) {
               </span>
             </div>
           )}
+          <div className="wp-node-actions">
+            <span
+              role="button"
+              tabIndex={0}
+              className="wp-node-edit"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(); } }}
+            >
+              ✎ Edit
+            </span>
+          </div>
         </div>
       )}
 
