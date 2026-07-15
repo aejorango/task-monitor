@@ -1131,7 +1131,7 @@ function ProjectAssigneeStrip({ project }) {
 }
 
 function SegmentManager({ projects, onClose }) {
-  const segments = useMemo(() => {
+  const [segments, setSegments] = useState(() => {
     const segs = new Set();
     projects.forEach((p) => {
       const seg = p.segment || 'Uncategorized';
@@ -1142,17 +1142,132 @@ function SegmentManager({ projects, onClose }) {
       if (b === 'Uncategorized') return -1;
       return a.localeCompare(b);
     });
-  }, [projects]);
+  });
+
+  const [editingSegment, setEditingSegment] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [newSegmentName, setNewSegmentName] = useState('');
+  const [savingSegment, setSavingSegment] = useState(null);
 
   const getSegmentProjects = (seg) => projects.filter((p) => (p.segment || 'Uncategorized') === seg);
+
+  const startEdit = (seg) => {
+    setEditingSegment(seg);
+    setEditingName(seg);
+  };
+
+  const saveSegmentName = async () => {
+    if (!editingName.trim() || editingName === editingSegment) {
+      setEditingSegment(null);
+      return;
+    }
+    if (segments.includes(editingName.trim())) {
+      alert('A segment with this name already exists.');
+      return;
+    }
+
+    setSavingSegment(editingSegment);
+    try {
+      // Update all projects in this segment to the new name
+      const projectsToUpdate = getSegmentProjects(editingSegment);
+      await Promise.all(projectsToUpdate.map((p) =>
+        updateProject(p.id, { segment: editingName.trim() })
+      ));
+
+      // Update local segments list
+      setSegments((prev) =>
+        prev.map((s) => s === editingSegment ? editingName.trim() : s)
+      );
+      setEditingSegment(null);
+    } catch (err) {
+      console.error(err);
+      alert('Could not rename segment. Check console.');
+    } finally {
+      setSavingSegment(null);
+    }
+  };
+
+  const deleteSegment = async (seg) => {
+    if (seg === 'Uncategorized') {
+      alert('Cannot delete the Uncategorized segment.');
+      return;
+    }
+    const count = getSegmentProjects(seg).length;
+    if (!confirm(`Delete segment "${seg}"? Its ${count} project${count === 1 ? '' : 's'} will be moved to Uncategorized.`)) {
+      return;
+    }
+
+    setSavingSegment(seg);
+    try {
+      // Move all projects to Uncategorized
+      const projectsToUpdate = getSegmentProjects(seg);
+      await Promise.all(projectsToUpdate.map((p) =>
+        updateProject(p.id, { segment: 'Uncategorized' })
+      ));
+
+      // Update local segments list
+      setSegments((prev) => prev.filter((s) => s !== seg));
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete segment. Check console.');
+    } finally {
+      setSavingSegment(null);
+    }
+  };
+
+  const addNewSegment = async () => {
+    if (!newSegmentName.trim()) return;
+    if (segments.includes(newSegmentName.trim())) {
+      alert('A segment with this name already exists.');
+      return;
+    }
+
+    setSavingSegment('__new__');
+    try {
+      setSegments((prev) => {
+        const sorted = [...prev, newSegmentName.trim()].sort((a, b) => {
+          if (a === 'Uncategorized') return 1;
+          if (b === 'Uncategorized') return -1;
+          return a.localeCompare(b);
+        });
+        return sorted;
+      });
+      setNewSegmentName('');
+    } catch (err) {
+      console.error(err);
+      alert('Could not create segment. Check console.');
+    } finally {
+      setSavingSegment(null);
+    }
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Project Segments</h3>
+        <h3 className="modal-title">Manage Segments</h3>
         <p className="modal-sub">
-          View and manage project organization by segment/department. Click on a segment to edit projects within it.
+          Create, rename, or delete project segments/departments. Move projects between segments by editing them.
         </p>
+
+        <div className="field">
+          <label className="label">Create new segment</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6 }}>
+            <input
+              className="input"
+              value={newSegmentName}
+              onChange={(e) => setNewSegmentName(e.target.value)}
+              placeholder="e.g. Marketing, Operations"
+              onKeyDown={(e) => e.key === 'Enter' && addNewSegment()}
+            />
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={addNewSegment}
+              disabled={!newSegmentName.trim() || savingSegment === '__new__'}
+            >
+              {savingSegment === '__new__' ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+        </div>
 
         {segments.length === 0 ? (
           <div className="empty-state">
@@ -1160,27 +1275,87 @@ function SegmentManager({ projects, onClose }) {
             <p>No segments yet.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {segments.map((seg) => {
               const count = getSegmentProjects(seg).length;
+              const isEditing = editingSegment === seg;
+              const isSaving = savingSegment === seg;
+
               return (
                 <div key={seg} style={{ borderBottom: '1px solid var(--c-border)', paddingBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <strong>{seg}</strong>
-                    <span className="badge badge-soft-muted">{count} project{count === 1 ? '' : 's'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                    {isEditing ? (
+                      <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                        <input
+                          className="input input-sm"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveSegmentName();
+                            if (e.key === 'Escape') setEditingSegment(null);
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          className="btn btn-sm"
+                          onClick={saveSegmentName}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setEditingSegment(null)}
+                          disabled={isSaving}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <strong>{seg}</strong>
+                          <span className="badge badge-soft-muted" style={{ marginLeft: 8 }}>{count} project{count === 1 ? '' : 's'}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {seg !== 'Uncategorized' && (
+                            <>
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                onClick={() => startEdit(seg)}
+                                title="Rename segment"
+                              >
+                                ✎
+                              </button>
+                              <button
+                                className="btn btn-sm btn-ghost link-danger"
+                                onClick={() => deleteSegment(seg)}
+                                disabled={isSaving}
+                                title="Delete segment (projects move to Uncategorized)"
+                              >
+                                ✕
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {getSegmentProjects(seg).map((p) => (
-                      <span
-                        key={p.id}
-                        className="badge badge-soft-info"
-                        style={{ paddingRight: 8 }}
-                      >
-                        <span className="proj-dot" style={{ background: p.color, width: 10, height: 10, borderRadius: '50%', marginRight: 4 }} />
-                        {p.name}
-                      </span>
-                    ))}
-                  </div>
+                  {!isEditing && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {getSegmentProjects(seg).map((p) => (
+                        <span
+                          key={p.id}
+                          className="badge badge-soft-info"
+                          style={{ paddingRight: 8 }}
+                        >
+                          <span className="proj-dot" style={{ background: p.color, width: 10, height: 10, borderRadius: '50%', marginRight: 4 }} />
+                          {p.name}
+                        </span>
+                      ))}
+                      {count === 0 && <span className="muted small">(no projects)</span>}
+                    </div>
+                  )}
                 </div>
               );
             })}
