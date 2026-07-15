@@ -431,6 +431,8 @@ export async function updateSegmentInWorkspace(workspaceId, segmentId, newName) 
   if (!newName.trim()) throw new Error('Segment name is required');
   const ref = doc(db, 'workspaces', workspaceId);
   const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Workspace not found');
+
   const current = snap.data() || {};
   const segments = current.segments || [];
   const oldSegment = segments.find((s) => s.id === segmentId);
@@ -444,22 +446,17 @@ export async function updateSegmentInWorkspace(workspaceId, segmentId, newName) 
     s.id === segmentId ? { ...s, name: newName.trim() } : s
   );
 
-  // Update all projects with the old name to use the new name
-  const projectsRef = collection(db, 'projects');
-  const projQuery = query(projectsRef, where('segment', '==', oldSegment.name));
-  const projSnap = await getDocs(projQuery);
-  const batch = writeBatch(db);
-  projSnap.forEach((doc) => {
-    batch.update(doc.ref, { segment: newName.trim() });
-  });
-  batch.update(ref, { segments: updated, updatedAt: serverTimestamp() });
-  await batch.commit();
+  // Just update the workspace segments array
+  // Projects with the old segment name will automatically use the new name from workspace.segments
+  await updateDoc(ref, { segments: updated, updatedAt: serverTimestamp() });
   return updated;
 }
 
 export async function deleteSegmentFromWorkspace(workspaceId, segmentId) {
   const ref = doc(db, 'workspaces', workspaceId);
   const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Workspace not found');
+
   const current = snap.data() || {};
   const segments = current.segments || [];
   const segment = segments.find((s) => s.id === segmentId);
@@ -467,16 +464,9 @@ export async function deleteSegmentFromWorkspace(workspaceId, segmentId) {
 
   const updated = segments.filter((s) => s.id !== segmentId);
 
-  // Move all projects with this segment name to Uncategorized
-  const projectsRef = collection(db, 'projects');
-  const projQuery = query(projectsRef, where('segment', '==', segment.name));
-  const projSnap = await getDocs(projQuery);
-  const batch = writeBatch(db);
-  projSnap.forEach((doc) => {
-    batch.update(doc.ref, { segment: 'Uncategorized' });
-  });
-  batch.update(ref, { segments: updated, updatedAt: serverTimestamp() });
-  await batch.commit();
+  // Just update the workspace segments array
+  // Projects with this segment name will fallback to Uncategorized when the segment no longer exists
+  await updateDoc(ref, { segments: updated, updatedAt: serverTimestamp() });
   return updated;
 }
 
