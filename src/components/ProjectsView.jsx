@@ -220,6 +220,7 @@ export default function ProjectsView() {
         <ProjectEditor
           project={editing === 'new' ? null : editing}
           userId={userId}
+          workspace={workspace}
           onClose={() => setEditing(null)}
         />
       )}
@@ -228,6 +229,7 @@ export default function ProjectsView() {
         <ProjectEditor
           project={null}
           userId={userId}
+          workspace={workspace}
           fromTemplate={createFromTemplate}
           onClose={() => setCreateFromTemplate(null)}
         />
@@ -817,11 +819,9 @@ function TemplateCard({ template, onUse, note }) {
   );
 }
 
-function ProjectEditor({ project, userId, fromTemplate, onClose }) {
-  const workspaceId = useActiveWorkspaceId();
+function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   const { projects } = useProjects();
-  const { workspaces } = useWorkspaces();
-  const workspace = workspaces.find((w) => w.id === workspaceId);
+  const workspaceId = workspace?.id;
   const isNew = !project;
   const seed = fromTemplate?.payload;
   const [name, setName]         = useState(project?.name || seed?.name || '');
