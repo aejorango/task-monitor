@@ -1,47 +1,49 @@
 /* ============================================================
-   Task Monitor PM Suite — AIM Brand Theme
-   Asian Institute of Management inspired: deep purple as primary accent,
-   navy foundation, vibrant secondary colors, professional elegance.
+   Task Monitor PM Suite — Blue Innovation Theme
+   Deep blue dominating color with light blue accents,
+   inspired by AIM brand colors. Professional, modern elegance.
    ============================================================ */
 
 :root {
-  /* ── Neutrals (aligned with AIM navy foundation) ── */
-  --c-bg:           #faf8fd;
+  /* ── Neutrals (modern blue foundation) ── */
+  --c-bg:           #f8fafc;
   --c-surface:      #ffffff;
-  --c-surface-2:    #f5f2fa;
-  --c-surface-3:    #ede8f5;
-  --c-border:       #e0d8ed;
-  --c-border-strong:#cfc0e0;
-  --c-text:         #2a1a47;
-  --c-text-2:       #4a3565;
-  --c-text-3:       #7a6b95;
-  --c-text-muted:   #9999aa;
+  --c-surface-2:    #f1f5f9;
+  --c-surface-3:    #e8f1f9;
+  --c-border:       #d4e0ed;
+  --c-border-strong:#c0d4e8;
+  --c-text:         #1a2847;
+  --c-text-2:       #364455;
+  --c-text-3:       #647489;
+  --c-text-muted:   #8899aa;
 
-  /* ── Accent — AIM Deep Purple (PRIMARY) ── */
-  --c-accent:       #7B2D8F;
-  --c-accent-hover: #6a2478;
-  --c-accent-soft:  #f3e8f9;
-  --c-accent-ink:   #3d1547;
+  /* ── Accent — Deep Blue (PRIMARY) ── */
+  --c-accent:       #0051BA;
+  --c-accent-hover: #003D82;
+  --c-accent-soft:  #e8f1ff;
+  --c-accent-ink:   #001a47;
 
-  /* ── Extended palette (AIM Brand Colors) ── */
-  --c-purple:       #7B2D8F;
-  --c-purple-soft:  #f3e8f9;
+  /* ── Extended palette (Blue Innovation Theme) ── */
+  --c-blue-deep:    #0051BA;
+  --c-blue-deep-soft: #e8f1ff;
+  --c-blue-light:   #0099CC;
+  --c-blue-light-soft: #d4e8ff;
   --c-teal:         #1D7CC7;
   --c-teal-soft:    #e6f1f9;
-  --c-pink:         #7B2D8F;
-  --c-pink-soft:    #f3e8f9;
+  --c-purple:       #7B2D8F;
+  --c-purple-soft:  #f3e8f9;
   --c-amber:        #FFD700;
   --c-amber-soft:   #fffae6;
   --c-emerald:      #1DA449;
   --c-emerald-soft: #e6f5f0;
 
-  /* ── Sidebar gradient (AIM Purple Foundation) ── */
-  --c-sidebar-from: #5B1D6F;
-  --c-sidebar-to:   #7B2D8F;
-  --c-sidebar-text: rgba(255,255,255,0.90);
-  --c-sidebar-text-muted: rgba(255,255,255,0.55);
-  --c-sidebar-active-bg: rgba(123,45,143,0.25);
-  --c-sidebar-hover-bg:  rgba(255,255,255,0.12);
+  /* ── Sidebar gradient (Deep Blue Foundation) ── */
+  --c-sidebar-from: #0051BA;
+  --c-sidebar-to:   #003D82;
+  --c-sidebar-text: rgba(255,255,255,0.95);
+  --c-sidebar-text-muted: rgba(255,255,255,0.60);
+  --c-sidebar-active-bg: rgba(0,153,204,0.20);
+  --c-sidebar-hover-bg:  rgba(255,255,255,0.10);
 
   /* ── Status colors (AIM-aligned) ── */
   --c-todo:    #9999aa;
@@ -101,72 +103,72 @@
 }
 
 /* Dark theme: applied automatically via prefers-color-scheme,
-   OR forced via [data-theme="dark"] on <html>. AIM-inspired purple dark palette. */
+   OR forced via [data-theme="dark"] on <html>. Deep blue dark palette. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --c-bg:           #1a0f2a;
-    --c-surface:      #2a1a3a;
-    --c-surface-2:    #352548;
-    --c-surface-3:    #3f3050;
-    --c-border:       #4d3f60;
-    --c-border-strong:#5a4d70;
-    --c-text:         #f0e8f8;
-    --c-text-2:       #d4c4e8;
-    --c-text-3:       #9999cc;
-    --c-text-muted:   #6b5a88;
+    --c-bg:           #0f1621;
+    --c-surface:      #1a2333;
+    --c-surface-2:    #243242;
+    --c-surface-3:    #2d3f52;
+    --c-border:       #3d4f66;
+    --c-border-strong:#4a5f75;
+    --c-text:         #e8f1ff;
+    --c-text-2:       #c4d9f0;
+    --c-text-3:       #8899cc;
+    --c-text-muted:   #5a7099;
 
-    --c-accent:       #b366d9;
-    --c-accent-hover: #c480e8;
-    --c-accent-soft:  #3d2555;
-    --c-accent-ink:   #e8d4f5;
+    --c-accent:       #3BA9FF;
+    --c-accent-hover: #5CBFFF;
+    --c-accent-soft:  #1a3a5a;
+    --c-accent-ink:   #b3e0ff;
 
-    --c-sidebar-from: #3d1f5a;
-    --c-sidebar-to:   #5B1D6F;
+    --c-sidebar-from: #003D82;
+    --c-sidebar-to:   #0051BA;
 
     --c-success-bg:  #0d3a25;
     --c-warn-bg:     #4a3d0d;
     --c-danger-bg:   #4a1515;
-    --c-info-bg:     #1a2a4a;
+    --c-info-bg:     #1a3a5a;
 
     --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.65);
     --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.65);
     --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.70);
     --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.80);
     --shadow-card:   0 2px 12px rgba(0, 0, 0, 0.55);
-    --shadow-accent: 0 8px 24px rgba(123, 45, 143, 0.45);
+    --shadow-accent: 0 8px 24px rgba(0, 81, 186, 0.45);
   }
 }
 :root[data-theme="dark"] {
-  --c-bg:           #1a0f2a;
-  --c-surface:      #2a1a3a;
-  --c-surface-2:    #352548;
-  --c-surface-3:    #3f3050;
-  --c-border:       #4d3f60;
-  --c-border-strong:#5a4d70;
-  --c-text:         #f0e8f8;
-  --c-text-2:       #d4c4e8;
-  --c-text-3:       #9999cc;
-  --c-text-muted:   #6b5a88;
+  --c-bg:           #0f1621;
+  --c-surface:      #1a2333;
+  --c-surface-2:    #243242;
+  --c-surface-3:    #2d3f52;
+  --c-border:       #3d4f66;
+  --c-border-strong:#4a5f75;
+  --c-text:         #e8f1ff;
+  --c-text-2:       #c4d9f0;
+  --c-text-3:       #8899cc;
+  --c-text-muted:   #5a7099;
 
-  --c-accent:       #b366d9;
-  --c-accent-hover: #c480e8;
-  --c-accent-soft:  #3d2555;
-  --c-accent-ink:   #e8d4f5;
+  --c-accent:       #3BA9FF;
+  --c-accent-hover: #5CBFFF;
+  --c-accent-soft:  #1a3a5a;
+  --c-accent-ink:   #b3e0ff;
 
-  --c-sidebar-from: #3d1f5a;
-  --c-sidebar-to:   #5B1D6F;
+  --c-sidebar-from: #003D82;
+  --c-sidebar-to:   #0051BA;
 
   --c-success-bg:  #0d3a25;
   --c-warn-bg:     #4a3d0d;
   --c-danger-bg:   #4a1515;
-  --c-info-bg:     #1a2a4a;
+  --c-info-bg:     #1a3a5a;
 
   --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.65);
   --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.65);
   --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.70);
   --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.80);
   --shadow-card:   0 2px 12px rgba(0, 0, 0, 0.55);
-  --shadow-accent: 0 8px 24px rgba(123, 45, 143, 0.45);
+  --shadow-accent: 0 8px 24px rgba(0, 81, 186, 0.45);
 }
 
 *, *::before, *::after { box-sizing: border-box; }

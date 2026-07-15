@@ -413,6 +413,73 @@ export async function updateWorkspace(workspaceId, updates) {
   });
 }
 
+export async function addSegmentToWorkspace(workspaceId, segmentName) {
+  if (!segmentName.trim()) throw new Error('Segment name is required');
+  const ref = doc(db, 'workspaces', workspaceId);
+  const snap = await getDoc(ref);
+  const current = snap.data() || {};
+  const segments = current.segments || [];
+  if (segments.some((s) => s.name === segmentName.trim())) {
+    throw new Error('Segment already exists');
+  }
+  const updated = [...segments, { id: uid(), name: segmentName.trim() }];
+  await updateDoc(ref, { segments: updated, updatedAt: serverTimestamp() });
+  return updated;
+}
+
+export async function updateSegmentInWorkspace(workspaceId, segmentId, newName) {
+  if (!newName.trim()) throw new Error('Segment name is required');
+  const ref = doc(db, 'workspaces', workspaceId);
+  const snap = await getDoc(ref);
+  const current = snap.data() || {};
+  const segments = current.segments || [];
+  const oldSegment = segments.find((s) => s.id === segmentId);
+  if (!oldSegment) throw new Error('Segment not found');
+
+  if (segments.some((s) => s.name === newName.trim() && s.id !== segmentId)) {
+    throw new Error('Segment name already exists');
+  }
+
+  const updated = segments.map((s) =>
+    s.id === segmentId ? { ...s, name: newName.trim() } : s
+  );
+
+  // Update all projects with the old name to use the new name
+  const projectsRef = collection(db, 'projects');
+  const projQuery = query(projectsRef, where('segment', '==', oldSegment.name));
+  const projSnap = await getDocs(projQuery);
+  const batch = writeBatch(db);
+  projSnap.forEach((doc) => {
+    batch.update(doc.ref, { segment: newName.trim() });
+  });
+  batch.update(ref, { segments: updated, updatedAt: serverTimestamp() });
+  await batch.commit();
+  return updated;
+}
+
+export async function deleteSegmentFromWorkspace(workspaceId, segmentId) {
+  const ref = doc(db, 'workspaces', workspaceId);
+  const snap = await getDoc(ref);
+  const current = snap.data() || {};
+  const segments = current.segments || [];
+  const segment = segments.find((s) => s.id === segmentId);
+  if (!segment) throw new Error('Segment not found');
+
+  const updated = segments.filter((s) => s.id !== segmentId);
+
+  // Move all projects with this segment name to Uncategorized
+  const projectsRef = collection(db, 'projects');
+  const projQuery = query(projectsRef, where('segment', '==', segment.name));
+  const projSnap = await getDocs(projQuery);
+  const batch = writeBatch(db);
+  projSnap.forEach((doc) => {
+    batch.update(doc.ref, { segment: 'Uncategorized' });
+  });
+  batch.update(ref, { segments: updated, updatedAt: serverTimestamp() });
+  await batch.commit();
+  return updated;
+}
+
 export async function softDeleteWorkspace(workspaceId) {
   return await updateWorkspace(workspaceId, { deleted: true });
 }

@@ -17,6 +17,9 @@ import {
   revokeInvite,
   subscribeToInvitesForProject,
   auth,
+  addSegmentToWorkspace,
+  updateSegmentInWorkspace,
+  deleteSegmentFromWorkspace,
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
@@ -32,6 +35,9 @@ export default function ProjectsView() {
   const { tasks } = useTasks();
   const { activities } = useAllActivities();
   const { templates } = useTemplates();
+  const { workspaces } = useWorkspaces();
+  const activeWsId = useActiveWorkspaceId();
+  const workspace = workspaces.find((w) => w.id === activeWsId);
   const projectTemplates = templates.filter((t) => t.kind === 'project');
   const taskTemplates    = templates.filter((t) => t.kind === 'task');
   const [editing, setEditing] = useState(null);          // project or 'new'
@@ -51,14 +57,28 @@ export default function ProjectsView() {
     };
   };
 
-  // Group projects by segment
+  // Group projects by segment (union of workspace segments + project segments for backward compatibility)
   const segments = useMemo(() => {
     const grouped = {};
+
+    // First, add all workspace-defined segments (even if empty)
+    const wsSegments = workspace?.segments || [];
+    wsSegments.forEach((seg) => {
+      grouped[seg.name] = [];
+    });
+
+    // Add Uncategorized if not present
+    if (!grouped['Uncategorized']) {
+      grouped['Uncategorized'] = [];
+    }
+
+    // Now add projects to their segments
     projects.forEach((p) => {
       const seg = p.segment || 'Uncategorized';
       if (!grouped[seg]) grouped[seg] = [];
       grouped[seg].push(p);
     });
+
     // Sort segments: Uncategorized last, others alphabetically
     const keys = Object.keys(grouped).sort((a, b) => {
       if (a === 'Uncategorized') return 1;
@@ -68,7 +88,7 @@ export default function ProjectsView() {
     const sorted = {};
     keys.forEach((k) => { sorted[k] = grouped[k]; });
     return sorted;
-  }, [projects]);
+  }, [projects, workspace?.segments]);
 
   if (loading) return <p className="muted">Loading projects…</p>;
 
@@ -1131,18 +1151,10 @@ function ProjectAssigneeStrip({ project }) {
 }
 
 function SegmentManager({ projects, onClose }) {
-  const [segments, setSegments] = useState(() => {
-    const segs = new Set();
-    projects.forEach((p) => {
-      const seg = p.segment || 'Uncategorized';
-      segs.add(seg);
-    });
-    return Array.from(segs).sort((a, b) => {
-      if (a === 'Uncategorized') return 1;
-      if (b === 'Uncategorized') return -1;
-      return a.localeCompare(b);
-    });
-  });
+  const workspaceId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const workspace = workspaces.find((w) => w.id === workspaceId);
+  const wsSegments = workspace?.segments || [];
 
   const [editingSegment, setEditingSegment] = useState(null);
   const [editingName, setEditingName] = useState('');
@@ -1150,6 +1162,7 @@ function SegmentManager({ projects, onClose }) {
   const [savingSegment, setSavingSegment] = useState(null);
 
   const getSegmentProjects = (seg) => projects.filter((p) => (p.segment || 'Uncategorized') === seg);
+  const getSegmentId = (seg) => wsSegments.find((s) => s.name === seg)?.id;
 
   const startEdit = (seg) => {
     setEditingSegment(seg);
@@ -1161,23 +1174,17 @@ function SegmentManager({ projects, onClose }) {
       setEditingSegment(null);
       return;
     }
-    if (segments.includes(editingName.trim())) {
+    if (wsSegments.some((s) => s.name === editingName.trim() && s.name !== editingSegment)) {
       alert('A segment with this name already exists.');
       return;
     }
 
     setSavingSegment(editingSegment);
     try {
-      // Update all projects in this segment to the new name
-      const projectsToUpdate = getSegmentProjects(editingSegment);
-      await Promise.all(projectsToUpdate.map((p) =>
-        updateProject(p.id, { segment: editingName.trim() })
-      ));
-
-      // Update local segments list
-      setSegments((prev) =>
-        prev.map((s) => s === editingSegment ? editingName.trim() : s)
-      );
+      const segId = getSegmentId(editingSegment);
+      if (segId) {
+        await updateSegmentInWorkspace(workspaceId, segId, editingName.trim());
+      }
       setEditingSegment(null);
     } catch (err) {
       console.error(err);
@@ -1199,14 +1206,10 @@ function SegmentManager({ projects, onClose }) {
 
     setSavingSegment(seg);
     try {
-      // Move all projects to Uncategorized
-      const projectsToUpdate = getSegmentProjects(seg);
-      await Promise.all(projectsToUpdate.map((p) =>
-        updateProject(p.id, { segment: 'Uncategorized' })
-      ));
-
-      // Update local segments list
-      setSegments((prev) => prev.filter((s) => s !== seg));
+      const segId = getSegmentId(seg);
+      if (segId) {
+        await deleteSegmentFromWorkspace(workspaceId, segId);
+      }
     } catch (err) {
       console.error(err);
       alert('Could not delete segment. Check console.');
@@ -1217,21 +1220,14 @@ function SegmentManager({ projects, onClose }) {
 
   const addNewSegment = async () => {
     if (!newSegmentName.trim()) return;
-    if (segments.includes(newSegmentName.trim())) {
+    if (wsSegments.some((s) => s.name === newSegmentName.trim())) {
       alert('A segment with this name already exists.');
       return;
     }
 
     setSavingSegment('__new__');
     try {
-      setSegments((prev) => {
-        const sorted = [...prev, newSegmentName.trim()].sort((a, b) => {
-          if (a === 'Uncategorized') return 1;
-          if (b === 'Uncategorized') return -1;
-          return a.localeCompare(b);
-        });
-        return sorted;
-      });
+      await addSegmentToWorkspace(workspaceId, newSegmentName.trim());
       setNewSegmentName('');
     } catch (err) {
       console.error(err);
@@ -1269,20 +1265,22 @@ function SegmentManager({ projects, onClose }) {
           </div>
         </div>
 
-        {segments.length === 0 ? (
+        {wsSegments.length === 0 && projects.filter((p) => !p.segment || p.segment === 'Uncategorized').length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">📋</div>
             <p>No segments yet.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {segments.map((seg) => {
+            {/* Display workspace-defined segments first */}
+            {wsSegments.map((wsSegment) => {
+              const seg = wsSegment.name;
               const count = getSegmentProjects(seg).length;
               const isEditing = editingSegment === seg;
               const isSaving = savingSegment === seg;
 
               return (
-                <div key={seg} style={{ borderBottom: '1px solid var(--c-border)', paddingBottom: 12 }}>
+                <div key={wsSegment.id} style={{ borderBottom: '1px solid var(--c-border)', paddingBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
                     {isEditing ? (
                       <div style={{ display: 'flex', gap: 6, flex: 1 }}>
@@ -1318,25 +1316,21 @@ function SegmentManager({ projects, onClose }) {
                           <span className="badge badge-soft-muted" style={{ marginLeft: 8 }}>{count} project{count === 1 ? '' : 's'}</span>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          {seg !== 'Uncategorized' && (
-                            <>
-                              <button
-                                className="btn btn-sm btn-ghost"
-                                onClick={() => startEdit(seg)}
-                                title="Rename segment"
-                              >
-                                ✎
-                              </button>
-                              <button
-                                className="btn btn-sm btn-ghost link-danger"
-                                onClick={() => deleteSegment(seg)}
-                                disabled={isSaving}
-                                title="Delete segment (projects move to Uncategorized)"
-                              >
-                                ✕
-                              </button>
-                            </>
-                          )}
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => startEdit(seg)}
+                            title="Rename segment"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            className="btn btn-sm btn-ghost link-danger"
+                            onClick={() => deleteSegment(seg)}
+                            disabled={isSaving}
+                            title="Delete segment (projects move to Uncategorized)"
+                          >
+                            ✕
+                          </button>
                         </div>
                       </>
                     )}
@@ -1359,6 +1353,30 @@ function SegmentManager({ projects, onClose }) {
                 </div>
               );
             })}
+
+            {/* Display Uncategorized if there are projects in it */}
+            {getSegmentProjects('Uncategorized').length > 0 && (
+              <div style={{ borderBottom: '1px solid var(--c-border)', paddingBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                  <div>
+                    <strong>Uncategorized</strong>
+                    <span className="badge badge-soft-muted" style={{ marginLeft: 8 }}>{getSegmentProjects('Uncategorized').length} project{getSegmentProjects('Uncategorized').length === 1 ? '' : 's'}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {getSegmentProjects('Uncategorized').map((p) => (
+                    <span
+                      key={p.id}
+                      className="badge badge-soft-info"
+                      style={{ paddingRight: 8 }}
+                    >
+                      <span className="proj-dot" style={{ background: p.color, width: 10, height: 10, borderRadius: '50%', marginRight: 4 }} />
+                      {p.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
