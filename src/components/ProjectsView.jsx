@@ -39,6 +39,7 @@ export default function ProjectsView() {
   const [aiFor, setAiFor] = useState(null);              // project to generate tasks for
   const [activityLogFor, setActivityLogFor] = useState(null); // project for activity log modal
   const [wbsFor, setWbsFor] = useState(null);                // project for WBS modal
+  const [managingSegments, setManagingSegments] = useState(false);
 
   const stats = (projectId) => {
     const t = tasks.filter((x) => x.projectId === projectId);
@@ -50,6 +51,25 @@ export default function ProjectsView() {
     };
   };
 
+  // Group projects by segment
+  const segments = useMemo(() => {
+    const grouped = {};
+    projects.forEach((p) => {
+      const seg = p.segment || 'Uncategorized';
+      if (!grouped[seg]) grouped[seg] = [];
+      grouped[seg].push(p);
+    });
+    // Sort segments: Uncategorized last, others alphabetically
+    const keys = Object.keys(grouped).sort((a, b) => {
+      if (a === 'Uncategorized') return 1;
+      if (b === 'Uncategorized') return -1;
+      return a.localeCompare(b);
+    });
+    const sorted = {};
+    keys.forEach((k) => { sorted[k] = grouped[k]; });
+    return sorted;
+  }, [projects]);
+
   if (loading) return <p className="muted">Loading projects…</p>;
 
   return (
@@ -57,9 +77,12 @@ export default function ProjectsView() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Projects</h1>
-          <p className="page-subtitle">Manage projects and their phases. Each task belongs to one project + phase.</p>
+          <p className="page-subtitle">Manage projects organized by department or segment.</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-secondary" onClick={() => setManagingSegments(true)}>
+            ⚙ Segments
+          </button>
           <button className="btn btn-primary" onClick={() => setEditing('new')}>
             + New project
           </button>
@@ -73,57 +96,64 @@ export default function ProjectsView() {
           <p className="small">Click <strong>+ New project</strong> to create one.</p>
         </div>
       ) : (
-        <div className="project-grid">
-          {projects.map((p) => {
-            const s = stats(p.id);
-            return (
-              <div key={p.id} className="project-card" onClick={() => setEditing(p)}>
-                <div className="project-card-head">
-                  <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
-                  <h3 className="project-name">{p.name}</h3>
-                  {p._shared && (
-                    <span
-                      className="badge badge-soft-info"
-                      title="This project lives in a different workspace and was shared with you."
-                      style={{ marginLeft: 'auto' }}
-                    >Shared</span>
-                  )}
-                </div>
-                <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
-                <ProjectAssigneeStrip project={p} />
-                <div className="project-phases">
-                  {p.phases?.length > 0 ? p.phases.map((ph) => (
-                    <span key={ph.id} className="phase-tag">{ph.name}</span>
-                  )) : <span className="muted small">No phases</span>}
-                </div>
-                <div className="project-stats">
-                  <span>{s.total} task{s.total === 1 ? '' : 's'}</span>
-                  <span>·</span>
-                  <span>{s.done} done</span>
-                  <span>·</span>
-                  <span>{s.activities} activit{s.activities === 1 ? 'y' : 'ies'}</span>
-                  {p.archived && (<><span>·</span><span className="badge badge-soft-muted">Archived</span></>)}
-                </div>
-                <div className="project-card-actions" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    title="View Work Breakdown Structure"
-                    onClick={() => setWbsFor(p)}
-                  >🗂 WBS</button>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    title="View this project's activity log"
-                    onClick={() => setActivityLogFor(p)}
-                  >☰ Log</button>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    title="Generate tasks with AI"
-                    onClick={() => setAiFor(p)}
-                  >✨ AI</button>
-                </div>
+        <div className="segments-container">
+          {Object.entries(segments).map(([segmentName, segmentProjects]) => (
+            <div key={segmentName} className="segment-group">
+              <h2 className="segment-title">{segmentName}</h2>
+              <div className="projects-row">
+                {segmentProjects.map((p) => {
+                  const s = stats(p.id);
+                  return (
+                    <div key={p.id} className="project-card" onClick={() => setEditing(p)}>
+                      <div className="project-card-head">
+                        <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
+                        <h3 className="project-name">{p.name}</h3>
+                        {p._shared && (
+                          <span
+                            className="badge badge-soft-info"
+                            title="This project lives in a different workspace and was shared with you."
+                            style={{ marginLeft: 'auto' }}
+                          >Shared</span>
+                        )}
+                      </div>
+                      <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
+                      <ProjectAssigneeStrip project={p} />
+                      <div className="project-phases">
+                        {p.phases?.length > 0 ? p.phases.map((ph) => (
+                          <span key={ph.id} className="phase-tag">{ph.name}</span>
+                        )) : <span className="muted small">No phases</span>}
+                      </div>
+                      <div className="project-stats">
+                        <span>{s.total} task{s.total === 1 ? '' : 's'}</span>
+                        <span>·</span>
+                        <span>{s.done} done</span>
+                        <span>·</span>
+                        <span>{s.activities} activit{s.activities === 1 ? 'y' : 'ies'}</span>
+                        {p.archived && (<><span>·</span><span className="badge badge-soft-muted">Archived</span></>)}
+                      </div>
+                      <div className="project-card-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          title="View Work Breakdown Structure"
+                          onClick={() => setWbsFor(p)}
+                        >🗂 WBS</button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          title="View this project's activity log"
+                          onClick={() => setActivityLogFor(p)}
+                        >☰ Log</button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          title="Generate tasks with AI"
+                          onClick={() => setAiFor(p)}
+                        >✨ AI</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
 
@@ -202,6 +232,13 @@ export default function ProjectsView() {
           project={wbsFor}
           projects={projects}
           onClose={() => setWbsFor(null)}
+        />
+      )}
+
+      {managingSegments && (
+        <SegmentManager
+          projects={projects}
+          onClose={() => setManagingSegments(false)}
         />
       )}
     </>
@@ -762,11 +799,13 @@ function TemplateCard({ template, onUse, note }) {
 
 function ProjectEditor({ project, userId, fromTemplate, onClose }) {
   const workspaceId = useActiveWorkspaceId();
+  const { projects } = useProjects();
   const isNew = !project;
   const seed = fromTemplate?.payload;
   const [name, setName]         = useState(project?.name || seed?.name || '');
   const [description, setDescription] = useState(project?.description || seed?.description || '');
   const [color, setColor]       = useState(project?.color || seed?.color || COLORS[0]);
+  const [segment, setSegment]   = useState(project?.segment || 'Uncategorized');
   const [phases, setPhases]     = useState(
     project?.phases?.length ? project.phases :
     seed?.phases?.length ? seed.phases.map((p) => ({ id: uid(), name: p.name, order: p.order })) :
@@ -780,6 +819,20 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
   const [assignedTo, setAssignedTo] = useState(project?.assignedTo || []);
   const [assignedToExternal, setAssignedToExternal] = useState(project?.assignedToExternal || []);
   const [saving, setSaving] = useState(false);
+  const [newSegmentInput, setNewSegmentInput] = useState('');
+
+  // Get all unique segments from projects
+  const allSegments = useMemo(() => {
+    const segs = new Set(['Uncategorized']);
+    projects.forEach((p) => {
+      if (p.segment) segs.add(p.segment);
+    });
+    return Array.from(segs).sort((a, b) => {
+      if (a === 'Uncategorized') return -1;
+      if (b === 'Uncategorized') return 1;
+      return a.localeCompare(b);
+    });
+  }, [projects]);
 
   // Pull workspace members + memberProfiles for the AssigneePicker.
   const { workspaces } = useWorkspaces();
@@ -830,9 +883,9 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, phases, customFields, assignedTo, assignedToExternal });
+        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal });
       } else {
-        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, phases, customFields, assignedTo, assignedToExternal });
+        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal });
       }
       onClose();
     } catch (err) {
@@ -840,6 +893,12 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
       alert('Could not save project. Check console.');
       setSaving(false);
     }
+  };
+
+  const addNewSegment = () => {
+    if (!newSegmentInput.trim()) return;
+    setSegment(newSegmentInput.trim());
+    setNewSegmentInput('');
   };
 
   const remove = async () => {
@@ -922,6 +981,57 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
                 }}
               />
             ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="label">Segment / Department</label>
+          <p className="muted small" style={{ marginTop: 0, marginBottom: 6 }}>
+            Organize projects by department (Sales, Finance, Engineering, etc.)
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, marginBottom: 6 }}>
+            {newSegmentInput ? (
+              <>
+                <input
+                  className="input"
+                  value={newSegmentInput}
+                  onChange={(e) => setNewSegmentInput(e.target.value)}
+                  placeholder="e.g. Sales, Finance, Engineering"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addNewSegment();
+                    if (e.key === 'Escape') setNewSegmentInput('');
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={addNewSegment}
+                  disabled={!newSegmentInput.trim()}
+                >
+                  Create
+                </button>
+              </>
+            ) : (
+              <>
+                <select
+                  className="select"
+                  value={segment}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') {
+                      setNewSegmentInput('');
+                    } else {
+                      setSegment(e.target.value);
+                    }
+                  }}
+                >
+                  {allSegments.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                  <option value="__new__">+ Create new segment…</option>
+                </select>
+              </>
+            )}
           </div>
         </div>
 
@@ -1016,6 +1126,72 @@ function ProjectAssigneeStrip({ project }) {
       {(uids.length + ext.length) > 8 && (
         <span className="muted small">+{(uids.length + ext.length) - 8} more</span>
       )}
+    </div>
+  );
+}
+
+function SegmentManager({ projects, onClose }) {
+  const segments = useMemo(() => {
+    const segs = new Set();
+    projects.forEach((p) => {
+      const seg = p.segment || 'Uncategorized';
+      segs.add(seg);
+    });
+    return Array.from(segs).sort((a, b) => {
+      if (a === 'Uncategorized') return 1;
+      if (b === 'Uncategorized') return -1;
+      return a.localeCompare(b);
+    });
+  }, [projects]);
+
+  const getSegmentProjects = (seg) => projects.filter((p) => (p.segment || 'Uncategorized') === seg);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="modal-title">Project Segments</h3>
+        <p className="modal-sub">
+          View and manage project organization by segment/department. Click on a segment to edit projects within it.
+        </p>
+
+        {segments.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">📋</div>
+            <p>No segments yet.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {segments.map((seg) => {
+              const count = getSegmentProjects(seg).length;
+              return (
+                <div key={seg} style={{ borderBottom: '1px solid var(--c-border)', paddingBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <strong>{seg}</strong>
+                    <span className="badge badge-soft-muted">{count} project{count === 1 ? '' : 's'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {getSegmentProjects(seg).map((p) => (
+                      <span
+                        key={p.id}
+                        className="badge badge-soft-info"
+                        style={{ paddingRight: 8 }}
+                      >
+                        <span className="proj-dot" style={{ background: p.color, width: 10, height: 10, borderRadius: '50%', marginRight: 4 }} />
+                        {p.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
     </div>
   );
 }

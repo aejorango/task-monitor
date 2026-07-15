@@ -666,6 +666,9 @@ export async function addProject(userId, project) {
     assignedTo:         project.assignedTo         || [],
     assignedToExternal: project.assignedToExternal || [],
 
+    // v12: project segment/department for grouping (e.g., Sales, Finance)
+    segment: project.segment || 'Uncategorized',
+
     archived: false,
     deleted:  false,
     createdAt: serverTimestamp(),
