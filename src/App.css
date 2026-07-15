@@ -1,51 +1,51 @@
 /* ============================================================
    Task Monitor PM Suite — AIM Brand Theme
-   Asian Institute of Management inspired: navy foundation,
-   bright blue accent, vibrant secondary colors, professional elegance.
+   Asian Institute of Management inspired: deep purple as primary accent,
+   navy foundation, vibrant secondary colors, professional elegance.
    ============================================================ */
 
 :root {
   /* ── Neutrals (aligned with AIM navy foundation) ── */
-  --c-bg:           #f8f9fc;
+  --c-bg:           #faf8fd;
   --c-surface:      #ffffff;
-  --c-surface-2:    #f3f4f9;
-  --c-surface-3:    #eaecf2;
-  --c-border:       #dfe3ed;
-  --c-border-strong:#c8cfe0;
-  --c-text:         #1a2847;
-  --c-text-2:       #354665;
-  --c-text-3:       #6b7a95;
-  --c-text-muted:   #9299a8;
+  --c-surface-2:    #f5f2fa;
+  --c-surface-3:    #ede8f5;
+  --c-border:       #e0d8ed;
+  --c-border-strong:#cfc0e0;
+  --c-text:         #2a1a47;
+  --c-text-2:       #4a3565;
+  --c-text-3:       #7a6b95;
+  --c-text-muted:   #9999aa;
 
-  /* ── Accent — AIM Bright Blue ── */
-  --c-accent:       #1D7CC7;
-  --c-accent-hover: #1666a8;
-  --c-accent-soft:  #e6f1f9;
-  --c-accent-ink:   #0d4080;
+  /* ── Accent — AIM Deep Purple (PRIMARY) ── */
+  --c-accent:       #7B2D8F;
+  --c-accent-hover: #6a2478;
+  --c-accent-soft:  #f3e8f9;
+  --c-accent-ink:   #3d1547;
 
   /* ── Extended palette (AIM Brand Colors) ── */
-  --c-purple:       #9B3B9D;
-  --c-purple-soft:  #f5e8f8;
+  --c-purple:       #7B2D8F;
+  --c-purple-soft:  #f3e8f9;
   --c-teal:         #1D7CC7;
   --c-teal-soft:    #e6f1f9;
-  --c-pink:         #9B3B9D;
-  --c-pink-soft:    #f5e8f8;
+  --c-pink:         #7B2D8F;
+  --c-pink-soft:    #f3e8f9;
   --c-amber:        #FFD700;
   --c-amber-soft:   #fffae6;
   --c-emerald:      #1DA449;
   --c-emerald-soft: #e6f5f0;
 
-  /* ── Sidebar gradient (AIM Navy Brand) ── */
-  --c-sidebar-from: #2D3966;
-  --c-sidebar-to:   #3d4a7d;
-  --c-sidebar-text: rgba(255,255,255,0.88);
-  --c-sidebar-text-muted: rgba(255,255,255,0.52);
-  --c-sidebar-active-bg: rgba(29,124,199,0.20);
-  --c-sidebar-hover-bg:  rgba(255,255,255,0.10);
+  /* ── Sidebar gradient (AIM Purple Foundation) ── */
+  --c-sidebar-from: #5B1D6F;
+  --c-sidebar-to:   #7B2D8F;
+  --c-sidebar-text: rgba(255,255,255,0.90);
+  --c-sidebar-text-muted: rgba(255,255,255,0.55);
+  --c-sidebar-active-bg: rgba(123,45,143,0.25);
+  --c-sidebar-hover-bg:  rgba(255,255,255,0.12);
 
   /* ── Status colors (AIM-aligned) ── */
-  --c-todo:    #9299a8;
-  --c-doing:   #1D7CC7;
+  --c-todo:    #9999aa;
+  --c-doing:   #7B2D8F;
   --c-done:    #1DA449;
   --c-blocked: #e74c3c;
 
@@ -86,12 +86,12 @@
   --r-pill: 999px;
 
   /* ── Shadows — softer, more diffused ── */
-  --shadow-sm:  0 1px 4px rgba(26, 40, 71, 0.07);
-  --shadow-md:  0 4px 16px rgba(26, 40, 71, 0.09);
-  --shadow-lg:  0 8px 32px rgba(26, 40, 71, 0.11), 0 2px 8px rgba(26, 40, 71, 0.06);
-  --shadow-xl:  0 20px 60px rgba(26, 40, 71, 0.15), 0 8px 20px rgba(26, 40, 71, 0.09);
-  --shadow-accent: 0 8px 24px rgba(29, 124, 199, 0.28);
-  --shadow-card:   0 2px 12px rgba(26, 40, 71, 0.08);
+  --shadow-sm:  0 1px 4px rgba(42, 26, 71, 0.08);
+  --shadow-md:  0 4px 16px rgba(42, 26, 71, 0.10);
+  --shadow-lg:  0 8px 32px rgba(42, 26, 71, 0.12), 0 2px 8px rgba(42, 26, 71, 0.07);
+  --shadow-xl:  0 20px 60px rgba(42, 26, 71, 0.16), 0 8px 20px rgba(42, 26, 71, 0.10);
+  --shadow-accent: 0 8px 24px rgba(123, 45, 143, 0.32);
+  --shadow-card:   0 2px 12px rgba(42, 26, 71, 0.09);
 
   /* ── Layout ── */
   --sidebar-w: 232px;
@@ -101,72 +101,72 @@
 }
 
 /* Dark theme: applied automatically via prefers-color-scheme,
-   OR forced via [data-theme="dark"] on <html>. AIM-inspired dark palette. */
+   OR forced via [data-theme="dark"] on <html>. AIM-inspired purple dark palette. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --c-bg:           #0f1628;
-    --c-surface:      #1a2241;
-    --c-surface-2:    #252f45;
-    --c-surface-3:    #303950;
-    --c-border:       #3d4860;
-    --c-border-strong:#4a556f;
-    --c-text:         #ecf0f8;
-    --c-text-2:       #b8c4dd;
-    --c-text-3:       #7a8299;
-    --c-text-muted:   #525e78;
+    --c-bg:           #1a0f2a;
+    --c-surface:      #2a1a3a;
+    --c-surface-2:    #352548;
+    --c-surface-3:    #3f3050;
+    --c-border:       #4d3f60;
+    --c-border-strong:#5a4d70;
+    --c-text:         #f0e8f8;
+    --c-text-2:       #d4c4e8;
+    --c-text-3:       #9999cc;
+    --c-text-muted:   #6b5a88;
 
-    --c-accent:       #5da8e8;
-    --c-accent-hover: #7bb9f0;
-    --c-accent-soft:  #1d3a55;
-    --c-accent-ink:   #aad4f5;
+    --c-accent:       #b366d9;
+    --c-accent-hover: #c480e8;
+    --c-accent-soft:  #3d2555;
+    --c-accent-ink:   #e8d4f5;
 
-    --c-sidebar-from: #1a2847;
-    --c-sidebar-to:   #2d3966;
+    --c-sidebar-from: #3d1f5a;
+    --c-sidebar-to:   #5B1D6F;
 
     --c-success-bg:  #0d3a25;
     --c-warn-bg:     #4a3d0d;
     --c-danger-bg:   #4a1515;
-    --c-info-bg:     #0d2f4a;
+    --c-info-bg:     #1a2a4a;
 
-    --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.6);
-    --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.6);
-    --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.65);
-    --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.75);
-    --shadow-card:   0 2px 12px rgba(0, 0, 0, 0.5);
-    --shadow-accent: 0 8px 24px rgba(29, 124, 199, 0.40);
+    --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.65);
+    --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.65);
+    --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.70);
+    --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.80);
+    --shadow-card:   0 2px 12px rgba(0, 0, 0, 0.55);
+    --shadow-accent: 0 8px 24px rgba(123, 45, 143, 0.45);
   }
 }
 :root[data-theme="dark"] {
-  --c-bg:           #0f1628;
-  --c-surface:      #1a2241;
-  --c-surface-2:    #252f45;
-  --c-surface-3:    #303950;
-  --c-border:       #3d4860;
-  --c-border-strong:#4a556f;
-  --c-text:         #ecf0f8;
-  --c-text-2:       #b8c4dd;
-  --c-text-3:       #7a8299;
-  --c-text-muted:   #525e78;
+  --c-bg:           #1a0f2a;
+  --c-surface:      #2a1a3a;
+  --c-surface-2:    #352548;
+  --c-surface-3:    #3f3050;
+  --c-border:       #4d3f60;
+  --c-border-strong:#5a4d70;
+  --c-text:         #f0e8f8;
+  --c-text-2:       #d4c4e8;
+  --c-text-3:       #9999cc;
+  --c-text-muted:   #6b5a88;
 
-  --c-accent:       #5da8e8;
-  --c-accent-hover: #7bb9f0;
-  --c-accent-soft:  #1d3a55;
-  --c-accent-ink:   #aad4f5;
+  --c-accent:       #b366d9;
+  --c-accent-hover: #c480e8;
+  --c-accent-soft:  #3d2555;
+  --c-accent-ink:   #e8d4f5;
 
-  --c-sidebar-from: #1a2847;
-  --c-sidebar-to:   #2d3966;
+  --c-sidebar-from: #3d1f5a;
+  --c-sidebar-to:   #5B1D6F;
 
   --c-success-bg:  #0d3a25;
   --c-warn-bg:     #4a3d0d;
   --c-danger-bg:   #4a1515;
-  --c-info-bg:     #0d2f4a;
+  --c-info-bg:     #1a2a4a;
 
-  --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.6);
-  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.6);
-  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.65);
-  --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.75);
-  --shadow-card:   0 2px 12px rgba(0, 0, 0, 0.5);
-  --shadow-accent: 0 8px 24px rgba(29, 124, 199, 0.40);
+  --shadow-sm:  0 1px 4px rgba(0, 0, 0, 0.65);
+  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.65);
+  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.70);
+  --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.80);
+  --shadow-card:   0 2px 12px rgba(0, 0, 0, 0.55);
+  --shadow-accent: 0 8px 24px rgba(123, 45, 143, 0.45);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
