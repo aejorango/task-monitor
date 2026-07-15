@@ -4,7 +4,7 @@
 
 import { useState, useMemo } from 'react';
 import { useMinutes, useProjects, useAuth, useTasks } from '../hooks/useTasks';
-import { useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid, todayLocal } from '../services/firebase';
 import Icon from './Icon';
 import TaskActivitiesModal from './TaskActivitiesModal';
@@ -47,6 +47,9 @@ export default function MinutesView({ projectFilter = 'all' }) {
   const { projects, byId: projectById } = useProjects();
   const { tasks } = useTasks();
   const { userId } = useAuth();
+  const { workspaces } = useWorkspaces();
+  const activeWsId = useActiveWorkspaceId();
+  const workspace = workspaces.find((w) => w.id === activeWsId);
   const [editing, setEditing] = useState(null); // minute object or 'new'
 
   const tasksById = useMemo(() => {
@@ -59,16 +62,45 @@ export default function MinutesView({ projectFilter = 'all' }) {
   // by the project list. '__all__' | '__none__' | <projectId>.
   const [selectedId, setSelectedId] = useState(projectFilter !== 'all' ? projectFilter : '__all__');
 
-  const sortedProjects = useMemo(
-    () => [...projects].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
-    [projects],
-  );
   const countByProject = useMemo(() => {
     const m = {};
     minutes.forEach((x) => { const k = x.projectId || '__none__'; m[k] = (m[k] || 0) + 1; });
     return m;
   }, [minutes]);
   const hasNoProject = (countByProject['__none__'] || 0) > 0;
+
+  // Group projects by segment
+  const projectsBySegment = useMemo(() => {
+    const grouped = {};
+
+    // First, add all workspace-defined segments (even if empty)
+    const wsSegments = workspace?.segments || [];
+    wsSegments.forEach((seg) => {
+      grouped[seg.name] = [];
+    });
+
+    // Add Uncategorized if not present
+    if (!grouped['Uncategorized']) {
+      grouped['Uncategorized'] = [];
+    }
+
+    // Now add projects to their segments
+    projects.forEach((p) => {
+      const seg = p.segment || 'Uncategorized';
+      if (!grouped[seg]) grouped[seg] = [];
+      grouped[seg].push(p);
+    });
+
+    // Sort segments: Uncategorized last, others alphabetically
+    const keys = Object.keys(grouped).sort((a, b) => {
+      if (a === 'Uncategorized') return 1;
+      if (b === 'Uncategorized') return -1;
+      return a.localeCompare(b);
+    });
+    const sorted = {};
+    keys.forEach((k) => { sorted[k] = grouped[k]; });
+    return sorted;
+  }, [projects, workspace?.segments]);
 
   const visibleMinutes =
     selectedId === '__all__'  ? minutes
@@ -98,16 +130,23 @@ export default function MinutesView({ projectFilter = 'all' }) {
             <span className="minutes-nav-name">All projects</span>
             <span className="minutes-nav-count">{minutes.length}</span>
           </button>
-          {sortedProjects.map((p) => (
-            <button
-              key={p.id}
-              className={`minutes-nav-link ${selectedId === p.id ? 'active' : ''}`}
-              onClick={() => setSelectedId(p.id)}
-            >
-              <span className="proj-dot" style={{ background: p.color }} />
-              <span className="minutes-nav-name">{p.name}</span>
-              {countByProject[p.id] ? <span className="minutes-nav-count">{countByProject[p.id]}</span> : null}
-            </button>
+          {Object.entries(projectsBySegment).map(([segmentName, segmentProjects]) => (
+            segmentProjects.length > 0 && (
+              <div key={segmentName} className="minutes-nav-segment">
+                <div className="minutes-nav-segment-title">{segmentName}</div>
+                {segmentProjects.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`minutes-nav-link ${selectedId === p.id ? 'active' : ''}`}
+                    onClick={() => setSelectedId(p.id)}
+                  >
+                    <span className="proj-dot" style={{ background: p.color }} />
+                    <span className="minutes-nav-name">{p.name}</span>
+                    {countByProject[p.id] ? <span className="minutes-nav-count">{countByProject[p.id]}</span> : null}
+                  </button>
+                ))}
+              </div>
+            )
           ))}
           {hasNoProject && (
             <button
