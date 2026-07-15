@@ -820,6 +820,8 @@ function TemplateCard({ template, onUse, note }) {
 function ProjectEditor({ project, userId, fromTemplate, onClose }) {
   const workspaceId = useActiveWorkspaceId();
   const { projects } = useProjects();
+  const { workspaces } = useWorkspaces();
+  const workspace = workspaces.find((w) => w.id === workspaceId);
   const isNew = !project;
   const seed = fromTemplate?.payload;
   const [name, setName]         = useState(project?.name || seed?.name || '');
@@ -841,18 +843,29 @@ function ProjectEditor({ project, userId, fromTemplate, onClose }) {
   const [saving, setSaving] = useState(false);
   const [newSegmentInput, setNewSegmentInput] = useState('');
 
-  // Get all unique segments from projects
+  // Get all segments from workspace + project segments for backward compatibility
   const allSegments = useMemo(() => {
-    const segs = new Set(['Uncategorized']);
+    const segs = new Set();
+
+    // Add workspace-defined segments
+    (workspace?.segments || []).forEach((s) => {
+      segs.add(s.name);
+    });
+
+    // Add Uncategorized
+    segs.add('Uncategorized');
+
+    // Add any project segments not in workspace (backward compatibility)
     projects.forEach((p) => {
       if (p.segment) segs.add(p.segment);
     });
+
     return Array.from(segs).sort((a, b) => {
       if (a === 'Uncategorized') return -1;
       if (b === 'Uncategorized') return 1;
       return a.localeCompare(b);
     });
-  }, [projects]);
+  }, [workspace?.segments, projects]);
 
   // Pull workspace members + memberProfiles for the AssigneePicker.
   const { workspaces } = useWorkspaces();
