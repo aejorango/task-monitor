@@ -1264,15 +1264,8 @@ a:hover { text-decoration: underline; }
 .project-phases {
   display: flex;
   gap: 4px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  min-width: 150px;
-  max-width: 300px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.project-phases::-webkit-scrollbar {
-  display: none;
+  flex-wrap: wrap;
+  width: 100%;
 }
 .phase-tag {
   background: var(--c-accent-soft);
@@ -1283,9 +1276,7 @@ a:hover { text-decoration: underline; }
   font-weight: 500;
   border: 1px solid rgba(29,124,199,0.15);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: inline-block;
+  flex-shrink: 0;
 }
 .project-stats {
   display: flex;
