@@ -880,6 +880,16 @@ export async function updateTask(taskId, updates) {
   });
 }
 
+// Fire a browser-level event when a task is completed so any mounted UI (the
+// global celebration modal) can react — regardless of which code path marked it
+// done (drag-drop, cycle button, editor, activity modal…). No-op outside a DOM.
+export function emitTaskDone(task) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('task:done', {
+    detail: { title: task?.title || '' },
+  }));
+}
+
 // Set status directly (used by drag-and-drop). If marked done and the task is
 // recurring, also spawn the next instance.
 export async function setTaskStatus(task, nextStatus) {
@@ -900,6 +910,8 @@ export async function setTaskStatus(task, nextStatus) {
     updates.progress = 0;
   }
   await updateDoc(doc(db, 'tasks', task.id), updates);
+
+  if (nextStatus === 'done') emitTaskDone(task);
 
   if (nextStatus === 'done' && task.recurrence) {
     try { await spawnNextRecurrence(task); }

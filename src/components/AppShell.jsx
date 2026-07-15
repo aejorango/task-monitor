@@ -8,6 +8,7 @@ import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import Icon from './Icon';
 import AiHelper from './AiHelper';
+import TaskDoneCelebration from './TaskDoneCelebration';
 
 const VIEWS = [
   { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
@@ -189,6 +190,9 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
 
       {/* Mobile bottom tab bar — rendered via CSS display:none on desktop */}
       <BottomNav route={route} navigate={navigate} />
+
+      {/* Global confetti celebration when any task is marked done */}
+      <TaskDoneCelebration />
     </div>
   );
 }

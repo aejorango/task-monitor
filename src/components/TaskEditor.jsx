@@ -1,7 +1,7 @@
 // src/components/TaskEditor.jsx — edit modal with subtasks, tags, dependencies.
 
 import { useState, useMemo } from 'react';
-import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload, todayLocal, auth } from '../services/firebase';
+import { addTask, updateTask, softDeleteTask, uid, addTemplate, taskAsTemplatePayload, todayLocal, auth, emitTaskDone } from '../services/firebase';
 import { useTasks, useAuth, useTaskComments } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import AssigneePicker from './AssigneePicker';
@@ -172,6 +172,7 @@ export default function TaskEditor({ task, projects, onClose }) {
       // just transition status (which has its own progress logic).
       if (completionPct !== null && status === task.status) updates.progress = completionPct;
       await updateTask(task.id, updates);
+      if (status === 'done' && task.status !== 'done') emitTaskDone({ ...task, title: title.trim() });
       onClose();
     } catch (err) {
       console.error(err);
