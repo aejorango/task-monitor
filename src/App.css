@@ -2750,122 +2750,29 @@ a:hover { text-decoration: underline; }
   margin: 0 0 8px;
 }
 
-/* ─── Dashboard — Blue Innovation PH "Clearwater" edition ──
-   Tokens are re-mapped inside .dashboard-view only, so every existing
-   var(--c-*) / var(--r-*) / var(--shadow-*) reference already used by
-   shared components (buttons, cards, pills…) repaints automatically
-   without touching the rest of the app's theme. */
-.dashboard-view {
-  --c-surface:       #FFFFFF;
-  --c-surface-2:     #EAF2FF;
-  --c-surface-3:     #E4E8EE;
-  --c-border:        #E4E8EE;
-  --c-border-strong: #C9D3E0;
-  --c-text:          #0A1628;
-  --c-text-2:        #33404F;
-  --c-text-3:        #5B6572;
-  --c-text-muted:    #8A93A0;
-
-  --c-accent:       #0B6CFF;
-  --c-accent-hover: #0047CC;
-  --c-accent-soft:  #EAF2FF;
-  --c-accent-ink:   #0047CC;
-
-  --c-success:    #2BC48A;
-  --c-success-bg: rgba(43,196,138,0.12);
-  --c-danger:     #F0564A;
-  --c-danger-bg:  rgba(240,86,74,0.12);
-  --c-warn:       #F5A524;
-  --c-warn-bg:    rgba(245,165,36,0.12);
-  --c-info:       #0B6CFF;
-  --c-info-bg:    #EAF2FF;
-
-  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px; --r-2xl: 24px;
-
-  --shadow-card:    0 1px 2px rgba(10,22,40,0.05);
-  --shadow-md:      0 8px 24px rgba(10,22,40,0.08);
-  --shadow-accent:  0 1px 2px rgba(10,22,40,0.05);
-}
-@media (prefers-color-scheme: dark) {
-  .dashboard-view {
-    --c-surface:       #101E33;
-    --c-surface-2:     rgba(255,255,255,0.06);
-    --c-surface-3:     rgba(255,255,255,0.10);
-    --c-border:        rgba(255,255,255,0.08);
-    --c-border-strong: rgba(255,255,255,0.16);
-    --c-text:          rgba(255,255,255,0.86);
-    --c-text-2:        rgba(255,255,255,0.70);
-    --c-text-3:        rgba(255,255,255,0.55);
-    --c-text-muted:    rgba(255,255,255,0.40);
-
-    --c-accent:       #3D8BFF;
-    --c-accent-hover: #6BA6FF;
-    --c-accent-soft:  rgba(61,139,255,0.16);
-    --c-accent-ink:   #9CC4FF;
-
-    --c-success-bg: rgba(43,196,138,0.16);
-    --c-danger-bg:  rgba(240,86,74,0.16);
-    --c-warn-bg:    rgba(245,165,36,0.16);
-    --c-info:       #3D8BFF;
-    --c-info-bg:    rgba(61,139,255,0.16);
-
-    --shadow-card: 0 1px 2px rgba(0,0,0,0.40);
-    --shadow-md:   0 8px 24px rgba(0,0,0,0.50);
-    --shadow-accent: 0 1px 2px rgba(0,0,0,0.40);
-  }
-}
-:root[data-theme="dark"] .dashboard-view {
-  --c-surface:       #101E33;
-  --c-surface-2:     rgba(255,255,255,0.06);
-  --c-surface-3:     rgba(255,255,255,0.10);
-  --c-border:        rgba(255,255,255,0.08);
-  --c-border-strong: rgba(255,255,255,0.16);
-  --c-text:          rgba(255,255,255,0.86);
-  --c-text-2:        rgba(255,255,255,0.70);
-  --c-text-3:        rgba(255,255,255,0.55);
-  --c-text-muted:    rgba(255,255,255,0.40);
-
-  --c-accent:       #3D8BFF;
-  --c-accent-hover: #6BA6FF;
-  --c-accent-soft:  rgba(61,139,255,0.16);
-  --c-accent-ink:   #9CC4FF;
-
-  --c-success-bg: rgba(43,196,138,0.16);
-  --c-danger-bg:  rgba(240,86,74,0.16);
-  --c-warn-bg:    rgba(245,165,36,0.16);
-  --c-info:       #3D8BFF;
-  --c-info-bg:    rgba(61,139,255,0.16);
-
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.40);
-  --shadow-md:   0 8px 24px rgba(0,0,0,0.50);
-  --shadow-accent: 0 1px 2px rgba(0,0,0,0.40);
-}
-
-/* Primary buttons inside the dashboard lose their colored glow — flat azure
-   fill only, per the "no colored glow shadows" rule. */
-.dashboard-view .btn-primary:hover { box-shadow: var(--shadow-md); }
-
+/* ─── Dashboard ──────────────────────────────────────────── */
 .dash-greet {
-  margin-bottom: 32px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  margin-bottom: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(120deg, var(--c-accent-soft) 0%, var(--c-surface) 60%);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2xl);
+  box-shadow: var(--shadow-card);
 }
 .dash-greet-title {
-  font-size: 32px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   margin: 0 0 4px;
   color: var(--c-text);
 }
-.dash-greet-sub { margin: 0; font-size: 15px; color: var(--c-text-3); }
+.dash-greet-sub { margin: 0; font-size: 13px; }
 
 .dash-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  margin: 0 0 32px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
 }
 @media (max-width: 960px) {
   .dash-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2873,22 +2780,22 @@ a:hover { text-decoration: underline; }
 .dash-kpi {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-lg);
-  padding: 20px;
+  border-radius: var(--r-xl);
+  padding: 14px 16px;
   box-shadow: var(--shadow-card);
-  transition: box-shadow 0.15s var(--ease-out, ease);
+  transition: transform 0.14s, box-shadow 0.14s;
 }
-.dash-kpi:hover { box-shadow: var(--shadow-md); }
+.dash-kpi:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .dash-kpi-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--r-md);
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-  margin-bottom: 12px;
+  background: var(--c-surface-2);
+  color: var(--c-text-3);
+  margin-bottom: 8px;
   transition: background 0.14s, color 0.14s;
 }
 .dash-kpi.kpi-tile-success .dash-kpi-icon { background: var(--c-success-bg); color: var(--c-success); }
@@ -2901,15 +2808,13 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--c-text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .dash-kpi-value {
-  font-size: 32px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
-  color: var(--c-text);
 }
 .dash-kpi-suffix {
   font-size: 14px;
@@ -2925,14 +2830,14 @@ a:hover { text-decoration: underline; }
 
 .dash-row {
   display: grid;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 /* minmax(0, …) lets tracks shrink below their content's min-width so a card
    with non-wrapping content can't push the row past the viewport. */
 .dash-row-main      { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 .dash-row-secondary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.dash-row-overview  { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); margin-bottom: 24px; }
+.dash-row-overview  { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); margin-bottom: 16px; }
 @media (max-width: 900px) {
   .dash-row-overview { grid-template-columns: 1fr; }
 }
@@ -2945,10 +2850,10 @@ a:hover { text-decoration: underline; }
 .dash-empty-hero {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-xl);
-  padding: 48px 32px;
+  border-radius: var(--r-2xl);
+  padding: 40px 28px;
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2959,17 +2864,17 @@ a:hover { text-decoration: underline; }
   width: 64px;
   height: 64px;
   border-radius: var(--r-lg);
-  background: var(--c-accent);
+  background: linear-gradient(135deg, var(--c-accent), #7c3aed);
   color: white;
   display: grid;
   place-items: center;
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 30px;
+  font-weight: 700;
   margin-bottom: 6px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-accent);
 }
-.dash-empty-hero-title { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -0.02em; color: var(--c-text); }
-.dash-empty-hero-sub   { max-width: 540px; margin: 0; font-size: 15px; line-height: 1.55; color: var(--c-text-3); }
+.dash-empty-hero-title { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+.dash-empty-hero-sub   { max-width: 540px; margin: 0; font-size: 13.5px; line-height: 1.55; }
 .dash-empty-hero-actions {
   display: flex;
   gap: 8px;
@@ -2984,7 +2889,7 @@ a:hover { text-decoration: underline; }
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 @media (max-width: 600px) {
   .dash-ws-stats { grid-template-columns: repeat(2, 1fr); }
@@ -2993,64 +2898,62 @@ a:hover { text-decoration: underline; }
   text-align: center;
   padding: 12px 8px;
   background: var(--c-surface-2);
-  border-radius: var(--r-md);
-  border: none;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--c-border);
   transition: background 0.12s;
 }
 .dash-ws-stat:hover { background: var(--c-surface-3); }
 .dash-ws-stat-value {
   font-size: 20px;
-  font-weight: 650;
+  font-weight: 700;
   color: var(--c-text);
   text-transform: capitalize;
   letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
 }
 .dash-ws-stat-label {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--c-text-3);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 3px;
   font-weight: 600;
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* Project list with progress bars */
 .dash-projects {
   list-style: none;
   padding: 0;
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .dash-project {
   display: grid;
   grid-template-columns: auto 1fr 100px;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border-radius: var(--r-md);
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
   cursor: pointer;
-  transition: background 0.14s;
+  transition: background 0.14s, transform 0.12s;
 }
-.dash-project:hover { background: var(--c-surface-2); }
+.dash-project:hover { background: var(--c-surface-2); transform: translateX(2px); }
 .dash-project-text  { min-width: 0; overflow: hidden; }
-.dash-project-name  { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-project-name  { font-weight: 500; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-project-bar {
   position: relative;
-  height: 4px;
-  background: var(--c-surface-3);
-  border-radius: 2px;
+  height: 6px;
+  background: var(--c-surface-2);
+  border-radius: 3px;
   overflow: hidden;
 }
-.dash-project-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; background: var(--c-accent) !important; }
+.dash-project-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
 .dash-project-pct {
   position: absolute;
   top: -16px;
   right: 0;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--c-text-3);
   font-variant-numeric: tabular-nums;
 }
@@ -3061,41 +2964,37 @@ a:hover { text-decoration: underline; }
 .dash-card {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-lg);
-  padding: 24px;
+  border-radius: var(--r-xl);
+  padding: 18px 20px;
   box-shadow: var(--shadow-card);
   min-width: 0;          /* allow the card to shrink inside its grid track */
   overflow: hidden;      /* clip any stray wide child instead of overflowing the page */
-}
-@media (max-width: 720px) {
-  .dash-card { padding: 20px; }
 }
 .dash-card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   gap: 8px;
 }
 .dash-card-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--c-text);
 }
 
-.dash-subsection { margin-top: 16px; }
+.dash-subsection { margin-top: 14px; }
 .dash-subsection-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--c-text-3);
   margin-bottom: 8px;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--c-border);
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .dash-subsection-title.accent-danger {
   color: var(--c-danger);
@@ -3115,17 +3014,18 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: transparent;
-  border-radius: var(--r-md);
+  padding: 8px 12px;
+  background: var(--c-surface-2);
+  border-radius: var(--r-lg);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   border: 1px solid transparent;
-  transition: background 0.14s, border-color 0.14s;
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.12s;
 }
 .dash-task:hover {
-  background: var(--c-surface-2);
-  border-color: var(--c-border);
+  border-color: var(--c-accent);
+  box-shadow: 0 2px 10px rgba(91,79,255,0.10);
+  transform: translateX(2px);
 }
 .dash-task-title {
   flex: 1;
@@ -3137,14 +3037,13 @@ a:hover { text-decoration: underline; }
 }
 
 .dash-day-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--c-accent);
-  margin: 16px 0 6px;
+  margin: 12px 0 6px;
   padding-left: 2px;
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .dash-upcoming { display: flex; flex-direction: column; }
 
@@ -3154,7 +3053,7 @@ a:hover { text-decoration: underline; }
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   max-height: 360px;
   overflow-y: auto;
 }
@@ -3162,8 +3061,8 @@ a:hover { text-decoration: underline; }
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  padding: 10px;
-  border-radius: var(--r-md);
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
   transition: background 0.12s;
 }
 .dash-feed-item:hover { background: var(--c-surface-2); }
@@ -3172,17 +3071,17 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   align-items: baseline;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   margin-bottom: 2px;
 }
 .dash-feed-body {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--c-text-2);
   line-height: 1.4;
 }
 .dash-bottleneck-list .dash-feed-item {
-  padding-left: 13px;
+  padding-left: 12px;
   border-left: 3px solid var(--c-warn);
   background: var(--c-warn-bg);
   border-radius: 0 var(--r-md) var(--r-md) 0;
