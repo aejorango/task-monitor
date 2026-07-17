@@ -131,11 +131,11 @@ export default function DashboardView({ projectFilter, navigate }) {
 
   // Loading & no-workspace gates.
   if (wsLoading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}><div className="spinner" />&nbsp; Loading workspace…</div>;
+    return <div className="dashboard-view" style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}><div className="spinner" />&nbsp; Loading workspace…</div>;
   }
   if (!activeWorkspaceId || !activeWorkspace) {
     return (
-      <>
+      <div className="dashboard-view">
         <div className="dash-greet">
           <h1 className="dash-greet-title">Welcome to Task Monitor</h1>
           <p className="dash-greet-sub muted">
@@ -157,11 +157,11 @@ export default function DashboardView({ projectFilter, navigate }) {
         {creatingWorkspace && (
           <WorkspaceEditor workspace={null} onClose={() => setCreatingWorkspace(false)} />
         )}
-      </>
+      </div>
     );
   }
   if (tasksLoading || actsLoading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}><div className="spinner" />&nbsp; Loading dashboard…</div>;
+    return <div className="dashboard-view" style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-3)' }}><div className="spinner" />&nbsp; Loading dashboard…</div>;
   }
 
   // Derived stats for the workspace + projects cards
@@ -184,7 +184,7 @@ export default function DashboardView({ projectFilter, navigate }) {
   const hasAnyData = tasks.length > 0 || activities.length > 0;
 
   return (
-    <>
+    <div className="dashboard-view">
       {/* Greeting + quick add */}
       <div className="dash-greet">
         <div>
@@ -446,7 +446,7 @@ export default function DashboardView({ projectFilter, navigate }) {
           onClose={() => { setEditingTask(null); setViewingTask(null); }}
         />
       )}
-    </>
+    </div>
   );
 }
 
