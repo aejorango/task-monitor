@@ -2751,6 +2751,122 @@ a:hover { text-decoration: underline; }
 }
 
 /* ─── Dashboard ──────────────────────────────────────────── */
+
+/* Breadcrumb trail — Azure DevOps-style "org / project / section" path */
+.dash-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--c-text-3);
+}
+.dash-breadcrumb svg { color: var(--c-text-muted); }
+.dash-breadcrumb a { color: var(--c-text-3); text-decoration: none; }
+.dash-breadcrumb a:hover { color: var(--c-accent); text-decoration: underline; }
+.dash-breadcrumb .current { color: var(--c-text); font-weight: 600; }
+
+/* Project header — icon tile + name + visibility badge + favorite */
+.dash-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.dash-header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+.dash-header-text { flex: 1; min-width: 0; }
+.dash-header-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--c-text);
+}
+.dash-private-badge { flex-shrink: 0; }
+.dash-star-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--c-border);
+  color: var(--c-text-3);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: color 0.14s, border-color 0.14s;
+}
+.dash-star-btn:hover { color: var(--c-warn); border-color: var(--c-warn); }
+@media (max-width: 600px) {
+  .dash-header { flex-wrap: wrap; }
+  .dash-header-title { font-size: 20px; }
+}
+
+/* Project stats side column — stacked "Project stats" + "Members" cards */
+.dash-overview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.chip-static { cursor: default; pointer-events: none; font-size: 11.5px; padding: 4px 10px; }
+
+.dash-stats-row {
+  display: flex;
+  gap: 20px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.dash-stat-mini {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dash-stat-mini-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text-3);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.dash-stat-mini-icon.success { background: var(--c-success-bg); color: var(--c-success); }
+.dash-stat-mini-value {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-members-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.dash-member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: default;
+  flex-shrink: 0;
+}
+
 .dash-greet {
   margin-bottom: 16px;
   padding: 20px 24px;

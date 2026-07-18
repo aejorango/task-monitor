@@ -142,6 +142,15 @@ const PATHS = {
   ),
   // Plus — used for "add" affordances
   plus: <path d="M12 5v14M5 12h14" />,
+  // Lock — used for the "Private" workspace badge
+  lock: (
+    <>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </>
+  ),
+  // Chevron right — used for breadcrumb separators
+  'chevron-right': <path d="M9 5l7 7-7 7" />,
   // Trash — used for delete affordances
   trash: (
     <>

@@ -15,7 +15,6 @@ import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import TaskForm from './TaskForm';
 import WorkspaceEditor from './WorkspaceEditor';
-import { WorkspaceIcon } from './WorkspaceSwitcher';
 import Icon from './Icon';
 
 function isoOf(d) {
@@ -28,6 +27,22 @@ function addDaysIso(s, n) {
   return isoOf(x);
 }
 function isoToday() { return todayLocal(); }
+function dateStrToMillis(s) { return new Date(`${s}T00:00:00`).getTime(); }
+
+// Deterministic pastel-on-brand color for a member avatar, hashed from uid
+// so the same person always gets the same chip color across sessions.
+const AVATAR_PALETTE = ['#0051BA', '#7B2D8F', '#1DA449', '#e74c3c', '#1D7CC7', '#c2410c', '#0f766e', '#a21caf'];
+function avatarColorFor(uid) {
+  let hash = 0;
+  for (let i = 0; i < uid.length; i++) hash = (hash * 31 + uid.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+function initialsFor(profile, uid) {
+  const name = profile?.displayName || profile?.email || uid;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 function friendlyDate(s) {
   const today = todayLocal();
   if (s === today)               return 'Today';
@@ -183,20 +198,52 @@ export default function DashboardView({ projectFilter, navigate }) {
 
   const hasAnyData = tasks.length > 0 || activities.length > 0;
 
+  // "Project stats" period block (Azure DevOps-style) — created vs. completed
+  // work items in the last 7 days.
+  const weekStart7Millis = dateStrToMillis(weekStart7);
+  const tasksCreatedThisWeek = filtered.filter((t) => {
+    const ms = t.createdAt?.toMillis?.();
+    return ms && ms >= weekStart7Millis;
+  }).length;
+  const memberProfiles = activeWorkspace.memberProfiles || {};
+  const memberUids = activeWorkspace.members || [];
+
   return (
     <>
-      {/* Greeting + quick add */}
-      <div className="dash-greet">
-        <div>
-          <h1 className="dash-greet-title">{greeting}{userFirst ? `, ${userFirst}` : ''}</h1>
+      {/* Breadcrumb — mirrors the "org / project / section" trail pattern */}
+      <nav className="dash-breadcrumb" aria-label="Breadcrumb">
+        <span>Task Monitor</span>
+        <Icon name="chevron-right" size={12} />
+        <span>{activeWorkspace.name}</span>
+        <Icon name="chevron-right" size={12} />
+        {projectFilter !== 'all' && projectById[projectFilter] ? (
+          <>
+            <a href="#" onClick={(e) => { e.preventDefault(); navigate?.({ view: 'dashboard', projectFilter: 'all' }); }}>Dashboard</a>
+            <Icon name="chevron-right" size={12} />
+            <span className="current">{projectById[projectFilter].name}</span>
+          </>
+        ) : (
+          <span className="current">Dashboard</span>
+        )}
+      </nav>
+
+      {/* Project header — icon, name, visibility badge, favorite */}
+      <div className="dash-header">
+        <div className="dash-header-icon" style={{ background: activeWorkspace.color || '#0051BA' }}>
+          {activeWorkspace.icon || activeWorkspace.name?.[0]?.toUpperCase() || '◆'}
+        </div>
+        <div className="dash-header-text">
+          <h1 className="dash-header-title">{activeWorkspace.name}</h1>
           <p className="dash-greet-sub muted small">
-            {new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-            {' · '}<strong>{activeWorkspace.name}</strong>
-            {projectFilter !== 'all' && projectById[projectFilter] && (
-              <> · Filtered to <strong>{projectById[projectFilter].name}</strong></>
-            )}
+            {greeting}{userFirst ? `, ${userFirst}` : ''} · {new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
           </p>
         </div>
+        <span className="badge badge-soft-muted dash-private-badge">
+          <Icon name="lock" size={12} /> Private
+        </span>
+        <button className="btn-icon dash-star-btn" title="Favorite" aria-label="Favorite this workspace">
+          <Icon name="star" size={16} />
+        </button>
       </div>
 
       {/* Empty-state hero — only when the workspace has literally no data yet */}
@@ -223,21 +270,18 @@ export default function DashboardView({ projectFilter, navigate }) {
 
       <TaskForm projects={projects} projectFilter={projectFilter} />
 
-      {/* Workspace + projects overview — always visible, even with empty data */}
+      {/* About / stats / members — Azure DevOps project-overview pattern */}
       <div className="dash-row dash-row-overview">
         <section className="dash-card">
           <div className="dash-card-head">
-            <h2 className="dash-card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <WorkspaceIcon workspace={activeWorkspace} size="sm" />
-              {activeWorkspace.name}
-            </h2>
+            <h2 className="dash-card-title">About this project</h2>
             <button className="btn btn-sm btn-ghost" onClick={() => navigate?.({ view: 'settings' })}>
               Manage →
             </button>
           </div>
-          {activeWorkspace.description && (
-            <p className="muted small" style={{ marginTop: 0 }}>{activeWorkspace.description}</p>
-          )}
+          <p className="muted small" style={{ marginTop: 0 }}>
+            {activeWorkspace.description || 'No description yet. Add one from workspace settings.'}
+          </p>
           <div className="dash-ws-stats">
             <Stat label="Members" value={wsMemberCount} />
             <Stat label="Projects" value={projects.length} />
@@ -246,6 +290,53 @@ export default function DashboardView({ projectFilter, navigate }) {
           </div>
         </section>
 
+        <div className="dash-overview-side">
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h2 className="dash-card-title">Project stats</h2>
+              <span className="chip chip-static">Period: Last 7 days</span>
+            </div>
+            <div className="dash-subsection-title" style={{ marginTop: 0 }}>Boards</div>
+            <div className="dash-stats-row">
+              <div className="dash-stat-mini">
+                <span className="dash-stat-mini-icon"><Icon name="board" size={16} /></span>
+                <div>
+                  <div className="dash-stat-mini-value">{tasksCreatedThisWeek}</div>
+                  <div className="muted small">Work items created</div>
+                </div>
+              </div>
+              <div className="dash-stat-mini">
+                <span className="dash-stat-mini-icon success"><Icon name="check" size={16} /></span>
+                <div>
+                  <div className="dash-stat-mini-value">{doneThisWeek.length}</div>
+                  <div className="muted small">Work items completed</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h2 className="dash-card-title">Members <span className="muted small">{memberUids.length}</span></h2>
+            </div>
+            <div className="dash-members-grid">
+              {memberUids.map((uid) => (
+                <span
+                  key={uid}
+                  className="dash-member-avatar"
+                  style={{ background: avatarColorFor(uid) }}
+                  title={memberProfiles[uid]?.displayName || memberProfiles[uid]?.email || uid}
+                >
+                  {initialsFor(memberProfiles[uid], uid)}
+                </span>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {/* Projects overview */}
+      <div className="dash-row">
         <section className="dash-card">
           <div className="dash-card-head">
             <h2 className="dash-card-title">Projects ({projectStats.length})</h2>
