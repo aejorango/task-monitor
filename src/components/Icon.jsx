@@ -140,6 +140,14 @@ const PATHS = {
       <path d="M8 13h8M8 17h5" />
     </>
   ),
+  // Layered squares — used for "switch workspace"
+  workspace: (
+    <>
+      <path d="m12 2 9 5-9 5-9-5 9-5z" />
+      <path d="m3 12 9 5 9-5" />
+      <path d="m3 17 9 5 9-5" />
+    </>
+  ),
   // Plus — used for "add" affordances
   plus: <path d="M12 5v14M5 12h14" />,
   // Lock — used for the "Private" workspace badge

@@ -12,11 +12,12 @@
 // "look at this view" steps where only one view is ever mounted at a time.
 
 import { useEffect, useRef, useState } from 'react';
+import Icon from './Icon';
 
 const TUTORIALS = [
   {
     id: 'create-project',
-    icon: '📁',
+    icon: 'projects',
     title: 'Create a project',
     blurb: 'Set up a project with phases to organize work.',
     steps: [
@@ -42,7 +43,7 @@ const TUTORIALS = [
   },
   {
     id: 'create-task',
-    icon: '✅',
+    icon: 'check',
     title: 'Create a task',
     blurb: 'Add a task from the Board’s quick-add bar.',
     steps: [
@@ -68,7 +69,7 @@ const TUTORIALS = [
   },
   {
     id: 'use-board',
-    icon: '🗂️',
+    icon: 'board',
     title: 'Use the Kanban board',
     blurb: 'Drag tasks across columns, filter by project or tag.',
     steps: [
@@ -94,7 +95,7 @@ const TUTORIALS = [
   },
   {
     id: 'track-time',
-    icon: '⏱️',
+    icon: 'clock',
     title: 'Log time & activity',
     blurb: 'Track hours and leave a progress note on a task.',
     steps: [
@@ -120,7 +121,7 @@ const TUTORIALS = [
   },
   {
     id: 'gantt-chart',
-    icon: '📊',
+    icon: 'gantt',
     title: 'Explore the Gantt chart',
     blurb: 'See planned timelines and drag to reschedule.',
     steps: [
@@ -140,7 +141,7 @@ const TUTORIALS = [
   },
   {
     id: 'workspaces',
-    icon: '🧭',
+    icon: 'workspace',
     title: 'Switch workspaces',
     blurb: 'Understand workspaces and how to switch between them.',
     steps: [
@@ -275,14 +276,14 @@ export default function TutorialGuide({ route, navigate }) {
           onClick={() => setMenuOpen((o) => !o)}
           title="Interactive tutorials"
         >
-          🎓 <span className="tutorial-btn-label">Tutorials</span>
+          <Icon name="play" size={16} /> <span className="tutorial-btn-label">Tutorials</span>
         </button>
         {menuOpen && (
           <div className="dropdown-menu tutorial-menu">
             <div className="search-group-label">Walk me through…</div>
             {TUTORIALS.map((t) => (
               <button key={t.id} className="dropdown-item tutorial-menu-item" onClick={() => startTutorial(t)}>
-                <span className="tutorial-menu-icon">{t.icon}</span>
+                <span className="tutorial-menu-icon"><Icon name={t.icon} size={17} /></span>
                 <span className="tutorial-menu-text">
                   <span className="tutorial-menu-title">{t.title}</span>
                   <span className="muted small">{t.blurb}</span>
@@ -328,7 +329,9 @@ function TutorialOverlay({ tutorial, stepIndex, step, rect, searching, onNext, o
       )}
       <div className="tutorial-card" style={cardStyle}>
         <div className="tutorial-card-head">
-          <span className="tutorial-card-eyebrow">{tutorial.icon} {tutorial.title} · {stepIndex + 1}/{tutorial.steps.length}</span>
+          <span className="tutorial-card-eyebrow">
+            <Icon name={tutorial.icon} size={13} /> {tutorial.title} · {stepIndex + 1}/{tutorial.steps.length}
+          </span>
           <button className="tutorial-close" onClick={onClose} aria-label="End tutorial" title="End tutorial">✕</button>
         </div>
         <h4 className="tutorial-card-title">{step.title}</h4>

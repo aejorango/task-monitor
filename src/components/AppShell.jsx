@@ -29,20 +29,32 @@ const VIEWS = [
   { id: 'settings',       label: 'Settings',         icon: 'settings' },
 ];
 
-// Sidebar-only grouping: Kanban/Calendar/Gantt chart/WBS collapse under a
-// "Board" parent that toggles open/closed on click — it isn't a view itself.
-const BOARD_GROUP_CHILD_IDS = ['board', 'calendar', 'gantt', 'wbs'];
+// Sidebar-only grouping: some views collapse under a parent that toggles
+// open/closed on click — the parent isn't a view itself. Declarative so new
+// groups can be added without duplicating the group-building logic below.
+// Each group is inserted at the position of its first child in VIEWS, and
+// its other children are skipped from the flat list.
+const NAV_GROUPS = [
+  { id: 'board-group',   label: 'Board',   icon: 'board',     childIds: ['board', 'calendar', 'gantt', 'wbs'] },
+  { id: 'reports-group', label: 'Reports', icon: 'analytics', childIds: ['table', 'work-performed', 'review', 'analytics'] },
+];
 const SIDEBAR_ITEMS = (() => {
-  const grouped = new Set(BOARD_GROUP_CHILD_IDS);
-  const items = VIEWS.filter((v) => !grouped.has(v.id));
-  const boardGroup = {
-    id: 'board-group',
-    label: 'Board',
-    icon: 'board',
-    children: BOARD_GROUP_CHILD_IDS.map((id) => VIEWS.find((v) => v.id === id)),
-  };
-  const insertAt = items.findIndex((v) => v.id === 'projects') + 1;
-  items.splice(insertAt, 0, boardGroup);
+  const childToGroup = new Map();
+  NAV_GROUPS.forEach((g) => g.childIds.forEach((id) => childToGroup.set(id, g)));
+  const insertedGroups = new Set();
+  const items = [];
+  VIEWS.forEach((v) => {
+    const group = childToGroup.get(v.id);
+    if (!group) { items.push(v); return; }
+    if (insertedGroups.has(group.id)) return; // later child of an already-inserted group
+    insertedGroups.add(group.id);
+    items.push({
+      id: group.id,
+      label: group.label,
+      icon: group.icon,
+      children: group.childIds.map((id) => VIEWS.find((x) => x.id === id)),
+    });
+  });
   return items;
 })();
 
@@ -146,7 +158,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           <div className="sidebar-section-label">Views</div>
           {SIDEBAR_ITEMS.map((v) => (
             v.children ? (
-              <SidebarBoardGroup key={v.id} item={v} route={route} navigate={navigateAndClose} />
+              <SidebarNavGroup key={v.id} item={v} route={route} navigate={navigateAndClose} />
             ) : (
               <button
                 key={v.id}
@@ -223,12 +235,12 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
   );
 }
 
-// ─── Sidebar: "Board" group (Kanban/Calendar/Gantt chart/WBS) ─────────────
-// A pure UI toggle — clicking "Board" only expands/collapses its children,
-// it doesn't navigate anywhere itself. Auto-expands if the active route is
-// one of its children (e.g. landing on Calendar via a direct link).
+// ─── Sidebar: collapsible nav groups (Board, Reports, …) ──────────────────
+// A pure UI toggle — clicking the group label only expands/collapses its
+// children, it doesn't navigate anywhere itself. Auto-expands if the active
+// route is one of its children (e.g. landing on Calendar via a direct link).
 
-function SidebarBoardGroup({ item, route, navigate }) {
+function SidebarNavGroup({ item, route, navigate }) {
   const childIsActive = item.children.some((c) => c.id === route.view) && !route.savedViewId;
   const [expanded, setExpanded] = useState(childIsActive);
 
@@ -242,7 +254,7 @@ function SidebarBoardGroup({ item, route, navigate }) {
         className={`sidebar-link sidebar-group-toggle ${childIsActive ? 'active' : ''}`}
         onClick={() => setExpanded((e) => !e)}
         aria-expanded={expanded}
-        data-tutorial="nav-board-group"
+        data-tutorial={`nav-${item.id}`}
       >
         <span className="sidebar-link-icon"><Icon name={item.icon} size={17} /></span>
         <span className="sidebar-group-label">{item.label}</span>
