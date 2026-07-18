@@ -256,7 +256,7 @@ function Overview() {
 const VIEWS_GUIDE = [
   { icon: 'dashboard', name: 'Dashboard', text: 'Your at-a-glance home: today\'s focus, what\'s overdue, what\'s in progress, and quick stats per project.' },
   { icon: 'projects',  name: 'Projects',  text: 'Create and manage projects + their phases. Save a project as a template, or start a New project from a saved template. Share a project via invite link, and open its WBS, Log, or AI helpers.' },
-  { icon: 'board',     name: 'Board',     text: 'Kanban — drag tasks across Todo → Doing → Done. Filter by tag, group by phase, start a timer, or quick-add from a template.' },
+  { icon: 'board',     name: 'Kanban',    text: 'Drag tasks across Todo → Doing → Done. Filter by tag, group by phase, start a timer, or quick-add from a template. Nested under "Board" in the sidebar alongside Calendar, Gantt chart, and WBS.' },
   { icon: 'calendar',  name: 'Calendar',  text: 'Month grid by plan end date. Drag a task to reschedule, filter by status (All / To do / Ongoing / Done), and add a new task.' },
   { icon: 'gantt',     name: 'Gantt',     text: 'Timeline of plan vs. actual. Drag bars to resize/move, see dependency arrows, and filter by a date period.' },
   { icon: 'wbs',       name: 'WBS',       text: 'Work-breakdown structure: Project → Phase → Task → Subtask with duration, dates, resource, and % complete, plus a Gantt-style timeline. Click any row for its activity log; filter by status or date.' },

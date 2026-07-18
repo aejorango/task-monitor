@@ -260,7 +260,7 @@ export default function DashboardView({ projectFilter, navigate }) {
             break it into subtasks, and log activity as you make progress.
           </p>
           <div className="dash-empty-hero-actions">
-            <button className="btn btn-primary" onClick={goToBoard}>Open Board view</button>
+            <button className="btn btn-primary" onClick={goToBoard}>Open Kanban view</button>
             <button className="btn" onClick={() => navigate?.({ view: 'projects' })}>
               Set up projects first
             </button>

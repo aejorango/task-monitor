@@ -13,9 +13,9 @@ import TaskDoneCelebration from './TaskDoneCelebration';
 const VIEWS = [
   { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
   { id: 'projects',       label: 'Projects',         icon: 'projects' },
-  { id: 'board',          label: 'Board',            icon: 'board' },
+  { id: 'board',          label: 'Kanban',           icon: 'board' },
   { id: 'calendar',       label: 'Calendar',         icon: 'calendar' },
-  { id: 'gantt',          label: 'Gantt',            icon: 'gantt' },
+  { id: 'gantt',          label: 'Gantt chart',      icon: 'gantt' },
   { id: 'wbs',            label: 'WBS',              icon: 'wbs' },
   { id: 'goals',          label: 'Goals',            icon: 'goals' },
   { id: 'messages',       label: 'Messages',         icon: 'messages' },
@@ -27,6 +27,23 @@ const VIEWS = [
   { id: 'how-to-use',     label: 'How to Use',       icon: 'help' },
   { id: 'settings',       label: 'Settings',         icon: 'settings' },
 ];
+
+// Sidebar-only grouping: Kanban/Calendar/Gantt chart/WBS collapse under a
+// "Board" parent that toggles open/closed on click — it isn't a view itself.
+const BOARD_GROUP_CHILD_IDS = ['board', 'calendar', 'gantt', 'wbs'];
+const SIDEBAR_ITEMS = (() => {
+  const grouped = new Set(BOARD_GROUP_CHILD_IDS);
+  const items = VIEWS.filter((v) => !grouped.has(v.id));
+  const boardGroup = {
+    id: 'board-group',
+    label: 'Board',
+    icon: 'board',
+    children: BOARD_GROUP_CHILD_IDS.map((id) => VIEWS.find((v) => v.id === id)),
+  };
+  const insertAt = items.findIndex((v) => v.id === 'projects') + 1;
+  items.splice(insertAt, 0, boardGroup);
+  return items;
+})();
 
 function parseHash() {
   const h = window.location.hash.replace(/^#\/?/, '');
@@ -126,15 +143,19 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
 
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Views</div>
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
-              onClick={() => navigateAndClose({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
-            >
-              <span className="sidebar-link-icon"><Icon name={v.icon} size={17} /></span>
-              {v.label}
-            </button>
+          {SIDEBAR_ITEMS.map((v) => (
+            v.children ? (
+              <SidebarBoardGroup key={v.id} item={v} route={route} navigate={navigateAndClose} />
+            ) : (
+              <button
+                key={v.id}
+                className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
+                onClick={() => navigateAndClose({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
+              >
+                <span className="sidebar-link-icon"><Icon name={v.icon} size={17} /></span>
+                {v.label}
+              </button>
+            )
           ))}
 
           <SidebarSavedViews route={route} navigate={navigateAndClose} />
@@ -193,6 +214,50 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
 
       {/* Global confetti celebration when any task is marked done */}
       <TaskDoneCelebration />
+    </div>
+  );
+}
+
+// ─── Sidebar: "Board" group (Kanban/Calendar/Gantt chart/WBS) ─────────────
+// A pure UI toggle — clicking "Board" only expands/collapses its children,
+// it doesn't navigate anywhere itself. Auto-expands if the active route is
+// one of its children (e.g. landing on Calendar via a direct link).
+
+function SidebarBoardGroup({ item, route, navigate }) {
+  const childIsActive = item.children.some((c) => c.id === route.view) && !route.savedViewId;
+  const [expanded, setExpanded] = useState(childIsActive);
+
+  useEffect(() => {
+    if (childIsActive) setExpanded(true);
+  }, [childIsActive]);
+
+  return (
+    <div className="sidebar-group">
+      <button
+        className={`sidebar-link sidebar-group-toggle ${childIsActive ? 'active' : ''}`}
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <span className="sidebar-link-icon"><Icon name={item.icon} size={17} /></span>
+        <span className="sidebar-group-label">{item.label}</span>
+        <span className={`sidebar-group-chevron ${expanded ? 'open' : ''}`}>
+          <Icon name="chevron-right" size={13} />
+        </span>
+      </button>
+      {expanded && (
+        <div className="sidebar-group-children">
+          {item.children.map((c) => (
+            <button
+              key={c.id}
+              className={`sidebar-link sidebar-link-sub ${c.id === route.view && !route.savedViewId ? 'active' : ''}`}
+              onClick={() => navigate({ view: c.id, savedViewId: null, tagFilter: null, statusFilter: null })}
+            >
+              <span className="sidebar-link-icon"><Icon name={c.icon} size={16} /></span>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -518,7 +583,7 @@ function GlobalSearch({ projects, navigate }) {
 
 const BOTTOM_TABS = [
   { id: 'dashboard', label: 'Home',     icon: 'dashboard' },
-  { id: 'board',     label: 'Board',    icon: 'board' },
+  { id: 'board',     label: 'Kanban',   icon: 'board' },
   { id: 'projects',  label: 'Projects', icon: 'projects' },
   { id: 'table',     label: 'Log',      icon: 'list' },
   { id: 'settings',  label: 'Settings', icon: 'settings' },
