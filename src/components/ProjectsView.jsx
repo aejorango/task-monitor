@@ -103,7 +103,7 @@ export default function ProjectsView() {
           <button className="btn btn-secondary" onClick={() => setManagingSegments(true)}>
             ⚙ Segments
           </button>
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>
+          <button className="btn btn-primary" onClick={() => setEditing('new')} data-tutorial="new-project-btn">
             + New project
           </button>
         </div>

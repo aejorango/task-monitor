@@ -122,6 +122,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
           placeholder="What needs doing?  (try: draft proposal next Friday !urgent #client @mark)"
           required
           disabled={!ready}
+          data-tutorial="quick-add-input"
         />
         <select className="select" value={projectId} onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }} style={{ width: 180 }}>
           {projects.length === 0 && <option value="">No projects</option>}
@@ -129,7 +130,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <button type="submit" className="btn btn-primary" disabled={submitting || !ready || !title.trim()}>
+        <button type="submit" className="btn btn-primary" disabled={submitting || !ready || !title.trim()} data-tutorial="quick-add-submit">
           {submitting ? 'Saving…' : 'Add task'}
         </button>
       </div>
@@ -201,7 +202,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpanded(!expanded)}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setExpanded(!expanded)} data-tutorial="quick-add-more">
             {expanded ? '− Hide details' : '+ More details'}
           </button>
           {taskTemplates.length > 0 && (

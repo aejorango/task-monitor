@@ -21,7 +21,7 @@ export default function WorkspaceSwitcher({ workspaces, activeId, onSwitch, onMa
   return (
     <>
       <div className="ws-switcher" ref={ref}>
-        <button className="ws-switcher-trigger" onClick={() => setOpen(!open)}>
+        <button className="ws-switcher-trigger" onClick={() => setOpen(!open)} data-tutorial="ws-switcher">
           <WorkspaceIcon workspace={active} />
           <div className="ws-info">
             <div className="ws-name">{active?.name || 'No workspace'}</div>

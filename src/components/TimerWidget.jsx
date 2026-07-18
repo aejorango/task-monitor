@@ -53,7 +53,7 @@ export default function TimerWidget() {
 
   return (
     <>
-      <div className="timer-widget" title={`Tracking: ${state.taskTitle}`}>
+      <div className="timer-widget" title={`Tracking: ${state.taskTitle}`} data-tutorial="timer-widget">
         <span className="timer-dot" />
         <span className="timer-title">{state.taskTitle}</span>
         <span className="timer-elapsed mono">{formatElapsed(elapsedMs)}</span>

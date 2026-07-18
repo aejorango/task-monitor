@@ -1408,6 +1408,69 @@ a:hover { text-decoration: underline; }
 .dropdown-item.selected { background: var(--c-accent-soft); color: var(--c-accent-ink); }
 .dropdown-item.danger { color: var(--c-danger); }
 
+/* ─── Interactive tutorials ────────────────────────────────── */
+.tutorial-menu { min-width: 260px; max-height: 360px; }
+.tutorial-menu-item { align-items: flex-start; padding: 8px; }
+.tutorial-menu-icon { font-size: 16px; line-height: 1.3; }
+.tutorial-menu-text { display: flex; flex-direction: column; gap: 1px; }
+.tutorial-menu-title { font-weight: 600; }
+
+.tutorial-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+.tutorial-spotlight {
+  position: fixed;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 9999px rgba(10, 10, 30, 0.55), 0 0 0 2px var(--c-accent);
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+  pointer-events: none;
+}
+.tutorial-card {
+  position: fixed;
+  pointer-events: auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xl);
+  padding: 14px 16px;
+  transition: top 0.2s ease, left 0.2s ease, bottom 0.2s ease;
+}
+.tutorial-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.tutorial-card-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--c-accent);
+  text-transform: uppercase;
+}
+.tutorial-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px;
+}
+.tutorial-close:hover { color: var(--c-text); }
+.tutorial-card-title { margin: 0 0 6px; font-size: 15px; color: var(--c-text); }
+.tutorial-card-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--c-text-2); }
+.tutorial-card-hint { margin: 8px 0 0; }
+.tutorial-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 /* ─── Utility ──────────────────────────────────────────────── */
 .muted   { color: var(--c-text-3); }
 .muted-2 { color: var(--c-text-muted); }
@@ -3387,6 +3450,7 @@ a:hover { text-decoration: underline; }
   /* Shrink "My tasks" chip */
   .topbar-chip-mytasks { padding: 4px 8px; font-size: 11px; }
   .chip-label-text { display: none; }   /* show icon only */
+  .tutorial-btn-label { display: none; }   /* show icon only */
 
   /* ── Content ── */
   .content { padding: var(--content-pad); }

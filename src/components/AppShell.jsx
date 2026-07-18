@@ -9,6 +9,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher';
 import Icon from './Icon';
 import AiHelper from './AiHelper';
 import TaskDoneCelebration from './TaskDoneCelebration';
+import TutorialGuide from './TutorialGuide';
 
 const VIEWS = [
   { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
@@ -151,6 +152,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
                 key={v.id}
                 className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
                 onClick={() => navigateAndClose({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
+                data-tutorial={v.id === 'projects' ? 'nav-projects' : undefined}
               >
                 <span className="sidebar-link-icon"><Icon name={v.icon} size={17} /></span>
                 {v.label}
@@ -181,11 +183,13 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         </button>
 
         <div className="topbar-title">{current.label}</div>
-        <ProjectPicker
-          projects={projects}
-          value={route.projectFilter}
-          onChange={(projectFilter) => navigate({ projectFilter })}
-        />
+        <div data-tutorial="project-picker">
+          <ProjectPicker
+            projects={projects}
+            value={route.projectFilter}
+            onChange={(projectFilter) => navigate({ projectFilter })}
+          />
+        </div>
         {userId && (
           <button
             className={`chip topbar-chip-mytasks ${route.onlyMine ? 'active' : ''}`}
@@ -202,6 +206,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
             ⚡ Offline
           </span>
         )}
+        <TutorialGuide route={route} navigate={navigate} />
         <AiHelper />
         {timerWidget}
         <GlobalSearch projects={projects} navigate={navigate} />
@@ -237,6 +242,7 @@ function SidebarBoardGroup({ item, route, navigate }) {
         className={`sidebar-link sidebar-group-toggle ${childIsActive ? 'active' : ''}`}
         onClick={() => setExpanded((e) => !e)}
         aria-expanded={expanded}
+        data-tutorial="nav-board-group"
       >
         <span className="sidebar-link-icon"><Icon name={item.icon} size={17} /></span>
         <span className="sidebar-group-label">{item.label}</span>

@@ -174,7 +174,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
       <TaskForm projects={projects} projectFilter={projectFilter} />
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="board">
+        <div className="board" data-tutorial="board-columns">
           {COLUMNS.map((col) => (
             <ColumnShell
               key={col.id}
