@@ -7,6 +7,7 @@ import { useMyCompany } from './hooks/useCompany';
 import { setCurrentUserRole } from './services/anthropic';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
+import { useSettings } from './hooks/useSettings';
 import AppShell, { useRoute } from './components/AppShell';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
@@ -56,6 +57,11 @@ function FullPageSpinner({ label = 'Loading…' }) {
 }
 
 export default function App() {
+  // Static import (not lazy) so the theme is applied on first paint no matter
+  // which view loads first — Board never imports useSettings itself, and
+  // Settings/Calendar are code-split, so without this call `data-theme` was
+  // never set until the user happened to visit one of those two views.
+  useSettings();
   const { userId, ready } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { route, navigate } = useRoute();

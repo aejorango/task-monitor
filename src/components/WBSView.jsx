@@ -193,8 +193,26 @@ export default function WBSView({ projectFilter }) {
     return blocks;
   }, [projects, tasks, projectFilter, statusFilter, statusActive, periodActive, periodFrom, periodTo]);
 
+  // ── Summary band stats ────────────────────────────────────────────────────
+  const allTreeTasks = useMemo(() => tree.flatMap((b) => b.tasks), [tree]);
+  const totalPhases = useMemo(
+    () => tree.reduce((s, b) => s + b.groups.filter((g) => g.phase).length, 0),
+    [tree]
+  );
+  const overallSpan = useMemo(() => spanOf(allTreeTasks), [allTreeTasks]);
+  const overallPct = avgPct(allTreeTasks);
+
+  const singleProject = projectFilter !== 'all' ? projects.find((p) => p.id === projectFilter) : null;
+  const wsName = workspaces.find((w) => w.id === activeWs)?.name;
+  const summaryTitle = singleProject?.name || wsName || 'All projects';
+
   // ── Timeline range (same approach as Gantt) ───────────────────────────────
   const today = parseDate(todayLocal());
+  const doneCount = allTreeTasks.filter((t) => t.status === 'done').length;
+  const ongoingCount = allTreeTasks.filter((t) => t.status === 'doing').length;
+  const overdueCount = allTreeTasks.filter(
+    (t) => t.status !== 'done' && t.plan?.endDate && parseDate(t.plan.endDate) < today
+  ).length;
   const range = useMemo(() => {
     // Extent of the visible tasks across plan + actual dates.
     let taskMin = null;
@@ -288,18 +306,54 @@ export default function WBSView({ projectFilter }) {
           </p>
         </div>
         <div className="page-actions">
-          {ZOOMS.map((z) => (
-            <button
-              key={z.id}
-              className={`chip ${zoom === z.id ? 'active' : ''}`}
-              onClick={() => setZoom(z.id)}
-            >{z.label}</button>
-          ))}
+          <div className="wbsx-zoom-group">
+            {ZOOMS.map((z) => (
+              <button
+                key={z.id}
+                className={`chip ${zoom === z.id ? 'active' : ''}`}
+                onClick={() => setZoom(z.id)}
+              >{z.label}</button>
+            ))}
+          </div>
           <button className="btn btn-primary btn-sm" onClick={() => setQuickAddOpen(true)}>
             + New task
           </button>
         </div>
       </div>
+
+      {tree.length > 0 && (
+        <div className="wbsx-summary">
+          <div className="wbsx-summary-left">
+            <div className="wbsx-ring" style={{ '--ring-pct': `${overallPct ?? 0}%` }}>
+              <div className="wbsx-ring-inner">
+                <span className="wbsx-ring-num">{overallPct ?? 0}%</span>
+              </div>
+            </div>
+            <div>
+              <div className="wbsx-summary-label">Overall complete</div>
+              <div className="wbsx-summary-title">{summaryTitle}</div>
+              <div className="wbsx-summary-meta">
+                {totalPhases} phase{totalPhases === 1 ? '' : 's'} · {allTreeTasks.length} task{allTreeTasks.length === 1 ? '' : 's'}
+                {overallSpan && <> · {overallSpan.start} → {overallSpan.end}</>}
+              </div>
+            </div>
+          </div>
+          <div className="wbsx-summary-stats">
+            <div className="wbsx-stat">
+              <div className="wbsx-stat-num">{doneCount}</div>
+              <div className="wbsx-stat-label">Done</div>
+            </div>
+            <div className="wbsx-stat wbsx-stat-ongoing">
+              <div className="wbsx-stat-num">{ongoingCount}</div>
+              <div className="wbsx-stat-label">Ongoing</div>
+            </div>
+            <div className="wbsx-stat wbsx-stat-overdue">
+              <div className="wbsx-stat-num">{overdueCount}</div>
+              <div className="wbsx-stat-label">Overdue</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="toolbar" style={{ marginBottom: 12, flexWrap: 'wrap', rowGap: 8 }}>
         <span className="small muted" style={{ fontWeight: 600 }}>Show:</span>

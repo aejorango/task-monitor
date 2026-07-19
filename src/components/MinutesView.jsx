@@ -124,7 +124,7 @@ export default function MinutesView({ projectFilter = 'all' }) {
         <aside className="minutes-nav">
           <div className="minutes-nav-label">Projects</div>
           <button
-            className={`minutes-nav-link ${selectedId === '__all__' ? 'active' : ''}`}
+            className={`minutes-nav-link minutes-nav-link-all ${selectedId === '__all__' ? 'active' : ''}`}
             onClick={() => setSelectedId('__all__')}
           >
             <span className="minutes-nav-name">All projects</span>
@@ -264,7 +264,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
   const boss = minute.bossName?.trim();
 
   return (
-    <div className="minute-card">
+    <div className="minute-card" style={project ? { '--minute-accent': project.color } : undefined}>
       <button className="minute-card-head" onClick={() => setOpen((o) => !o)}>
         <div className="minute-card-main">
           <span className="minute-card-title">{minute.title || 'Untitled meeting'}</span>
@@ -276,7 +276,9 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
         </div>
         <div className="minute-card-side">
           {items.length > 0 && (
-            <span className="badge badge-soft-muted">{doneCount}/{items.length} actions</span>
+            <span className={`badge ${doneCount === items.length ? 'badge-soft-success' : 'badge-soft-accent'}`}>
+              {doneCount}/{items.length} actions
+            </span>
           )}
           <span className="minute-card-chevron">{open ? '▾' : '▸'}</span>
         </div>
@@ -353,7 +355,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
             <aside className="minute-body-side">
               <div className="minute-priority">
                 <div className="minute-priority-head">
-                  <PriorityIcon />
+                  <span className="minute-priority-icon"><PriorityIcon /></span>
                   <span className="minute-priority-title">The Priority</span>
                   {boss && <span className="minute-priority-boss">{boss}</span>}
                 </div>
