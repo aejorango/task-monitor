@@ -117,6 +117,15 @@ export default function CalendarView({ projectFilter }) {
     }
   };
 
+  const monthName = cursor.toLocaleString('en', { month: 'long' });
+  const monthYear = cursor.getFullYear();
+
+  const legendProjects = useMemo(() => {
+    if (projectFilter !== 'all') return [];
+    const usedIds = new Set(filtered.map((t) => t.projectId).filter(Boolean));
+    return projects.filter((p) => usedIds.has(p.id));
+  }, [projects, filtered, projectFilter]);
+
   if (loading) return <p className="muted">Loading calendar…</p>;
 
   return (
@@ -127,30 +136,43 @@ export default function CalendarView({ projectFilter }) {
           <p className="page-subtitle">Tasks placed on their <strong>plan end date</strong>. Click to edit; drag to reschedule.</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-sm" onClick={prev}>‹</button>
-          <button className="btn btn-sm" onClick={goToday}>Today</button>
-          <button className="btn btn-sm" onClick={next}>›</button>
-          <span className="muted" style={{ marginLeft: 8 }}>{monthLabel}</span>
-          <button className="btn btn-primary btn-sm" style={{ marginLeft: 8 }} onClick={() => setQuickAddOpen(true)}>
-            + New task
+          <div className="cal-nav">
+            <button className="cal-nav-btn" onClick={prev} aria-label="Previous month">‹</button>
+            <button className="cal-nav-today" onClick={goToday}>Today</button>
+            <button className="cal-nav-btn" onClick={next} aria-label="Next month">›</button>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setQuickAddOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            New task
           </button>
         </div>
       </div>
 
-      <div className="toolbar" style={{ marginBottom: 12 }}>
-        <span className="small muted" style={{ fontWeight: 600 }}>Show:</span>
-        {[
-          { id: 'all',   label: 'All' },
-          { id: 'todo',  label: 'To do' },
-          { id: 'doing', label: 'Ongoing' },
-          { id: 'done',  label: 'Done' },
-        ].map((s) => (
-          <button
-            key={s.id}
-            className={`chip ${statusFilter === s.id ? 'active' : ''}`}
-            onClick={() => setStatusFilter(s.id)}
-          >{s.label}</button>
-        ))}
+      <div className="cal-toolbar">
+        <h2 className="cal-month-label">{monthName} <span className="accent">{monthYear}</span></h2>
+        <div className="cal-filter-group">
+          {[
+            { id: 'all',   label: 'All' },
+            { id: 'todo',  label: 'To do' },
+            { id: 'doing', label: 'Ongoing' },
+            { id: 'done',  label: 'Done' },
+          ].map((s) => (
+            <button
+              key={s.id}
+              className={`cal-filter-btn ${statusFilter === s.id ? 'active' : ''}`}
+              onClick={() => setStatusFilter(s.id)}
+            >{s.label}</button>
+          ))}
+        </div>
+        {legendProjects.length > 0 && (
+          <div className="cal-legend">
+            {legendProjects.map((p) => (
+              <span key={p.id} className="cal-legend-item">
+                <span className="cal-legend-dot" style={{ background: p.color }} />{p.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -234,7 +256,14 @@ function CalCell({ dateStr, inMonth, isToday, isWeekend, dayNum, dayTasks, proje
       className={`cal-cell ${inMonth ? '' : 'out'} ${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''} ${isOver ? 'drag-over' : ''}`}
     >
       <div className="cal-cell-head">
-        <span className="cal-cell-num">{dayNum}</span>
+        {isToday ? (
+          <span className="cal-today-badge">
+            <span className="cal-today-num">{dayNum}</span>
+            <span className="cal-today-label">Today</span>
+          </span>
+        ) : (
+          <span className="cal-cell-num">{dayNum}</span>
+        )}
         {dayTasks.length > 3 && <span className="muted small">{dayTasks.length} tasks</span>}
       </div>
       <div className="cal-cell-tasks">
@@ -260,8 +289,8 @@ function DraggableCalTask({ task, project, onClick }) {
       {...attributes}
       className={`cal-task ${task.status === 'done' ? 'done' : ''}`}
       style={{
-        background: project?.color || 'var(--c-text-3)',
-        opacity: isDragging ? 0.3 : (task.status === 'done' ? 0.55 : 1),
+        '--task-color': project?.color || 'var(--c-text-3)',
+        opacity: isDragging ? 0.3 : 1,
         touchAction: 'none',
       }}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
