@@ -154,16 +154,15 @@ function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs }) {
 
   return (
     <div className="goal-card">
-      <div className="goal-banner" style={{ background: goal.color || '#1e2a52' }}>
-        <h2 className="goal-banner-title">
-          {goal.code ? `${goal.code}: ` : ''}{goal.title || 'Untitled goal'}
-        </h2>
+      <div className="goal-banner" style={{ backgroundColor: goal.color || '#1e2a52' }}>
+        {goal.code && <span className="goal-code-badge">{goal.code}</span>}
+        <h2 className="goal-banner-title">{goal.title || 'Untitled goal'}</h2>
         <button className="goal-edit-btn" onClick={onEdit} title="Edit goal">
           <GoalIcon name="pencil" size={14} /> Edit
         </button>
       </div>
 
-      <div className="goal-body" style={{ background: goal.bgColor || goal.color || '#1e2a52' }}>
+      <div className="goal-body" style={{ backgroundColor: goal.bgColor || goal.color || '#1e2a52' }}>
         {/* INITIATIVES */}
         <div className="goal-srow">
           <div className="goal-chip"><GoalIcon name="initiatives" /> INITIATIVES</div>

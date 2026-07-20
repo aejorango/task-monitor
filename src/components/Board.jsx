@@ -43,6 +43,8 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [activeDrag, setActiveDrag]     = useState(null);
   const [groupByPhase, setGroupByPhase] = useState(false);
+  const [groupByProject, setGroupByProject] = useState(true);
+  const [expandedSegments, setExpandedSegments] = useState({});
   const [tagFilter, setTagFilter] = useState(initialTagFilter || null);
 
   // Sync local tag filter when URL-level filter changes (e.g. saved view loaded)
@@ -96,6 +98,28 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   const canGroupByPhase = !!selectedProject && phases.length > 0;
   const showSwimLanes = groupByPhase && canGroupByPhase;
 
+  // Grouped-by-project view (Kanban Redesign): only makes sense across
+  // "All projects" — a single-project filter already shows one board.
+  const canGroupByProject = projectFilter === 'all' && projects.length > 0;
+  const showProjectSegments = canGroupByProject && groupByProject;
+  const isSegmentExpanded = (id) => expandedSegments[id] !== undefined ? expandedSegments[id] : true;
+  const toggleSegment = (id) => setExpandedSegments((prev) => ({ ...prev, [id]: !isSegmentExpanded(id) }));
+
+  const projectSegments = showProjectSegments
+    ? projects
+        .map((p) => ({ project: p, tasks: filtered.filter((t) => t.projectId === p.id) }))
+        .filter((seg) => seg.tasks.length > 0)
+    : [];
+  const unassignedTasks = showProjectSegments
+    ? filtered.filter((t) => !t.projectId || !projectById[t.projectId])
+    : [];
+  if (unassignedTasks.length > 0) {
+    projectSegments.push({
+      project: { id: '__unassigned__', name: 'No project', color: null },
+      tasks: unassignedTasks,
+    });
+  }
+
   const handleDragStart = (e) => {
     const task = filtered.find((t) => t.id === e.active.id);
     setActiveDrag(task);
@@ -110,10 +134,12 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     if (!task) return;
 
     // Drop target ids:
-    //  - "todo" / "doing" / "done"               (no swim lanes)
-    //  - "todo::<phaseId>" / etc.                (swim lanes; phaseId or NO_PHASE_ID)
-    const [targetStatus, targetPhase] = String(overId).split('::');
+    //  - "todo" / "doing" / "done"                    (no swim lanes)
+    //  - "todo::<phaseId>" / etc.                      (swim lanes; phaseId or NO_PHASE_ID)
+    //  - "todo::proj::<projectId>"                     (project segments; project doesn't change on drop)
+    const [targetStatus, marker] = String(overId).split('::');
     if (!COLUMNS.find((c) => c.id === targetStatus)) return;
+    const targetPhase = marker === 'proj' ? undefined : marker;
 
     const statusChanged = targetStatus !== task.status;
     const phaseChanged  = targetPhase !== undefined &&
@@ -135,6 +161,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
           <h1 className="page-title">Board</h1>
           <p className="page-subtitle">
             Drag cards across columns to update status.
+            {showProjectSegments && <> Expand a segment to see its To Do / In Progress / Done columns.</>}
             {showSwimLanes && <> Drop into a phase row to also set the phase.</>}
             {projectFilter !== 'all' && projectById[projectFilter] && !showSwimLanes && (
               <> Filtered to <strong>{projectById[projectFilter].name}</strong>.</>
@@ -142,6 +169,15 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
           </p>
         </div>
         <div className="page-actions">
+          {canGroupByProject && (
+            <button
+              className={`chip ${groupByProject ? 'active' : ''}`}
+              onClick={() => setGroupByProject(!groupByProject)}
+              title="Group tasks into collapsible per-project segments"
+            >
+              {groupByProject ? '✓ ' : ''}Grouped by project
+            </button>
+          )}
           {canGroupByPhase && (
             <button
               className={`chip ${groupByPhase ? 'active' : ''}`}
@@ -174,46 +210,70 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
       <TaskForm projects={projects} projectFilter={projectFilter} />
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="board" data-tutorial="board-columns">
-          {COLUMNS.map((col) => (
-            <ColumnShell
-              key={col.id}
-              column={col}
-              count={filtered.filter((t) => t.status === col.id).length}
-            >
-              {showSwimLanes ? (
-                <SwimLanes
-                  column={col}
-                  phases={phases}
-                  filtered={filtered}
-                  projectById={projectById}
-                  expandedTaskId={expandedTaskId}
-                  setExpandedTaskId={setExpandedTaskId}
-                  setLoggingTask={setLoggingTask}
-                  setEditingTask={setEditingTask}
-                  setEditingActivity={setEditingActivity}
-                />
-              ) : (
-                <DroppableArea id={col.id}>
-                  {filtered
-                    .filter((t) => t.status === col.id)
-                    .map((task) => (
-                      <DraggableCard
-                        key={task.id}
-                        task={task}
-                        project={projectById[task.projectId]}
-                        expanded={expandedTaskId === task.id}
-                        onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
-                        onLog={() => setLoggingTask(task)}
-                        onEdit={() => setEditingTask(task)}
-                        onEditActivity={(a) => setEditingActivity(a)}
-                      />
-                    ))}
-                </DroppableArea>
-              )}
-            </ColumnShell>
-          ))}
-        </div>
+        {showProjectSegments ? (
+          <div className="board-segments" data-tutorial="board-columns">
+            {projectSegments.map(({ project, tasks }) => (
+              <ProjectSegment
+                key={project.id}
+                project={project}
+                tasks={tasks}
+                expanded={isSegmentExpanded(project.id)}
+                onToggle={() => toggleSegment(project.id)}
+                expandedTaskId={expandedTaskId}
+                setExpandedTaskId={setExpandedTaskId}
+                setLoggingTask={setLoggingTask}
+                setEditingTask={setEditingTask}
+                setEditingActivity={setEditingActivity}
+              />
+            ))}
+            {projectSegments.length === 0 && (
+              <p className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
+                No tasks match the current filters.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="board" data-tutorial="board-columns">
+            {COLUMNS.map((col) => (
+              <ColumnShell
+                key={col.id}
+                column={col}
+                count={filtered.filter((t) => t.status === col.id).length}
+              >
+                {showSwimLanes ? (
+                  <SwimLanes
+                    column={col}
+                    phases={phases}
+                    filtered={filtered}
+                    projectById={projectById}
+                    expandedTaskId={expandedTaskId}
+                    setExpandedTaskId={setExpandedTaskId}
+                    setLoggingTask={setLoggingTask}
+                    setEditingTask={setEditingTask}
+                    setEditingActivity={setEditingActivity}
+                  />
+                ) : (
+                  <DroppableArea id={col.id}>
+                    {filtered
+                      .filter((t) => t.status === col.id)
+                      .map((task) => (
+                        <DraggableCard
+                          key={task.id}
+                          task={task}
+                          project={projectById[task.projectId]}
+                          expanded={expandedTaskId === task.id}
+                          onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                          onLog={() => setLoggingTask(task)}
+                          onEdit={() => setEditingTask(task)}
+                          onEditActivity={(a) => setEditingActivity(a)}
+                        />
+                      ))}
+                  </DroppableArea>
+                )}
+              </ColumnShell>
+            ))}
+          </div>
+        )}
 
         <DragOverlay>
           {activeDrag ? <CardBody task={activeDrag} project={projectById[activeDrag.projectId]} dragging /> : null}
@@ -233,11 +293,62 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   );
 }
 
+// ─── Project segment (grouped-by-project view) ────────────────────────────
+// Collapsible header + its own 3-column To Do / In Progress / Done grid,
+// scoped to one project's tasks. Matches the imported Kanban Redesign mockup.
+
+function ProjectSegment({ project, tasks, expanded, onToggle, expandedTaskId, setExpandedTaskId, setLoggingTask, setEditingTask, setEditingActivity }) {
+  const dot = project.color || 'var(--c-text-muted)';
+  return (
+    <div className="board-segment">
+      <button
+        type="button"
+        className="board-segment-header"
+        onClick={onToggle}
+        style={{ background: `color-mix(in srgb, ${dot} 14%, var(--c-surface))` }}
+      >
+        <span className="board-segment-dot" style={{ background: dot }} />
+        <span className="board-segment-name">{project.name}</span>
+        <span className="board-segment-count">{tasks.length} task{tasks.length === 1 ? '' : 's'}</span>
+        <span className={`board-segment-chevron ${expanded ? 'open' : ''}`}>▾</span>
+      </button>
+      {expanded && (
+        <div className="board board-segment-grid">
+          {COLUMNS.map((col) => (
+            <ColumnShell
+              key={col.id}
+              column={col}
+              count={tasks.filter((t) => t.status === col.id).length}
+            >
+              <DroppableArea id={`${col.id}::proj::${project.id}`}>
+                {tasks
+                  .filter((t) => t.status === col.id)
+                  .map((task) => (
+                    <DraggableCard
+                      key={task.id}
+                      task={task}
+                      project={project.id === '__unassigned__' ? null : project}
+                      expanded={expandedTaskId === task.id}
+                      onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                      onLog={() => setLoggingTask(task)}
+                      onEdit={() => setEditingTask(task)}
+                      onEditActivity={(a) => setEditingActivity(a)}
+                    />
+                  ))}
+              </DroppableArea>
+            </ColumnShell>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Column shell (header only) ───────────────────────────────────────────
 
 function ColumnShell({ column, count, children }) {
   return (
-    <div className="column">
+    <div className={`column status-tint-${column.id}`}>
       <div className={`column-head status-${column.id}`}>
         <span>{column.label}</span>
         <span className="count">{count}</span>

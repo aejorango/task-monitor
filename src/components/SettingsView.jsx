@@ -197,53 +197,148 @@ export default function SettingsView() {
 
       <WorkspacesSection currentUser={currentUser} />
 
-      <section className="review-section">
-        <h2 className="review-h2">Account</h2>
-        <div className="account-row">
-          {photoURL ? (
-            <img src={photoURL} alt="" className="account-avatar" />
-          ) : (
-            <div className="account-avatar fallback">
-              {(displayName[0] || '?').toUpperCase()}
-            </div>
-          )}
-          <div className="account-info">
-            <div className="account-name">
-              {displayName}
-              {profile?.role === 'superadmin' && (
-                <span className="badge badge-soft-info" style={{ marginLeft: 8 }}>superadmin</span>
-              )}
-            </div>
-            <div className="muted small">{currentUser?.email || 'Signed in.'}</div>
+      <section className="settings-hero">
+        <div className="settings-hero-head">
+          <div>
+            <h2 className="review-h2-accent settings-hero-title">Appearance</h2>
+            <p className="settings-hero-sub">Choose how Task Monitor looks on this device.</p>
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn" onClick={handleSignOut}>Sign out</button>
-          </div>
+          <span className="settings-hero-badge">{cap(settings.theme)} selected</span>
         </div>
-
-        {userId && (
-          <div className="field" style={{ marginTop: 12 }}>
-            <label className="label">Your Account ID</label>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                className="input input-sm mono"
-                value={userId}
-                readOnly
-                onFocus={(e) => e.target.select()}
-                style={{ flex: 1 }}
-              />
-              <CopyButton value={userId} />
-            </div>
-            <p className="muted small" style={{ marginTop: 6 }}>
-              Share this ID with a workspace owner so they can add you as a member.
-            </p>
-          </div>
-        )}
-
-        <p className="muted small" style={{ marginTop: 8 }}>
-          Your data syncs across any device where you sign in with this Google account.
+        <div className="settings-theme-grid">
+          {['system', 'light', 'dark'].map((t) => (
+            <ThemeTile
+              key={t}
+              value={t}
+              label={cap(t)}
+              active={settings.theme === t}
+              onClick={() => update({ theme: t })}
+            />
+          ))}
+        </div>
+        <p className="settings-hero-note">
+          <strong>System</strong> follows your OS setting via <code>prefers-color-scheme</code>.
         </p>
       </section>
+
+      <div className="review-2col">
+        <section className="review-section">
+          <h2 className="review-h2-accent">Account</h2>
+          <div className="account-row">
+            {photoURL ? (
+              <img src={photoURL} alt="" className="account-avatar" />
+            ) : (
+              <div className="account-avatar fallback">
+                {(displayName[0] || '?').toUpperCase()}
+              </div>
+            )}
+            <div className="account-info">
+              <div className="account-name">
+                {displayName}
+                {profile?.role === 'superadmin' && (
+                  <span className="badge badge-soft-info" style={{ marginLeft: 8 }}>superadmin</span>
+                )}
+              </div>
+              <div className="muted small">{currentUser?.email || 'Signed in.'}</div>
+            </div>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={handleSignOut}>Sign out</button>
+            </div>
+          </div>
+
+          {userId && (
+            <div className="field" style={{ marginTop: 12 }}>
+              <label className="label">Your Account ID</label>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  className="input input-sm mono"
+                  value={userId}
+                  readOnly
+                  onFocus={(e) => e.target.select()}
+                  style={{ flex: 1 }}
+                />
+                <CopyButton value={userId} />
+              </div>
+              <p className="muted small" style={{ marginTop: 6 }}>
+                Share this ID with a workspace owner so they can add you as a member.
+              </p>
+            </div>
+          )}
+
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Your data syncs across any device where you sign in with this Google account.
+          </p>
+        </section>
+
+        <section className="review-section">
+          <h2 className="review-h2-accent">Notifications</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className={`badge badge-soft-${notifPerm === 'granted' ? 'success' : notifPerm === 'denied' ? 'danger' : 'muted'}`}>
+              {notifPerm === 'granted' ? 'enabled' : notifPerm === 'denied' ? 'blocked' : notifPerm === 'unsupported' ? 'unsupported' : 'not set'}
+            </span>
+            {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
+              <button className="btn" onClick={handleTestNotification}>Enable notifications</button>
+            )}
+            {notifPerm === 'granted' && (
+              <button className="btn" onClick={handleTestNotification}>Send test notification</button>
+            )}
+          </div>
+          <p className="muted small" style={{ marginTop: 8 }}>
+            You’ll be pinged when a task with a plan-end date becomes overdue. Scanned on app load and every 5 min.
+          </p>
+        </section>
+
+        <section className="review-section">
+          <h2 className="review-h2-accent">Defaults</h2>
+
+          <div className="field-row">
+            <div className="field">
+              <label className="label">Default project for quick-add</label>
+              <select
+                className="select"
+                value={settings.defaultProject || ''}
+                onChange={(e) => update({ defaultProject: e.target.value || null })}
+              >
+                <option value="">— First available —</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Week starts on</label>
+              <select
+                className="select"
+                value={settings.weekStart}
+                onChange={(e) => update({ weekStart: Number(e.target.value) })}
+              >
+                <option value={0}>Sunday</option>
+                <option value={1}>Monday</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section className="review-section">
+          <h2 className="review-h2-accent">Your data on this device</h2>
+          <p className="muted small">
+            Anonymous session <span className="mono">{userId}</span>. {projects.length} projects,
+            {' '}{tasks.length} active tasks, {activities.length} activity entries.
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              onClick={() => exportData({ projects, tasks, activities }, userId)}
+            >Export JSON</button>
+            <button
+              className="btn"
+              onClick={() => {
+                if (confirm('Reset all settings to defaults? (This does not delete your data.)')) reset();
+              }}
+            >Reset settings</button>
+          </div>
+        </section>
+      </div>
 
       {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
@@ -252,7 +347,7 @@ export default function SettingsView() {
 
       {isSuperadmin && (
         <section className="review-section">
-          <h2 className="review-h2">AI — superadmin fallback</h2>
+          <h2 className="review-h2-accent">AI — superadmin fallback</h2>
           <p className="muted small" style={{ marginTop: 0 }}>
             Personal, browser-only key used <strong>only when no company key is
             available</strong> (e.g. you haven't assigned yourself to a company yet).
@@ -300,95 +395,6 @@ export default function SettingsView() {
         </section>
       )}
 
-      <section className="review-section">
-        <h2 className="review-h2">Notifications</h2>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className={`badge badge-soft-${notifPerm === 'granted' ? 'success' : notifPerm === 'denied' ? 'danger' : 'muted'}`}>
-            {notifPerm === 'granted' ? 'enabled' : notifPerm === 'denied' ? 'blocked' : notifPerm === 'unsupported' ? 'unsupported' : 'not set'}
-          </span>
-          {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
-            <button className="btn" onClick={handleTestNotification}>Enable notifications</button>
-          )}
-          {notifPerm === 'granted' && (
-            <button className="btn" onClick={handleTestNotification}>Send test notification</button>
-          )}
-        </div>
-        <p className="muted small" style={{ marginTop: 8 }}>
-          You’ll be pinged when a task with a plan-end date becomes overdue. Scanned on app load and every 5 min.
-        </p>
-      </section>
-
-      <section className="review-section">
-        <h2 className="review-h2">Appearance</h2>
-        <div className="field">
-          <label className="label">Theme</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {['system', 'light', 'dark'].map((t) => (
-              <button
-                key={t}
-                className={`chip ${settings.theme === t ? 'active' : ''}`}
-                onClick={() => update({ theme: t })}
-                style={{ textTransform: 'capitalize' }}
-              >{t}</button>
-            ))}
-          </div>
-          <p className="muted small" style={{ marginTop: 6 }}>
-            <strong>System</strong> follows your OS setting via <code>prefers-color-scheme</code>.
-          </p>
-        </div>
-      </section>
-
-      <section className="review-section">
-        <h2 className="review-h2">Defaults</h2>
-
-        <div className="field-row">
-          <div className="field">
-            <label className="label">Default project for quick-add</label>
-            <select
-              className="select"
-              value={settings.defaultProject || ''}
-              onChange={(e) => update({ defaultProject: e.target.value || null })}
-            >
-              <option value="">— First available —</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label className="label">Week starts on</label>
-            <select
-              className="select"
-              value={settings.weekStart}
-              onChange={(e) => update({ weekStart: Number(e.target.value) })}
-            >
-              <option value={0}>Sunday</option>
-              <option value={1}>Monday</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      <section className="review-section">
-        <h2 className="review-h2">Your data on this device</h2>
-        <p className="muted small">
-          Anonymous session <span className="mono">{userId}</span>. {projects.length} projects,
-          {' '}{tasks.length} active tasks, {activities.length} activity entries.
-        </p>
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-          <button
-            className="btn"
-            onClick={() => exportData({ projects, tasks, activities }, userId)}
-          >Export JSON</button>
-          <button
-            className="btn"
-            onClick={() => {
-              if (confirm('Reset all settings to defaults? (This does not delete your data.)')) reset();
-            }}
-          >Reset settings</button>
-        </div>
-      </section>
-
       <WebhooksSection userId={userId} />
 
       <section className="review-section">
@@ -399,6 +405,38 @@ export default function SettingsView() {
         </p>
       </section>
     </>
+  );
+}
+
+function cap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// One tile in the Appearance hero's System/Light/Dark picker — a small
+// static preview of each theme plus a radio-style selection state.
+function ThemeTile({ value, label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`settings-theme-tile ${active ? 'active' : ''}`}
+      onClick={onClick}
+    >
+      {active && (
+        <span className="settings-theme-check">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </span>
+      )}
+      <div className={`theme-preview theme-preview-${value}`}>
+        <div className="theme-preview-card" />
+        <div className="theme-preview-bar" />
+      </div>
+      <div className="settings-theme-label">
+        <span className="settings-theme-radio" />
+        {label}
+      </div>
+    </button>
   );
 }
 

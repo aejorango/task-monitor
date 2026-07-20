@@ -465,20 +465,21 @@ export default function WBSView({ projectFilter }) {
         </div>
       )}
 
-      <div className="toolbar" style={{ marginTop: 16 }}>
-        <span className="small muted">Legend:</span>
-        <span className="badge" style={{ background: 'var(--c-text-2)', color: 'white' }}>Project span</span>
-        <span className="badge" style={{ background: 'var(--c-accent)', color: 'white', opacity: 0.65 }}>Phase span</span>
-        <span className="badge" style={{ background: 'var(--c-doing)', color: 'white' }}>Task</span>
-        <span className="badge" style={{ background: 'var(--c-danger)', color: 'white' }}>Overdue</span>
-        <span className="small muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
+      <div className="wbsx-legend">
+        <span style={{ fontWeight: 600, color: 'var(--c-text-2)' }}>Legend:</span>
+        <span className="wbsx-legend-item"><span className="wbsx-legend-swatch project" />Project span</span>
+        <span className="wbsx-legend-item"><span className="wbsx-legend-swatch phase" />Phase span</span>
+        <span className="wbsx-legend-item"><span className="wbsx-legend-swatch task" />Task</span>
+        <span className="wbsx-legend-item"><span className="wbsx-legend-swatch overdue" />Overdue</span>
+        <span className="wbsx-legend-item">
           <span className="wbsx-today-check" aria-hidden="true">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
           </span>
           activity logged today
         </span>
-        <span className="small muted" style={{ marginLeft: 8 }}>
+        <span className="wbsx-legend-item"><span className="wbsx-legend-line" />Today</span>
+        <span style={{ marginLeft: 4 }}>
           % roll-up: task = subtasks / progress · phase &amp; project = average of their tasks.
         </span>
       </div>

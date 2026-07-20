@@ -357,12 +357,14 @@ export default function DashboardView({ projectFilter, navigate }) {
                       {s.total === 0 ? 'No tasks yet' : `${s.done}/${s.total} done · ${s.doing} in progress`}
                     </div>
                   </div>
-                  {s.total > 0 && (
-                    <div className="dash-project-bar">
-                      <div className="dash-project-bar-fill" style={{ width: `${s.pct}%`, background: s.project.color }} />
+                  {s.total > 0 ? (
+                    <>
+                      <div className="dash-project-bar">
+                        <div className="dash-project-bar-fill" style={{ width: `${s.pct}%`, background: s.project.color }} />
+                      </div>
                       <span className="dash-project-pct">{s.pct}%</span>
-                    </div>
-                  )}
+                    </>
+                  ) : <><span /><span /></>}
                 </li>
               ))}
             </ul>
@@ -376,7 +378,7 @@ export default function DashboardView({ projectFilter, navigate }) {
         <KpiTile label="Due today"      value={tasksDueToday.length} accent={tasksDueToday.length > 0 ? 'info' : 'muted'}   icon={<Icon name="calendar" />} />
         <KpiTile label="Overdue"        value={overdue.length}       accent={overdue.length > 0 ? 'danger' : 'muted'}        icon={<Icon name="alert" />} />
         <KpiTile label="Done this week" value={doneThisWeek.length}  accent="success"                                        icon={<Icon name="check" />} />
-        <KpiTile label="In progress"    value={inProgress.length}    accent={inProgress.length > 0 ? 'info' : 'muted'}       icon={<Icon name="play" />} />
+        <KpiTile label="In progress"    value={inProgress.length}    accent={inProgress.length > 0 ? 'accent' : 'muted'}      icon={<Icon name="play" />} />
       </div>
 
       <div className="dash-row dash-row-main">
@@ -424,7 +426,7 @@ export default function DashboardView({ projectFilter, navigate }) {
 
           {overdue.length > 0 && (
             <DashSubsection title={`Overdue (${overdue.length})`} accent="danger">
-              <TaskList tasks={overdue.slice(0, 8)} projectById={projectById} onSelect={setViewingTask} />
+              <TaskList tasks={overdue.slice(0, 8)} projectById={projectById} onSelect={setViewingTask} urgent />
               {overdue.length > 8 && (
                 <p className="muted small" style={{ marginTop: 6 }}>+ {overdue.length - 8} more overdue.</p>
               )}
@@ -572,9 +574,9 @@ function DashSubsection({ title, children, accent }) {
   );
 }
 
-function TaskList({ tasks, projectById, onSelect, compact }) {
+function TaskList({ tasks, projectById, onSelect, compact, urgent }) {
   return (
-    <ul className={`dash-tasklist ${compact ? 'compact' : ''}`}>
+    <ul className={`dash-tasklist ${compact ? 'compact' : ''} ${urgent ? 'urgent' : ''}`}>
       {tasks.map((t) => {
         const proj = projectById[t.projectId];
         return (
