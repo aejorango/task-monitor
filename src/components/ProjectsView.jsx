@@ -124,7 +124,7 @@ export default function ProjectsView() {
                 {segmentProjects.map((p) => {
                   const s = stats(p.id);
                   return (
-                    <div key={p.id} className="project-card" onClick={() => setEditing(p)}>
+                    <div key={p.id} className="project-card" style={{ '--project-color': p.color }} onClick={() => setEditing(p)}>
                       <div className="project-card-head">
                         <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
                         <h3 className="project-name">{p.name}</h3>

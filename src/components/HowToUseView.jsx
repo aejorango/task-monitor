@@ -146,6 +146,11 @@ function Icon({ name, size = 18, className }) {
   );
 }
 
+// 6-color rotation reused for view/concept icon chips — mirrors the imported
+// mockup's palette, built entirely from existing theme tokens so dark mode
+// stays automatic.
+const CHIP_PALETTE = ['htu-pal-0', 'htu-pal-1', 'htu-pal-2', 'htu-pal-3', 'htu-pal-4', 'htu-pal-5'];
+
 const SECTIONS = [
   { id: 'overview',    label: 'Overview' },
   { id: 'views',       label: 'The Views (what each page does)' },
@@ -170,14 +175,13 @@ export default function HowToUseView() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">How to Use Task Monitor</h1>
-          <p className="page-subtitle">
-            The mental model — when something is a Workspace vs. Project vs. Task vs. Subtask vs. Activity,
-            with real examples and decision rules.
-          </p>
-        </div>
+      <div className="htu-hero">
+        <span className="htu-hero-eyebrow">The Playbook</span>
+        <h1 className="htu-hero-title">How to Use Task Monitor</h1>
+        <p className="htu-hero-subtitle">
+          The mental model — when something is a Workspace vs. Project vs. Task vs. Subtask vs. Activity,
+          with real examples and decision rules. Read it once; refer back when in doubt.
+        </p>
       </div>
 
       <div className="htu-layout">
@@ -223,29 +227,31 @@ function Overview() {
         for what it was built for</strong>. This page is the playbook: read it once, refer back when in doubt.
       </p>
 
-      <div className="htu-callout htu-callout-info">
-        <div className="htu-callout-title">The one-sentence summary</div>
-        <p className="htu-callout-body">
-          <strong>Workspaces</strong> separate who can see what. <strong>Projects</strong> are real-world
-          initiatives with an outcome. <strong>Phases</strong> are stages a project moves through.
-          <strong> Tasks</strong> are the units of work that get done. <strong>Subtasks</strong> are a
-          checklist inside a task. <strong>Activities</strong> are time-stamped records of work performed.
-        </p>
-      </div>
+      <div className="htu-overview-grid">
+        <div className="htu-callout htu-callout-info">
+          <div className="htu-callout-title"><span className="htu-callout-mark">◆</span>The one-sentence summary</div>
+          <p className="htu-callout-body">
+            <strong>Workspaces</strong> separate who can see what. <strong>Projects</strong> are real-world
+            initiatives with an outcome. <strong>Phases</strong> are stages a project moves through.
+            <strong> Tasks</strong> are the units of work that get done. <strong>Subtasks</strong> are a
+            checklist inside a task. <strong>Activities</strong> are time-stamped records of work performed.
+          </p>
+        </div>
 
-      <div className="htu-callout htu-callout-tip">
-        <div className="htu-callout-title">Pro tip — the "shape" test</div>
-        <p className="htu-callout-body">
-          Ask: <em>"What shape is this thing?"</em>
-        </p>
-        <ul className="htu-list">
-          <li><strong>A boundary</strong> (who's in, who's out) → Workspace</li>
-          <li><strong>An outcome</strong> (a thing being delivered) → Project</li>
-          <li><strong>A stage</strong> (a milestone within an outcome) → Phase</li>
-          <li><strong>A unit of work</strong> (someone does it, then it's done) → Task</li>
-          <li><strong>A step inside a unit</strong> (a checkbox) → Subtask</li>
-          <li><strong>A record of time spent</strong> (yesterday I…) → Activity</li>
-        </ul>
+        <div className="htu-callout htu-callout-tip">
+          <div className="htu-callout-title"><span className="htu-callout-mark">✦</span>Pro tip — the "shape" test</div>
+          <p className="htu-callout-body">
+            Ask: <em>"What shape is this thing?"</em>
+          </p>
+          <ul className="htu-list">
+            <li><strong>A boundary</strong> (who's in, who's out) → Workspace</li>
+            <li><strong>An outcome</strong> (a thing being delivered) → Project</li>
+            <li><strong>A stage</strong> (a milestone within an outcome) → Phase</li>
+            <li><strong>A unit of work</strong> (someone does it, then it's done) → Task</li>
+            <li><strong>A step inside a unit</strong> (a checkbox) → Subtask</li>
+            <li><strong>A record of time spent</strong> (yesterday I…) → Activity</li>
+          </ul>
+        </div>
       </div>
     </section>
   );
@@ -280,9 +286,9 @@ function Views() {
         <strong> ✨ AI button</strong> ("Stuck? Don't know what to do next?" — it suggests your top 3 next actions and can draft a prompt for each).
       </p>
       <div className="htu-views-grid">
-        {VIEWS_GUIDE.map((v) => (
+        {VIEWS_GUIDE.map((v, i) => (
           <div key={v.name} className="htu-view-card">
-            <span className="htu-view-icon"><NavIcon name={v.icon} size={18} /></span>
+            <span className={`htu-view-icon ${CHIP_PALETTE[i % CHIP_PALETTE.length]}`}><NavIcon name={v.icon} size={18} /></span>
             <div>
               <div className="htu-view-name">{v.name}</div>
               <div className="htu-view-text">{v.text}</div>
@@ -308,7 +314,7 @@ function Hierarchy() {
         <HierarchyRow
           level={1}
           name="Workspace"
-          color="#7c3aed"
+          color="var(--c-purple)"
           tagline="Who can see this? (the boundary)"
           example="BRIDGED · AIM · Personal"
         />
@@ -316,7 +322,7 @@ function Hierarchy() {
         <HierarchyRow
           level={2}
           name="Project"
-          color="#0ea5e9"
+          color="var(--c-blue-deep)"
           tagline="What outcome are we delivering?"
           example="Q3 Member Onboarding Revamp"
         />
@@ -324,7 +330,7 @@ function Hierarchy() {
         <HierarchyRow
           level={3}
           name="Phase"
-          color="#10b981"
+          color="var(--c-emerald)"
           tagline="What stage of the project?"
           example="Discovery · Build · Launch · Wrap-up"
         />
@@ -332,7 +338,7 @@ function Hierarchy() {
         <HierarchyRow
           level={4}
           name="Task"
-          color="#f59e0b"
+          color="var(--c-accent)"
           tagline="What unit of work needs to happen?"
           example="Draft welcome-email copy"
         />
@@ -340,7 +346,7 @@ function Hierarchy() {
         <HierarchyRow
           level={5}
           name="Subtask"
-          color="#fb923c"
+          color="var(--c-accent-hover)"
           tagline="What checkbox is inside this task?"
           example="☐ Write subject line · ☐ Write body · ☐ Get review"
         />
@@ -348,7 +354,7 @@ function Hierarchy() {
         <HierarchyRow
           level={6}
           name="Activity"
-          color="#ef4444"
+          color="var(--c-danger)"
           tagline="What time did I actually spend, and on what?"
           example="May 27 · 1.5h · Drafted v1 of welcome email"
         />
@@ -655,20 +661,20 @@ function Concepts() {
       </p>
 
       <div className="htu-concept-grid">
-        {CONCEPTS.map((c) => (
-          <ConceptCard key={c.name} concept={c} />
+        {CONCEPTS.map((c, i) => (
+          <ConceptCard key={c.name} concept={c} paletteClass={CHIP_PALETTE[i % CHIP_PALETTE.length]} />
         ))}
       </div>
     </section>
   );
 }
 
-function ConceptCard({ concept }) {
+function ConceptCard({ concept, paletteClass }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`htu-concept-card ${open ? 'open' : ''}`}>
       <button className="htu-concept-header" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="htu-concept-icon"><Icon name={concept.icon} size={17} /></span>
+        <span className={`htu-concept-icon ${paletteClass}`}><Icon name={concept.icon} size={17} /></span>
         <span className="htu-concept-name">{concept.name}</span>
         <span className="htu-concept-toggle">{open ? '▾' : '▸'}</span>
       </button>
@@ -1036,7 +1042,7 @@ function Principles() {
       <div className="htu-principle-grid">
         {PRINCIPLES.map((p, i) => (
           <div key={i} className="htu-principle">
-            <div className="htu-principle-title">{p.title}</div>
+            <div className="htu-principle-title"><span className="htu-principle-mark">◆</span>{p.title}</div>
             <div className="htu-principle-body">{p.body}</div>
           </div>
         ))}
