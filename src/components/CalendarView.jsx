@@ -120,12 +120,6 @@ export default function CalendarView({ projectFilter }) {
   const monthName = cursor.toLocaleString('en', { month: 'long' });
   const monthYear = cursor.getFullYear();
 
-  const legendProjects = useMemo(() => {
-    if (projectFilter !== 'all') return [];
-    const usedIds = new Set(filtered.map((t) => t.projectId).filter(Boolean));
-    return projects.filter((p) => usedIds.has(p.id));
-  }, [projects, filtered, projectFilter]);
-
   if (loading) return <p className="muted">Loading calendar…</p>;
 
   return (
@@ -164,15 +158,6 @@ export default function CalendarView({ projectFilter }) {
             >{s.label}</button>
           ))}
         </div>
-        {legendProjects.length > 0 && (
-          <div className="cal-legend">
-            {legendProjects.map((p) => (
-              <span key={p.id} className="cal-legend-item">
-                <span className="cal-legend-dot" style={{ background: p.color }} />{p.name}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
