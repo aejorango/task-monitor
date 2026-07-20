@@ -102,7 +102,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   // "All projects" — a single-project filter already shows one board.
   const canGroupByProject = projectFilter === 'all' && projects.length > 0;
   const showProjectSegments = canGroupByProject && groupByProject;
-  const isSegmentExpanded = (id) => expandedSegments[id] !== undefined ? expandedSegments[id] : false;
+  const isSegmentExpanded = (id) => expandedSegments[id] !== undefined ? expandedSegments[id] : true;
   const toggleSegment = (id) => setExpandedSegments((prev) => ({ ...prev, [id]: !isSegmentExpanded(id) }));
 
   const projectSegments = showProjectSegments
