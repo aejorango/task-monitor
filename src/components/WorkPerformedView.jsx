@@ -41,6 +41,8 @@ export default function WorkPerformedView({ projectFilter }) {
   const [loggingTask, setLoggingTask] = useState(null);    // → ActivityLogger
   const [editingActivity, setEditingActivity] = useState(null); // → ActivityEditor
 
+  const today = todayLocal();
+
   const [expandedId,   setExpandedId]   = useState(null);
   const [dateFrom,     setDateFrom]     = useState('');
   const [dateTo,       setDateTo]       = useState('');
@@ -280,13 +282,16 @@ export default function WorkPerformedView({ projectFilter }) {
               const dayHours      = dayActivities.reduce((s, a) => s + (a.hoursSpent || 0), 0);
               const dateMatrix    = matrix[date] || {};
 
+              const isToday = date === today;
+
               return (
                 <Fragment key={date}>
                   {/* Full-width date separator bar */}
                   <div
-                    className="wp-sl-date-bar"
+                    className={`wp-sl-date-bar${isToday ? ' today' : ''}`}
                     style={{ gridColumn: `1 / ${laneIds.length + 2}` }}
                   >
+                    {isToday && <span className="wp-sl-date-badge">{date.slice(-2)}</span>}
                     <span className="wp-sl-date-text">{friendlyDate(date)}</span>
                     {dayHours > 0 && (
                       <span className="wp-sl-date-hours">{dayHours.toFixed(1)}h</span>
@@ -433,7 +438,10 @@ function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle, onEdit }) 
       <div className="wp-node-header">
         <span className="wp-node-title">{a.taskTitle || '(untitled task)'}</span>
         {a.hoursSpent > 0 && (
-          <span className="wp-node-badge" style={{ background: color + '22', color }}>
+          <span
+            className="wp-node-badge"
+            style={{ background: `color-mix(in srgb, ${color} 20%, transparent)`, color }}
+          >
             ⏱ {a.hoursSpent}h
           </span>
         )}
@@ -443,22 +451,28 @@ function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle, onEdit }) 
 
       {isOpen && (
         <div className="wp-node-details">
-          {a.phaseId && proj?.phases?.find(p => p.id === a.phaseId) && (
-            <span className="phase-tag" style={{ fontSize: 10, padding: '1px 6px' }}>
-              {proj.phases.find(p => p.id === a.phaseId).name}
-            </span>
-          )}
-          {compStatus && (
-            <span
-              className="badge"
-              style={{ background: compStatus.bg + '22', color: compStatus.bg, fontSize: 11 }}
-            >
-              {compStatus.label}
-            </span>
-          )}
-          {a.statusAtTime && (
-            <span className="badge badge-soft-muted">Task: {a.statusAtTime}</span>
-          )}
+          <div className="wp-node-tags">
+            {a.phaseId && proj?.phases?.find(p => p.id === a.phaseId) && (
+              <span className="phase-tag" style={{ fontSize: 10, padding: '1px 6px' }}>
+                {proj.phases.find(p => p.id === a.phaseId).name}
+              </span>
+            )}
+            {compStatus && (
+              <span
+                className="badge"
+                style={{
+                  background: `color-mix(in srgb, ${compStatus.bg} 18%, transparent)`,
+                  color: compStatus.bg,
+                  fontSize: 11,
+                }}
+              >
+                {compStatus.label}
+              </span>
+            )}
+            {a.statusAtTime && (
+              <span className="badge badge-soft-muted">Task: {a.statusAtTime}</span>
+            )}
+          </div>
           {a.requestedBy && (
             <div className="wp-node-meta">
               <span className="muted small">Requested by:</span>
@@ -494,7 +508,19 @@ function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle, onEdit }) 
       )}
 
       <div className="wp-node-footer">
-        <span className="muted" style={{ fontSize: 10 }}>{a.date}</span>
+        {!isOpen && compStatus ? (
+          <span
+            className="badge"
+            style={{
+              background: `color-mix(in srgb, ${compStatus.bg} 18%, transparent)`,
+              color: compStatus.bg,
+            }}
+          >
+            {compStatus.label}
+          </span>
+        ) : (
+          <span className="muted" style={{ fontSize: 10 }}>{a.date}</span>
+        )}
         <span className="muted" style={{ fontSize: 10 }}>{isOpen ? '▲' : '▼'}</span>
       </div>
     </button>

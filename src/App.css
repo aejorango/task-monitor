@@ -4287,7 +4287,12 @@ a:hover { text-decoration: underline; }
   align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 0 0 20px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 18px;
 }
 .wp-filter-group {
   display: flex;
@@ -4295,9 +4300,9 @@ a:hover { text-decoration: underline; }
   gap: 4px;
 }
 .wp-filter-group label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--c-text-2);
+  color: var(--c-text-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -4307,8 +4312,8 @@ a:hover { text-decoration: underline; }
 .wp-filter-group select {
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--r-xl);
-  border: 1.5px solid var(--c-border);
+  border-radius: var(--r-lg);
+  border: 1.5px solid transparent;
   background: var(--c-surface-2);
   color: var(--c-text);
   font-size: 13px;
@@ -4349,6 +4354,7 @@ a:hover { text-decoration: underline; }
   border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--c-surface);
+  box-shadow: var(--shadow-card);
 }
 
 /* ── Corner cell (top-left) ── */
@@ -4424,8 +4430,25 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 10px;
+  transition: background 0.15s;
+}
+.wp-sl-date-bar.today {
+  background: color-mix(in srgb, var(--c-accent) 10%, var(--c-surface-2));
+}
+.wp-sl-date-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
 }
 .wp-sl-date-text {
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   color: var(--c-text);
@@ -4433,11 +4456,17 @@ a:hover { text-decoration: underline; }
 }
 .wp-sl-date-hours {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-border);
+}
+.wp-sl-date-bar.today .wp-sl-date-hours {
   background: var(--c-accent-soft);
   color: var(--c-accent);
-  padding: 1px 8px;
-  border-radius: var(--r-pill);
+  border-color: transparent;
 }
 
 /* ── Date label cell (first column per date row) ── */
@@ -4507,12 +4536,12 @@ a:hover { text-decoration: underline; }
 }
 .wp-node-card:hover {
   border-color: var(--node-color, var(--c-accent));
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
-  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.12);
+  transform: translateY(-2px);
 }
 .wp-node-card.open {
   border-color: var(--node-color, var(--c-accent));
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.14);
 }
 
 .wp-node-header {
@@ -4556,17 +4585,27 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  align-items: flex-start;
+  gap: 6px;
+}
+.wp-node-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 .wp-node-meta {
   display: flex;
   gap: 6px;
   align-items: baseline;
+  align-self: stretch;
   font-size: 11px;
 }
+.wp-card-bottleneck { align-self: stretch; }
 .wp-node-actions {
   display: flex;
   justify-content: flex-end;
+  align-self: stretch;
   margin-top: 2px;
 }
 .wp-node-edit {
@@ -4590,6 +4629,11 @@ a:hover { text-decoration: underline; }
   margin-top: 6px;
   padding-top: 5px;
   border-top: 1px dashed var(--c-border);
+}
+.wp-node-footer .badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
 }
 
 /* ── Mobile ── */
