@@ -59,6 +59,31 @@ export default function SettingsView() {
   const displayName = currentUser?.displayName || currentUser?.email || 'Signed out';
   const photoURL = currentUser?.photoURL;
   const isSuperadmin = profile?.role === 'superadmin' && profile?.status === 'approved';
+  const [activeId, setActiveId] = useState('workspaces');
+  const scrollTo = (id) => {
+    setActiveId(id);
+    const el = document.getElementById(`settings-${id}`);
+    if (!el) return;
+    if (el.tagName === 'DETAILS') el.open = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const tocSections = [
+    { id: 'workspaces',    label: 'Workspaces' },
+    { id: 'appearance',    label: 'Appearance' },
+    { id: 'account',       label: 'Account' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'defaults',      label: 'Defaults' },
+    { id: 'data',          label: 'Your data on this device' },
+    ...(isSuperadmin ? [
+      { id: 'companies', label: 'Companies' },
+      { id: 'users',     label: 'User Management' },
+    ] : [
+      { id: 'ai', label: 'AI access' },
+    ]),
+    ...(isSuperadmin ? [{ id: 'ai-fallback', label: 'AI — superadmin fallback' }] : []),
+    { id: 'webhooks', label: 'Webhooks' },
+    { id: 'about',    label: 'About this device' },
+  ];
 
   // Keep permission state fresh
   useEffect(() => {
@@ -195,9 +220,25 @@ export default function SettingsView() {
         </div>
       </div>
 
+      <div className="htu-layout">
+        <aside className="htu-toc">
+          <div className="htu-toc-label">On this page</div>
+          {tocSections.map((s) => (
+            <button
+              key={s.id}
+              className={`htu-toc-link ${activeId === s.id ? 'active' : ''}`}
+              onClick={() => scrollTo(s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </aside>
+
+        <div className="htu-content">
+
       <WorkspacesSection currentUser={currentUser} />
 
-      <section className="settings-hero">
+      <section id="settings-appearance" className="settings-hero htu-section">
         <div className="settings-hero-head">
           <div>
             <h2 className="review-h2-accent settings-hero-title">Appearance</h2>
@@ -222,7 +263,7 @@ export default function SettingsView() {
       </section>
 
       <div className="review-2col">
-        <section className="review-section">
+        <section id="settings-account" className="review-section htu-section">
           <h2 className="review-h2-accent">Account</h2>
           <div className="account-row">
             {photoURL ? (
@@ -270,7 +311,7 @@ export default function SettingsView() {
           </p>
         </section>
 
-        <section className="review-section">
+        <section id="settings-notifications" className="review-section htu-section">
           <h2 className="review-h2-accent">Notifications</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span className={`badge badge-soft-${notifPerm === 'granted' ? 'success' : notifPerm === 'denied' ? 'danger' : 'muted'}`}>
@@ -288,7 +329,7 @@ export default function SettingsView() {
           </p>
         </section>
 
-        <section className="review-section">
+        <section id="settings-defaults" className="review-section htu-section">
           <h2 className="review-h2-accent">Defaults</h2>
 
           <div className="field-row">
@@ -319,7 +360,7 @@ export default function SettingsView() {
           </div>
         </section>
 
-        <section className="review-section">
+        <section id="settings-data" className="review-section htu-section">
           <h2 className="review-h2-accent">Your data on this device</h2>
           <p className="muted small">
             Anonymous session <span className="mono">{userId}</span>. {projects.length} projects,
@@ -345,65 +386,71 @@ export default function SettingsView() {
 
       {!isSuperadmin && <MyCompanyAiStatus profile={profile} />}
 
-      {isSuperadmin && (
-        <section className="review-section">
-          <h2 className="review-h2-accent">AI — superadmin fallback</h2>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Personal, browser-only key used <strong>only when no company key is
-            available</strong> (e.g. you haven't assigned yourself to a company yet).
-            All other users' AI calls are billed to their assigned company's key.
-            Need a key? Contact <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
-          </p>
-          <div className="field">
-            <label className="label">AI API key</label>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                type={aiKeyVisible ? 'text' : 'password'}
-                className="input"
-                value={anthroKey}
-                onChange={(e) => setAnthroKey(e.target.value)}
-                placeholder="Paste API key…"
-                autoComplete="off"
-              />
-              <button type="button" className="btn btn-sm" onClick={() => setAiKeyVisible(!aiKeyVisible)}>
-                {aiKeyVisible ? 'Hide' : 'Show'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setAnthropicKey(anthroKey.trim());
-                  setAnthropicModel(anthroModel.trim() || 'claude-sonnet-4-5-20250929');
-                  alert(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
-                }}
-              >Save</button>
-            </div>
-          </div>
-          <div className="field">
-            <label className="label">Model</label>
-            <input
-              type="text"
-              className="input"
-              value={anthroModel}
-              onChange={(e) => setAnthroModel(e.target.value)}
-              placeholder="Leave blank for default"
-            />
-            <p className="muted small" style={{ marginTop: 4 }}>
-              Leave blank to use the default model. Override only if instructed.
+      {isSuperadmin ? (
+        <div className="review-2col">
+          <CollapsibleSection id="settings-ai-fallback" title="AI — superadmin fallback">
+            <p className="muted small" style={{ marginTop: 0 }}>
+              Personal, browser-only key used <strong>only when no company key is
+              available</strong> (e.g. you haven't assigned yourself to a company yet).
+              All other users' AI calls are billed to their assigned company's key.
+              Need a key? Contact <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
             </p>
-          </div>
-        </section>
+            <div className="field">
+              <label className="label">AI API key</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type={aiKeyVisible ? 'text' : 'password'}
+                  className="input"
+                  value={anthroKey}
+                  onChange={(e) => setAnthroKey(e.target.value)}
+                  placeholder="Paste API key…"
+                  autoComplete="off"
+                />
+                <button type="button" className="btn btn-sm" onClick={() => setAiKeyVisible(!aiKeyVisible)}>
+                  {aiKeyVisible ? 'Hide' : 'Show'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setAnthropicKey(anthroKey.trim());
+                    setAnthropicModel(anthroModel.trim() || 'claude-sonnet-4-5-20250929');
+                    alert(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
+                  }}
+                >Save</button>
+              </div>
+            </div>
+            <div className="field">
+              <label className="label">Model</label>
+              <input
+                type="text"
+                className="input"
+                value={anthroModel}
+                onChange={(e) => setAnthroModel(e.target.value)}
+                placeholder="Leave blank for default"
+              />
+              <p className="muted small" style={{ marginTop: 4 }}>
+                Leave blank to use the default model. Override only if instructed.
+              </p>
+            </div>
+          </CollapsibleSection>
+
+          <WebhooksSection userId={userId} />
+        </div>
+      ) : (
+        <WebhooksSection userId={userId} />
       )}
 
-      <WebhooksSection userId={userId} />
-
-      <section className="review-section">
+      <section id="settings-about" className="review-section review-section-plain htu-section">
         <h2 className="review-h2">About this device</h2>
         <p className="muted small">
           Your data is stored in Firebase Firestore (project <span className="mono">task-monitor-cbaf2</span>)
           and synced to your Google account, so it appears on every device you sign in from.
         </p>
       </section>
+
+        </div>
+      </div>
     </>
   );
 }
@@ -437,6 +484,22 @@ function ThemeTile({ value, label, active, onClick }) {
         {label}
       </div>
     </button>
+  );
+}
+
+// Collapsed-by-default section — native <details> so no extra state is
+// needed. Header keeps the same accent-dot title look as the other cards.
+function CollapsibleSection({ id, title, children }) {
+  return (
+    <details id={id} className="review-section settings-collapsible htu-section">
+      <summary className="settings-collapsible-summary">
+        <span className="settings-collapsible-title">{title}</span>
+        <svg className="settings-collapsible-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </summary>
+      <div className="settings-collapsible-body">{children}</div>
+    </details>
   );
 }
 
@@ -492,7 +555,7 @@ function WebhooksSection({ userId }) {
   const [editing, setEditing] = useState(null);
 
   return (
-    <section className="review-section">
+    <section id="settings-webhooks" className="review-section htu-section">
       <h2 className="review-h2">Webhooks</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
         POST a JSON payload to a URL when something changes. The HTTP delivery
@@ -626,7 +689,7 @@ function WorkspacesSection({ currentUser }) {
   const isAdmin = isOwner || active?.acl?.[currentUser?.uid] === 'admin';
 
   return (
-    <section className="review-section">
+    <section id="settings-workspaces" className="review-section htu-section">
       <h2 className="review-h2">Workspaces</h2>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
@@ -873,7 +936,7 @@ function UserManagementSection({ currentUid }) {
   };
 
   return (
-    <section className="review-section">
+    <section id="settings-users" className="review-section htu-section">
       <h2 className="review-h2">User Management</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
         Approve or reject sign-in requests. Superadmin emails
@@ -1050,8 +1113,7 @@ function CompaniesManagementSection() {
   };
 
   return (
-    <section className="review-section">
-      <h2 className="review-h2">Companies</h2>
+    <CollapsibleSection id="settings-companies" title="Companies">
       <p className="muted small" style={{ marginTop: 0 }}>
         Each company has its own AI API key. Users you assign to a
         company use that company's key for all AI features — so you can
@@ -1089,7 +1151,7 @@ function CompaniesManagementSection() {
           {companies.map((c) => <CompanyRow key={c.id} company={c} />)}
         </div>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }
 
@@ -1231,7 +1293,7 @@ function MyCompanyAiStatus({ profile }) {
 
   if (!companyId) {
     return (
-      <section className="review-section">
+      <section id="settings-ai" className="review-section htu-section">
         <h2 className="review-h2">AI access</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
           The AI feature is not available on your end. To enable it, contact
@@ -1244,7 +1306,7 @@ function MyCompanyAiStatus({ profile }) {
 
   const hasKey = !!(company?.anthropicApiKey || '').trim();
   return (
-    <section className="review-section">
+    <section id="settings-ai" className="review-section htu-section">
       <h2 className="review-h2">AI access</h2>
       {hasKey ? (
         <>

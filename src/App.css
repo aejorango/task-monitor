@@ -1765,6 +1765,54 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 
+/* Card with no visible chrome — blends into the page background */
+.review-section-plain {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Collapsed-by-default <details>-based section (Settings: Companies, AI fallback) */
+.settings-collapsible { padding: 0; }
+.settings-collapsible-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 18px;
+}
+.settings-collapsible-summary::-webkit-details-marker { display: none; }
+.settings-collapsible-summary::marker { content: ''; }
+.settings-collapsible-title {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--c-text);
+}
+.settings-collapsible-title::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.settings-collapsible-chevron {
+  color: var(--c-text-3);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.settings-collapsible[open] > .settings-collapsible-summary .settings-collapsible-chevron {
+  transform: rotate(180deg);
+}
+.settings-collapsible-body { padding: 0 18px 18px; }
+
 /* ─── Settings: Appearance hero + theme picker ───────────────────────────── */
 .settings-hero {
   background: linear-gradient(150deg, var(--c-sidebar-from), var(--c-sidebar-to));
