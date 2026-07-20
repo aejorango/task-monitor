@@ -7002,7 +7002,7 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .chat-msg.theirs .chat-bubble { background: var(--c-surface-2); color: var(--c-text); border-bottom-left-radius: 4px; }
-.chat-msg.mine .chat-bubble { background: var(--c-accent); color: #fff; border-bottom-right-radius: 4px; }
+.chat-msg.mine .chat-bubble { background: var(--c-blue-deep); color: #fff; border-bottom-right-radius: 4px; }
 .chat-msg-time { font-size: 11px; color: var(--c-text-3); margin: 3px 8px 0; opacity: 0; transition: opacity 0.15s ease; }
 .chat-msg:hover .chat-msg-time { opacity: 1; }
 
