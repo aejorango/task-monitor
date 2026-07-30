@@ -964,7 +964,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-2col" onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">{isNew ? 'New project' : 'Edit project'}</h3>
 
         {isNew && projectTemplates.length > 0 && (
@@ -988,122 +988,128 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
           </div>
         )}
 
-        <div className="field">
-          <label className="label">Name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BRIDGED Compliance" />
-        </div>
+        <div className="modal-2col-grid">
+          <div className="modal-col-left">
+            <div className="field">
+              <label className="label">Name</label>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BRIDGED Compliance" />
+            </div>
 
-        <div className="field">
-          <label className="label">Description</label>
-          <MarkdownEditor value={description} onChange={setDescription} rows={3} placeholder="What is this project about? Markdown supported." />
-        </div>
+            <div className="field">
+              <label className="label">Description</label>
+              <MarkdownEditor value={description} onChange={setDescription} rows={3} placeholder="What is this project about? Markdown supported." />
+            </div>
 
-        <div className="field">
-          <label className="label">Color</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {COLORS.map((c) => (
-              <button
-                type="button"
-                key={c}
-                onClick={() => setColor(c)}
-                title={c}
-                style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: c, border: color === c ? '2px solid var(--c-text)' : '2px solid transparent',
-                  cursor: 'pointer',
-                }}
-              />
-            ))}
+            <div className="field">
+              <label className="label">Phases</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {phases.map((p, i) => (
+                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 4 }}>
+                    <input className="input input-sm" value={p.name} onChange={(e) => updatePhase(p.id, e.target.value)} />
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0}>↑</button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1}>↓</button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1}>✕</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-sm" onClick={addPhase} style={{ alignSelf: 'flex-start', marginTop: 4 }}>+ Add phase</button>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="field">
-          <label className="label">Segment / Department</label>
-          <p className="muted small" style={{ marginTop: 0, marginBottom: 6 }}>
-            Organize projects by department (Sales, Finance, Engineering, etc.)
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, marginBottom: 6 }}>
-            {newSegmentInput ? (
-              <>
-                <input
-                  className="input"
-                  value={newSegmentInput}
-                  onChange={(e) => setNewSegmentInput(e.target.value)}
-                  placeholder="e.g. Sales, Finance, Engineering"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') addNewSegment();
-                    if (e.key === 'Escape') setNewSegmentInput('');
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={addNewSegment}
-                  disabled={!newSegmentInput.trim()}
-                >
-                  Create
-                </button>
-              </>
-            ) : (
-              <>
-                <select
-                  className="select"
-                  value={segment}
-                  onChange={(e) => {
-                    if (e.target.value === '__new__') {
-                      setNewSegmentInput('');
-                    } else {
-                      setSegment(e.target.value);
-                    }
-                  }}
-                >
-                  {allSegments.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                  <option value="__new__">+ Create new segment…</option>
-                </select>
-              </>
+          <div className="modal-col-right">
+            <div className="field">
+              <label className="label">Color</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {COLORS.map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    onClick={() => setColor(c)}
+                    title={c}
+                    style={{
+                      width: 24, height: 24, borderRadius: '50%',
+                      background: c, border: color === c ? '2px solid var(--c-text)' : '2px solid transparent',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="label">Segment / Department</label>
+              <p className="muted small" style={{ marginTop: 0, marginBottom: 6 }}>
+                Organize projects by department (Sales, Finance, Engineering, etc.)
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, marginBottom: 6 }}>
+                {newSegmentInput ? (
+                  <>
+                    <input
+                      className="input"
+                      value={newSegmentInput}
+                      onChange={(e) => setNewSegmentInput(e.target.value)}
+                      placeholder="e.g. Sales, Finance, Engineering"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') addNewSegment();
+                        if (e.key === 'Escape') setNewSegmentInput('');
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={addNewSegment}
+                      disabled={!newSegmentInput.trim()}
+                    >
+                      Create
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      className="select"
+                      value={segment}
+                      onChange={(e) => {
+                        if (e.target.value === '__new__') {
+                          setNewSegmentInput('');
+                        } else {
+                          setSegment(e.target.value);
+                        }
+                      }}
+                    >
+                      {allSegments.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                      <option value="__new__">+ Create new segment…</option>
+                    </select>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="field">
+              <AssigneePicker
+                candidates={candidates}
+                memberProfiles={memberProfiles}
+                assignedTo={assignedTo}
+                assignedToExternal={assignedToExternal}
+                onChange={({ assignedTo: a, assignedToExternal: e }) => {
+                  setAssignedTo(a);
+                  setAssignedToExternal(e);
+                }}
+                fallbackLabels={fallbackLabels}
+                label="Assigned to (project lead / responsible)"
+                helpText="Who owns this project? Click teammates to assign, or type an external name. This doesn't grant edit access — use Sharing below for that."
+              />
+            </div>
+
+            <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
+
+            {!isNew && (
+              <ProjectSharing project={project} />
             )}
           </div>
         </div>
-
-        <div className="field">
-          <label className="label">Phases</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {phases.map((p, i) => (
-              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 4 }}>
-                <input className="input input-sm" value={p.name} onChange={(e) => updatePhase(p.id, e.target.value)} />
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0}>↑</button>
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1}>↓</button>
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1}>✕</button>
-              </div>
-            ))}
-            <button type="button" className="btn btn-sm" onClick={addPhase} style={{ alignSelf: 'flex-start', marginTop: 4 }}>+ Add phase</button>
-          </div>
-        </div>
-
-        <div className="field">
-          <AssigneePicker
-            candidates={candidates}
-            memberProfiles={memberProfiles}
-            assignedTo={assignedTo}
-            assignedToExternal={assignedToExternal}
-            onChange={({ assignedTo: a, assignedToExternal: e }) => {
-              setAssignedTo(a);
-              setAssignedToExternal(e);
-            }}
-            fallbackLabels={fallbackLabels}
-            label="Assigned to (project lead / responsible)"
-            helpText="Who owns this project? Click teammates to assign, or type an external name. This doesn't grant edit access — use Sharing below for that."
-          />
-        </div>
-
-        <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
-
-        {!isNew && (
-          <ProjectSharing project={project} />
-        )}
 
         <div className="modal-actions">
           {!isNew && (

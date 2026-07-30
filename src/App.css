@@ -1000,6 +1000,29 @@ a:hover { text-decoration: underline; }
 }
 @keyframes modal-in { from { transform: scale(0.94) translateY(8px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
 
+/* Wider two-column modal variant — used by the Project editor so the long
+   form doesn't scroll forever. Left = identity (name/description/phases),
+   right = metadata (color/segment/assignees/custom fields/sharing). */
+.modal-2col {
+  max-width: 840px; /* base .modal is 560px — 1.5× */
+}
+.modal-2col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 28px;
+  align-items: start;
+}
+.modal-2col-grid > .modal-col-left,
+.modal-2col-grid > .modal-col-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .modal-2col { max-width: 560px; }
+  .modal-2col-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Task-done celebration ─────────────────────────────────── */
 .celebrate-backdrop {
   position: fixed;
