@@ -20,6 +20,7 @@ const GanttView         = lazy(() => import('./components/GanttView'));
 const CalendarView      = lazy(() => import('./components/CalendarView'));
 const DashboardView     = lazy(() => import('./components/DashboardView'));
 const ReviewView        = lazy(() => import('./components/ReviewView'));
+const ArtifactsView     = lazy(() => import('./components/ArtifactsView'));
 const AnalyticsView     = lazy(() => import('./components/AnalyticsView'));
 const InviteClaimView   = lazy(() => import('./components/InviteClaimView'));
 const ProjectsView      = lazy(() => import('./components/ProjectsView'));
@@ -150,6 +151,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'minutes'   && <MinutesView projectFilter={route.projectFilter} />}
         {route.view === 'calendar'  && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'review'         && <ReviewView />}
+        {route.view === 'artifacts'      && <ArtifactsView projectFilter={route.projectFilter} />}
         {route.view === 'analytics'      && <AnalyticsView projectFilter={route.projectFilter} />}
         {route.view === 'projects'       && <ProjectsView />}
         {route.view === 'settings'       && <SettingsView />}

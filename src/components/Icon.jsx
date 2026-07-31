@@ -140,6 +140,10 @@ const PATHS = {
       <path d="M8 13h8M8 17h5" />
     </>
   ),
+  // Paperclip — used for "Artifacts" (attached/linked documents)
+  artifacts: (
+    <path d="M21 11.5 12.5 20a4.5 4.5 0 0 1-6.36-6.36l8.6-8.6a3 3 0 0 1 4.24 4.24l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78" />
+  ),
   // Layered squares — used for "switch workspace"
   workspace: (
     <>
