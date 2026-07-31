@@ -235,6 +235,9 @@ export default function CalendarView({ projectFilter }) {
 
 function CalCell({ dateStr, inMonth, isToday, isWeekend, dayNum, dayTasks, projectById, onTaskClick }) {
   const { setNodeRef, isOver } = useDroppable({ id: dateStr });
+  const [expanded, setExpanded] = useState(false);
+  const visibleTasks = expanded ? dayTasks : dayTasks.slice(0, 3);
+  const hiddenCount = dayTasks.length - 3;
   return (
     <div
       ref={setNodeRef}
@@ -252,12 +255,12 @@ function CalCell({ dateStr, inMonth, isToday, isWeekend, dayNum, dayTasks, proje
         {dayTasks.length > 3 && <span className="muted small">{dayTasks.length} tasks</span>}
       </div>
       <div className="cal-cell-tasks">
-        {dayTasks.slice(0, 3).map((t) => (
+        {visibleTasks.map((t) => (
           <DraggableCalTask key={t.id} task={t} project={projectById[t.projectId]} onClick={() => onTaskClick(t)} />
         ))}
-        {dayTasks.length > 3 && (
-          <button className="cal-more" onClick={() => onTaskClick(dayTasks[3])}>
-            +{dayTasks.length - 3} more
+        {hiddenCount > 0 && (
+          <button className="cal-more" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? 'Show less' : `+${hiddenCount} more`}
           </button>
         )}
       </div>
