@@ -136,7 +136,17 @@ export default function ProjectsView() {
                           >Shared</span>
                         )}
                       </div>
-                      <p className="project-desc">{p.description || <span className="muted-2">No description</span>}</p>
+                      <div className="project-progress" title={`${s.done} of ${s.total} tasks done`}>
+                        <div className="project-progress-track">
+                          <div
+                            className="project-progress-fill"
+                            style={{ width: `${s.total > 0 ? Math.round((s.done / s.total) * 100) : 0}%` }}
+                          />
+                        </div>
+                        <span className="project-progress-label">
+                          {s.total > 0 ? Math.round((s.done / s.total) * 100) : 0}%
+                        </span>
+                      </div>
                       <ProjectAssigneeStrip project={p} />
                       <div className="project-phases">
                         {p.phases?.length > 0 ? p.phases.map((ph) => (
