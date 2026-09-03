@@ -16,6 +16,7 @@
 
 import {
   getEffectiveApiKey, getEffectiveModel, DEFAULT_MODEL, noKeyMessage,
+  isAiAllowedForUser,
 } from './aiCredentials';
 
 export const PROVIDERS = ['claude-code', 'api', 'mock'];
@@ -146,7 +147,12 @@ export async function detectProvider({ force = false } = {}) {
     const { provider, allowMock } = aiSettings();
     let next;
 
-    if (provider === 'claude-code') {
+    // Company-level switch first: a company the superadmin hasn't allowed
+    // gets no brain at all, not even the bridge or a mock. This is the same
+    // gate for every provider, so there is no way around it by picking one.
+    if (!isAiAllowedForUser()) {
+      next = 'none';
+    } else if (provider === 'claude-code') {
       await probeBridge();
       next = 'claude-code';                       // honoured even if down: askAI reports it
     } else if (provider === 'api' || provider === 'mock') {
@@ -193,6 +199,7 @@ export function aiStatus() {
     provider: mode,
     known: mode !== null,
     available: mode !== null && mode !== 'none',
+    allowed: isAiAllowedForUser(),
     bridge: { ..._bridge, url: aiSettings().bridgeUrl, enabled: bridgeEnabled() },
     hasApiKey: !!getEffectiveApiKey(),
     settings: aiSettings(),
@@ -203,6 +210,7 @@ export function aiStatus() {
 // present we already know AI works, otherwise we assume the bridge might be
 // there rather than flashing "not available" for a frame.
 export function isAiAvailable() {
+  if (!isAiAllowedForUser()) return false;
   const mode = currentProvider();
   if (mode === null) return !!getEffectiveApiKey() || bridgeEnabled();
   return mode !== 'none';

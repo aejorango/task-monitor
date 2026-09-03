@@ -290,6 +290,9 @@ export async function addCompany(creatorUid, company) {
     name: company.name?.trim() || 'New company',
     anthropicApiKey: (company.anthropicApiKey || '').trim(),
     anthropicModel:  (company.anthropicModel  || DEFAULT_AI_MODEL).trim(),
+    // Per-company AI switch. New companies start allowed; a superadmin can
+    // revoke access from Settings → Companies without touching the key.
+    aiEnabled: company.aiEnabled !== false,
     createdByUserId: creatorUid,
     deleted: false,
     createdAt: serverTimestamp(),

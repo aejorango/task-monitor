@@ -81,8 +81,8 @@ export default function SettingsView() {
     ...(isSuperadmin ? [
       { id: 'companies', label: 'Companies' },
       { id: 'users',     label: 'User Management' },
+      { id: 'ai-brain',  label: 'AI brain' },
     ] : [
-      { id: 'ai-brain', label: 'AI brain' },
       { id: 'ai', label: 'AI access' },
     ]),
     ...(isSuperadmin ? [{ id: 'ai-fallback', label: 'AI — superadmin fallback' }] : []),
@@ -389,7 +389,7 @@ export default function SettingsView() {
       {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
 
-      <AiBrainSection />
+      {isSuperadmin && <AiBrainSection />}
 
       {!isSuperadmin && <MyCompanyAiStatus profile={profile} />}
 
@@ -1280,7 +1280,9 @@ function CompaniesManagementSection() {
       <p className="muted small" style={{ marginTop: 0 }}>
         Each company has its own AI API key. Users you assign to a
         company use that company's key for all AI features — so you can
-        budget AI token spend per company. Need a key? Contact{' '}
+        budget AI token spend per company. <strong>Enable AI</strong> on a row
+        grants that company access to the AI brain; members never see the AI
+        brain settings themselves. Need a key? Contact{' '}
         <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
       </p>
 
@@ -1322,6 +1324,8 @@ function CompanyRow({ company }) {
   const [name, setName]     = useState(company.name || '');
   const [apiKey, setApiKey] = useState(company.anthropicApiKey || '');
   const [model, setModel]   = useState(company.anthropicModel  || 'claude-sonnet-4-5-20250929');
+  // Legacy companies predate the switch, so a missing field means "allowed".
+  const [aiEnabled, setAiEnabled] = useState(company.aiEnabled !== false);
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
@@ -1337,11 +1341,14 @@ function CompanyRow({ company }) {
   useEffect(() => { setApiKey(company.anthropicApiKey || ''); }, [company.anthropicApiKey]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setModel(company.anthropicModel || 'claude-sonnet-4-5-20250929'); }, [company.anthropicModel]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setAiEnabled(company.aiEnabled !== false); }, [company.aiEnabled]);
 
   const dirty =
     name.trim() !== (company.name || '') ||
     apiKey.trim() !== (company.anthropicApiKey || '') ||
-    model.trim() !== (company.anthropicModel || 'claude-sonnet-4-5-20250929');
+    model.trim() !== (company.anthropicModel || 'claude-sonnet-4-5-20250929') ||
+    aiEnabled !== (company.aiEnabled !== false);
 
   const save = async () => {
     if (!name.trim()) { alert('Company name cannot be empty.'); return; }
@@ -1351,6 +1358,7 @@ function CompanyRow({ company }) {
         name: name.trim(),
         anthropicApiKey: apiKey,
         anthropicModel:  model || 'claude-sonnet-4-5-20250929',
+        aiEnabled,
       });
       setSavedAt(Date.now());
       setTimeout(() => setSavedAt(null), 2500);
@@ -1369,6 +1377,26 @@ function CompanyRow({ company }) {
     finally { setBusy(false); }
   };
 
+  // Flipping AI access is a one-click decision, so it commits on its own
+  // rather than waiting for Save — the row's other fields are text you edit
+  // then confirm, this is a switch you throw.
+  const toggleAi = async () => {
+    const next = !aiEnabled;
+    if (!next && !confirm(`Turn AI off for "${company.name}"? Its members lose every AI feature until you turn it back on.`)) return;
+    setAiEnabled(next);
+    setBusy(true);
+    try {
+      await updateCompany(company.id, { aiEnabled: next });
+      setSavedAt(Date.now());
+      setTimeout(() => setSavedAt(null), 2500);
+    } catch (err) {
+      setAiEnabled(!next);   // roll back the optimistic flip
+      alert('Failed to change AI access: ' + (err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const keyStatus = (company.anthropicApiKey || '').trim()
     ? <span className="badge badge-soft-success">key set</span>
     : <span className="badge badge-soft-warn">no key</span>;
@@ -1384,8 +1412,22 @@ function CompanyRow({ company }) {
           placeholder="Company name"
         />
         {keyStatus}
+        {aiEnabled
+          ? <span className="badge badge-soft-success">AI brain: on</span>
+          : <span className="badge badge-soft-warn">AI brain: off</span>}
         <div style={{ flex: 1 }} />
         {savedAt && <span className="badge badge-soft-success">✓ Saved</span>}
+        <button
+          type="button"
+          className={`btn btn-sm ${aiEnabled ? 'btn-ghost link-danger' : 'btn-primary'}`}
+          onClick={toggleAi}
+          disabled={busy}
+          title={aiEnabled
+            ? 'Revoke this company\u2019s access to the AI brain'
+            : 'Allow this company to use the AI brain'}
+        >
+          {aiEnabled ? 'Disable AI' : 'Enable AI'}
+        </button>
         <button className="btn btn-sm" onClick={save} disabled={busy || !dirty}>
           {busy ? 'Saving…' : 'Save'}
         </button>
@@ -1468,10 +1510,13 @@ function MyCompanyAiStatus({ profile }) {
   }
 
   const hasKey = !!(company?.anthropicApiKey || '').trim();
+  // The superadmin can revoke AI for a whole company without removing its
+  // key, so an existing key is not on its own proof of access.
+  const aiAllowed = company?.aiEnabled !== false;
   return (
     <section id="settings-ai" className="review-section htu-section">
       <h2 className="review-h2">AI access</h2>
-      {hasKey ? (
+      {hasKey && aiAllowed ? (
         <>
           <p className="muted small" style={{ marginTop: 0 }}>
             Your AI usage is provided by <strong>{company?.name || 'your company'}</strong>.

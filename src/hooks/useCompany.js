@@ -20,6 +20,7 @@ import {
   setCurrentCompanyContext,
   clearCurrentCompanyContext,
 } from '../services/anthropic';
+import { recheckProvider } from '../services/ai';
 
 // Sync the AI client with the current user's company. Returns the resolved
 // company doc (or null) so callers can show contextual UI.
@@ -30,6 +31,7 @@ export function useMyCompany(profile) {
   useEffect(() => {
     if (!companyId) {
       clearCurrentCompanyContext();
+      recheckProvider();
       return;
     }
     const unsub = subscribeToCompany(companyId, (c) => {
@@ -40,10 +42,16 @@ export function useMyCompany(profile) {
           name: c.name,
           apiKey: c.anthropicApiKey || '',
           model:  c.anthropicModel  || '',
+          // Missing field = legacy company created before the switch existed;
+          // treat it as allowed so nobody loses AI on upgrade.
+          aiEnabled: c.aiEnabled !== false,
         });
       } else {
         clearCurrentCompanyContext();
       }
+      // The provider is cached for 60s; a superadmin flipping the switch
+      // should take effect on this user's next question, not a minute later.
+      recheckProvider();
     });
     return () => {
       unsub();

@@ -206,7 +206,7 @@ export default function AskAiView() {
           {!aiOn && (
             <p className="askai-note">
               AI narration is off for your account, so answers are written from your data locally.
-              An admin can enable it in Settings → AI.
+              An admin can connect one in Settings.
             </p>
           )}
 

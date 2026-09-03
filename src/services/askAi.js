@@ -974,7 +974,7 @@ Request: ${question}`;
   } else {
     raw = localParseAction(question, digest);
     if (!raw) {
-      return { clarify: 'I need an AI brain connected to interpret that request. Connect one in Settings → AI, or add it from the Projects / Board views.' };
+      return { clarify: 'I need an AI brain connected to interpret that request — an admin can connect one in Settings. In the meantime you can add it directly from the Projects or Board views.' };
     }
   }
 
@@ -1234,7 +1234,18 @@ export async function applyAction(proposal, { userId, digest }) {
     return { label: `${payload.activity.date} · ${t.title}`, hash, url: appUrl(hash), taskId: t.id };
   }
   const existing = (digest.activityLog || []).find((a) => a.id === targetId);
-  const raw = existing ? { id: existing.id, taskId: existing.taskId, hoursSpent: existing.hours, attachments: [] } : null;
+  // editActivity/deleteActivity only read attachments.length to compute the
+  // task's attachmentCount delta, and the digest carries that count (not the
+  // array), so stand in an array of the right length. An empty one here would
+  // silently leave attachmentCount too high after a delete.
+  const raw = existing
+    ? {
+        id: existing.id,
+        taskId: existing.taskId,
+        hoursSpent: existing.hours,
+        attachments: new Array(existing.attachments || 0).fill(null),
+      }
+    : null;
   if (!raw) throw new Error('That activity entry no longer exists.');
   if (op === 'update') {
     await editActivity(raw, payload.updates);

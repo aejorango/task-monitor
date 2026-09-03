@@ -37,24 +37,39 @@ export function setModel(model) {
 let _companyKey   = '';
 let _companyModel = '';
 let _companyMeta  = null;   // { id, name } for diagnostics
+let _companyAi    = true;   // company-level AI switch (aiEnabled on the doc)
 let _userRole     = '';     // '', 'user', or 'superadmin'
 
 export function setCurrentUserRole(role) { _userRole = role || ''; }
 
-export function setCurrentCompanyContext({ apiKey, model, id, name } = {}) {
+export function setCurrentCompanyContext({ apiKey, model, id, name, aiEnabled } = {}) {
   _companyKey   = apiKey || '';
   _companyModel = model  || '';
   _companyMeta  = (id || name) ? { id: id || null, name: name || '' } : null;
+  // Absent field on legacy docs means "allowed" — only an explicit false
+  // (the superadmin flipping the switch off) revokes access.
+  _companyAi    = aiEnabled !== false;
 }
 export function clearCurrentCompanyContext() {
   _companyKey = '';
   _companyModel = '';
   _companyMeta = null;
+  _companyAi = true;
 }
 export function getCurrentCompanyMeta() { return _companyMeta; }
 export function isUsingCompanyKey() { return !!_companyKey; }
 
+// Is this user's company allowed to reach the AI brain at all? The AI brain
+// panel is superadmin-only UI, but *access* is granted per company from
+// Settings → Companies, so this is the one gate every provider respects.
+// Superadmins are never locked out — they are the ones granting access.
+export function isAiAllowedForUser() {
+  if (_userRole === 'superadmin') return true;
+  return _companyAi;
+}
+
 export function getEffectiveApiKey() {
+  if (!isAiAllowedForUser()) return '';
   if (_companyKey) return _companyKey;
   if (_userRole === 'superadmin') return getApiKey();
   return '';
@@ -67,6 +82,10 @@ export function getEffectiveModel() {
 
 // The message shown when no API key is available AND no other brain is live.
 export function noKeyMessage() {
+  if (!isAiAllowedForUser()) {
+    const who = _companyMeta?.name ? `"${_companyMeta.name}"` : 'your company';
+    return `AI features are turned off for ${who}. Contact your company admin or reach out to hello@blueinnovation.ph to enable them.`;
+  }
   if (_companyMeta) {
     return `The AI feature is not available on your end — "${_companyMeta.name}" hasn't enabled it yet. Contact your company admin or reach out to hello@blueinnovation.ph to enable.`;
   }
