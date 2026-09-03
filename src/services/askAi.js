@@ -249,9 +249,14 @@ export function buildDigest({
     const own = activityLog.filter((a) => a.taskId === t.id);
     return {
       id: t.id, title: t.title || 'Untitled task', status: t.status,
+      description: (t.description || '').trim(),
+      priority: t.priority || 'medium',
+      tags: t.tags || [],
       projectId: t.projectId, project: projName(t.projectId), color: projColor(t.projectId),
       due: t.plan?.endDate || null,
+      start: t.plan?.startDate || null,
       overdue: !!(t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today),
+      blocked: own.some((a) => a.status === 'blocked' || a.bottleneck),
       hours: num(t.totalHoursLogged),
       activityCount: own.length,
       lastEntry: own[0] || null,
@@ -317,6 +322,13 @@ function topThemes(acts, limit = 3) {
 export function routeIntent(q, digest) {
   const w = (q || '').toLowerCase();
 
+  // "find the tasks about X" / "which tasks are overdue in Y" is a request to
+  // search the task list. It beats everything below, or a question naming a
+  // task the user just created gets answered with a workload report that
+  // never mentions it.
+  const search = parseSearch(w, digest);
+  if (search?.strong) return { key: 'search', ...search };
+
   // A named project or task beats any keyword — "how is X going" is a question
   // about X. Longest name wins so "Partner API integration" is not shadowed by
   // a project called "API".
@@ -328,6 +340,15 @@ export function routeIntent(q, digest) {
     .sort((a, b) => b.n.length - a.n.length)[0];
   if (named) return named.hit;
 
+  const kw = keywordIntent(w);
+  if (kw) return kw;
+
+  // A bare "find/search …" with no topic keyword still means: go look.
+  if (search) return { key: 'search', ...search };
+  return null;
+}
+
+function keywordIntent(w) {
   if (/activity log|activities|logged entr|log entr|what was logged|entries/.test(w)) return { key: 'activity' };
   if (/block|bottleneck|stuck|waiting/.test(w))                        return { key: 'blockers' };
   if (/overload|capacity|who|busy|workload|assign|team/.test(w))       return { key: 'people' };
@@ -338,6 +359,131 @@ export function routeIntent(q, digest) {
   if (/project/.test(w))                                               return { key: 'risk' };
   if (/task/.test(w))                                                  return { key: 'people' };
   return null;
+}
+
+/* ── task search ─────────────────────────────────────────────────────────
+   Turns "find me the SBLAF tasks that are still overdue" into a set of
+   filters plus the words worth matching, then ranks every live task against
+   them. The result is a clickable list, not prose — the model narrates it
+   but never decides what is in it. */
+
+const SEARCH_VERB = /\b(find|search|look\s+for|looking\s+for|locate|filter)\b/;
+const SEARCH_LIST = new RegExp([
+  '\\b(?:show|list|display|give|pull|get)\\s+(?:me\\s+)?(?:the\\s+|all\\s+|any\\s+|my\\s+)*tasks?\\b',
+  '\\b(?:which|what|any|whose|how\\s+many)\\s+(?:of\\s+)?(?:my\\s+|the\\s+|all\\s+)?tasks?\\b',
+  '\\bdo\\s+(?:i|we)\\s+have\\s+(?:a|any)\\s+tasks?\\b',
+  '\\btasks?\\s+(?:about|named|called|containing|with|matching|related\\s+to|regarding|involving|mentioning|under|tagged)\\b',
+  '\\ball\\s+(?:my\\s+|the\\s+)?tasks?\\b',
+].join('|'));
+
+// Words that carry no search signal once the intent is known.
+const SEARCH_STOP = new Set((
+  'a an the my our your all any some each of for on in at about with to from by is are was were be been ' +
+  'do does did i we us me you it its this that these those there here and or not no non ' +
+  'please pls can could would show me list display give pull get find search searching look looking locate filter ' +
+  'task tasks todo todos to-do item items thing things which what who whose where when how many much ' +
+  'have has had need needs want wants related regarding containing named called matching mentioning involving ' +
+  'under tagged tag tags still yet again just now currently right'
+).split(/\s+/));
+
+// Each filter narrows the candidate set AND consumes its own words, so
+// "overdue" never doubles as a keyword nothing will ever match.
+const SEARCH_FILTERS = [
+  { label: 'overdue',     re: /\boverdue\b|\bpast\s+due\b|\blate\b/g,                                    pass: (t) => t.overdue },
+  { label: 'blocked',     re: /\bblocked\b|\bblockers?\b|\bstuck\b/g,                                     pass: (t) => t.blocked },
+  { label: 'done',        re: /\bdone\b|\bcompleted?\b|\bfinished\b|\bclosed\b/g,                        pass: (t) => t.status === 'done' },
+  { label: 'in progress', re: /\bin[-\s]?progress\b|\bdoing\b|\bongoing\b|\bstarted\b/g,                 pass: (t) => t.status === 'doing' },
+  { label: 'not started', re: /\bnot[-\s]started\b|\bunstarted\b|\bbacklog\b/g,                          pass: (t) => t.status === 'todo' },
+  { label: 'open',        re: /\bopen\b|\bunfinished\b|\bincomplete\b|\boutstanding\b|\bpending\b|\bremaining\b/g, pass: (t) => t.status !== 'done' },
+  { label: 'unassigned',  re: /\bunassigned\b|\bnobody\b|\bno[-\s]one\b/g,                                pass: (t) => !t.assignees.length },
+  { label: 'high priority', re: /\bhigh[-\s]priority\b|\burgent\b|\bcritical\b/g,                        pass: (t) => t.priority === 'high' },
+  { label: 'due today',   re: /\bdue\s+today\b|\btoday\b/g,                                              pass: (t, d) => t.due === d.today },
+];
+
+// → { terms, filters, label, strong } or null when this isn't a search.
+export function parseSearch(raw, digest) {
+  let w = String(raw || '').toLowerCase().trim();
+  if (!w) return null;
+  const mentionsTask = /\btasks?\b|\bto-?dos?\b/.test(w);
+  const verb = SEARCH_VERB.test(w);
+  const listy = SEARCH_LIST.test(w);
+  if (!verb && !listy) return null;
+
+  // A quoted phrase is taken literally — "find tasks about \"partial release\"".
+  const phrases = [];
+  w = w.replace(/["'\u201c\u201d]([^"'\u201c\u201d]{2,})["'\u201c\u201d]/g, (_, p) => { phrases.push(p.trim()); return ' '; });
+
+  const filters = [];
+
+  // A project named in the query scopes the search instead of being matched
+  // as loose words — "overdue tasks in Website revamp" means that project.
+  (digest?.projects || [])
+    .filter((p) => p.name && p.name.length >= 4 && w.includes(p.name.toLowerCase()))
+    .sort((a, b) => b.name.length - a.name.length)
+    .slice(0, 1)
+    .forEach((p) => {
+      filters.push({ label: p.name, scope: true, pass: (t) => t.projectId === p.id });
+      w = w.split(p.name.toLowerCase()).join(' ');
+    });
+
+  SEARCH_FILTERS.forEach((f) => {
+    f.re.lastIndex = 0;
+    if (f.re.test(w)) {
+      filters.push(f);
+      w = w.replace(new RegExp(f.re.source, 'g'), ' ');
+    }
+  });
+
+  const terms = [
+    ...phrases,
+    ...w.replace(/[^a-z0-9#\s-]/g, ' ').split(/\s+/)
+      .map((x) => x.replace(/^#/, '').trim())
+      .filter((x) => x.length >= 2 && !SEARCH_STOP.has(x)),
+  ];
+
+  // "show me all tasks" carries no words and no filters — that is still a
+  // search, it just means everything. A bare verb with nothing to match is not.
+  if (!terms.length && !filters.length && !listy) return null;
+  const label = [...phrases.map((p) => `"${p}"`), ...terms.filter((t) => !phrases.includes(t)), ...filters.map((f) => f.label)]
+    .filter((v, i, a) => a.indexOf(v) === i).join(' + ');
+  return { terms, filters, label, strong: mentionsTask && (verb || listy) };
+}
+
+function scoreTask(t, terms) {
+  if (!terms.length) return 1;
+  const title = t.title.toLowerCase();
+  const words = title.split(/[^a-z0-9]+/).filter(Boolean);
+  const desc  = (t.description || '').toLowerCase();
+  const proj  = (t.project || '').toLowerCase();
+  const tags  = (t.tags || []).join(' ').toLowerCase();
+  const who   = (t.assignees || []).join(' ').toLowerCase();
+  let score = 0;
+  if (terms.length > 1 && title.includes(terms.join(' '))) score += 60;
+  terms.forEach((term) => {
+    if (title.includes(term)) score += 12;
+    // Light typo/stem tolerance: "disburse" finds "disbursement".
+    else if (words.some((x) => x.startsWith(term) || (term.startsWith(x) && x.length >= 4))) score += 6;
+    if (tags.includes(term)) score += 8;
+    if (proj.includes(term)) score += 5;
+    if (who.includes(term))  score += 5;
+    if (desc.includes(term)) score += 4;
+  });
+  return score;
+}
+
+const DUE_LAST = '9999-99-99';
+function byDue(a, b) {
+  return (a.due || DUE_LAST).localeCompare(b.due || DUE_LAST) || a.title.localeCompare(b.title);
+}
+
+export function searchTasks(digest, terms = [], filters = []) {
+  const pool = (digest.taskIndex || []).filter((t) => filters.every((f) => f.pass(t, digest)));
+  if (!terms.length) return pool.slice().sort(byDue);
+  return pool
+    .map((t) => ({ t, score: scoreTask(t, terms) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || byDue(a.t, b.t))
+    .map((x) => x.t);
 }
 
 /* ── answer builders — every number here is computed, not guessed ── */
@@ -355,6 +501,7 @@ export function buildAnswer(intent, digest, question) {
     case 'project':    return projectAnswer(digest, intent.projectId);
     case 'activity':   return activityAnswer(digest);
     case 'task':       return taskAnswer(digest, intent.taskId);
+    case 'search':     return searchAnswer(digest, intent, question);
     default:           return fallbackAnswer(digest, question);
   }
 }
@@ -755,6 +902,101 @@ function taskAnswer(d, taskId) {
   };
 }
 
+const STATUS_LABEL = { todo: 'To do', doing: 'Doing', done: 'Done' };
+
+function taskRow(t) {
+  return {
+    title: t.title,
+    meta: [
+      t.project,
+      t.due ? `due ${t.due}` : 'no due date',
+      t.assignees.length ? t.assignees.join(', ') : 'unassigned',
+      t.hours ? fmtHours(t.hours) : null,
+      t.tags?.length ? t.tags.map((x) => `#${x}`).join(' ') : null,
+    ].filter(Boolean).join(' · '),
+    tag: t.overdue ? 'Overdue' : t.blocked ? 'Blocked' : STATUS_LABEL[t.status] || t.status,
+    tone: t.overdue || t.blocked ? 'red' : t.status === 'done' ? 'green' : t.status === 'doing' ? 'navy' : 'grey',
+    dot: t.color,
+    taskId: t.id,
+    projectId: t.projectId || null,
+  };
+}
+
+// A search always answers with the matching tasks — never with a report that
+// leaves the user wondering whether their task exists.
+function searchAnswer(d, intent, question) {
+  const { terms = [], filters = [], label = '' } = intent || {};
+  const hits = searchTasks(d, terms, filters);
+  const shown = hits.slice(0, 12);
+  const total = d.counts.tasks;
+
+  // Nothing matched: say so, and show what the words alone would have found
+  // so a too-narrow filter is obvious rather than mysterious.
+  if (!hits.length) {
+    // Relax the status filters but keep any project scope — "no overdue tasks
+    // in Website revamp" should still show that project's tasks, not the
+    // whole workspace's.
+    const kept    = filters.filter((f) => f.scope);
+    const dropped = filters.filter((f) => !f.scope);
+    const loose   = dropped.length ? searchTasks(d, terms, kept).slice(0, 6) : [];
+    return {
+      key: `search:${label}`,
+      badge: `No match · ${label || 'search'}`,
+      tone: 'amber',
+      searchLabel: label,
+      matchCount: 0,
+      summary: `No task in this workspace matches ${label ? `${label}` : 'that'}. I searched all ${plural(total, 'live task', 'live tasks')} here by title, description, tags, project and assignee.${loose.length ? ` Without the ${dropped.map((f) => f.label).join(' + ')} filter, ${plural(loose.length, 'task matches', 'tasks match')} — listed below.` : ''} If you just created it, check it landed in this workspace: Ask AI only sees the one you have open.`,
+      metrics: [],
+      itemsTitle: loose.length ? `Same search without "${dropped.map((f) => f.label).join(' + ')}"` : '',
+      items: loose.map(taskRow),
+      actions: localActions([
+        'Try fewer words — a single distinctive one usually finds it.',
+        dropped.length && `Drop the ${dropped.map((f) => f.label).join(' + ')} filter and search again.`,
+        'If it is in another workspace, switch to it from the sidebar first.',
+      ]),
+      sources: [`${plural(total, 'task', 'tasks')} searched`, `${plural(d.counts.projects, 'project', 'projects')}`],
+      followUps: [
+        { label: 'Which projects are at risk?', key: 'risk' },
+        { label: 'What is blocking us?', key: 'blockers' },
+        { label: 'What changed this week?', key: 'week' },
+      ],
+    };
+  }
+
+  const overdue = hits.filter((t) => t.overdue).length;
+  const open    = hits.filter((t) => t.status !== 'done').length;
+  const hours   = hits.reduce((s, t) => s + t.hours, 0);
+  const projects = [...new Set(hits.map((t) => t.project))];
+
+  return {
+    key: `search:${label}`,
+    badge: `${plural(hits.length, 'match', 'matches')} · ${label || 'all tasks'}`,
+    tone: overdue ? 'red' : open ? 'navy' : 'green',
+    searchLabel: label,
+    matchCount: hits.length,
+    summary: `${plural(hits.length, 'task matches', 'tasks match')} ${label ? `${label}` : 'that'}, out of ${plural(total, 'live task', 'live tasks')} in this workspace. ${plural(open, 'is', 'are')} still open${overdue ? `, and ${plural(overdue, 'is', 'are')} past due` : ''}. ${hits.length === 1 ? `It sits in ${projects[0]}.` : projects.length === 1 ? `All of them sit in ${projects[0]}.` : `They span ${plural(projects.length, 'project', 'projects')}: ${projects.slice(0, 4).join(', ')}${projects.length > 4 ? '…' : ''}.`}${hits.length > shown.length ? ` The ${shown.length} most relevant are listed below.` : ''}`,
+    metrics: [
+      { label: 'Matches',  value: String(hits.length), delta: label || 'all tasks', tone: 'navy' },
+      { label: 'Open',     value: String(open), delta: `${hits.length - open} done`, tone: open ? 'amber' : 'green' },
+      { label: 'Overdue',  value: String(overdue), delta: overdue ? 'past the plan' : 'none late', tone: overdue ? 'red' : 'green' },
+      { label: 'Logged',   value: fmtHours(hours), delta: 'across the matches', tone: 'navy' },
+    ],
+    itemsTitle: hits.length > shown.length ? `Top ${shown.length} of ${hits.length} matches` : 'Matching tasks',
+    items: shown.map(taskRow),
+    actions: localActions([
+      overdue && `${plural(overdue, 'match is', 'matches are')} overdue — re-date or close ${overdue === 1 ? 'it' : 'them'}.`,
+      hits.some((t) => t.blocked) && 'Some of these are blocked — clear the blocker before adding more work.',
+      'Click a row to open the task.',
+    ]),
+    sources: [`${plural(total, 'task', 'tasks')} searched`, ...projects.slice(0, 2)],
+    followUps: [
+      { label: 'What is blocking us?', key: 'blockers' },
+      { label: 'Who is overloaded right now?', key: 'people' },
+      { label: 'Which projects are at risk?', key: 'risk' },
+    ],
+  };
+}
+
 function fallbackAnswer(d, question) {
   return {
     key: 'fallback',
@@ -804,6 +1046,15 @@ function factsText(answer, digest, scope) {
       `  - ${e.date} · ${e.project} · ${e.title} · ${e.hours}h · ${e.status}${e.who ? ` · ${e.who}` : ''}${e.bottleneck ? ` · BLOCKER: ${e.bottleneck.slice(0, 110)}` : e.note ? ` · note: ${e.note.slice(0, 110)}` : ''}`,
     ));
   }
+  if (answer.searchLabel !== undefined) {
+    lines.push(`Search performed: ${answer.searchLabel || '(no terms)'} — matched ${answer.matchCount} task(s). The list above is the COMPLETE result set.`);
+  }
+  // The real task inventory, so the model can never claim a task does not
+  // exist when it does — it only ever narrates what is actually here.
+  const idx = digest.taskIndex || [];
+  if (idx.length) {
+    lines.push(`Task inventory (${Math.min(idx.length, 40)} of ${idx.length}): ${idx.slice(0, 40).map((t) => `${t.title} [${t.status}${t.overdue ? ', overdue' : ''}]`).join(' | ')}`);
+  }
   if (digest.blockers.tasks.length) lines.push(`Blocked tasks: ${digest.blockers.tasks.slice(0, 5).map((b) => `${b.task.title} (${b.days}d${b.why ? `: ${b.why.slice(0, 80)}` : ''})`).join(' | ')}`);
   if (digest.people.length) lines.push(`Workload: ${digest.people.map((p) => `${p.label} ${p.open} open/${p.doing} doing/${p.overdue} overdue`).join(' | ')}`);
   return lines.join('\n');
@@ -811,7 +1062,7 @@ function factsText(answer, digest, scope) {
 
 const NARRATE_SYSTEM = `You are the analyst inside "Task Monitor", a project-management app. You are shown FACTS computed from the user's live database. Those facts are correct and complete — never invent, adjust or contradict a number, name or date, and never mention data you were not given.
 
-Write for a busy operator: direct, concrete, no filler, no praise, no "it looks like". Refer to projects, tasks and people by their real names from the facts. When the activity log is included, quote or paraphrase specific entries (with their date) rather than only aggregates — the user wants updates down to the individual log entry.
+Write for a busy operator: direct, concrete, no filler, no praise, no "it looks like". Refer to projects, tasks and people by their real names from the facts. Never say something does not exist unless the facts say so — when a search result is given, it is the complete answer, so report it as found. When the activity log is included, quote or paraphrase specific entries (with their date) rather than only aggregates — the user wants updates down to the individual log entry.
 
 Respond ONLY with a JSON object, no markdown and no code fences:
 {

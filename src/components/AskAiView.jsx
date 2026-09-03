@@ -237,10 +237,10 @@ export default function AskAiView() {
               turn={t}
               initial={initial}
               isLast={i === turns.length - 1}
-              // The detail table is shown once per thread — on the opening
-              // question — so follow-ups read as a conversation, not as the
-              // same table over and over.
-              showItems={i === 0}
+              // The first answer of a thread is the full report; every
+              // follow-up is rendered compact so the transcript reads as a
+              // conversation rather than the same dashboard over and over.
+              isFirst={i === 0}
               aiOn={aiOn}
               onAsk={ask}
               onConfirm={confirmAction}
@@ -288,8 +288,15 @@ export default function AskAiView() {
 
 /* ── one question + its answer ───────────────────────────── */
 
-function Turn({ turn, initial, isLast, showItems, aiOn, onAsk, onConfirm, onCancel, tailRef }) {
+function Turn({ turn, initial, isLast, isFirst, aiOn, onAsk, onConfirm, onCancel, tailRef }) {
   const a = turn.answer;
+  const isSearch = typeof a?.key === 'string' && a.key.startsWith('search:');
+  // Follow-ups fold: the summary clamps to a couple of lines and "Based on"
+  // hides behind its own header. The opening answer stays fully open.
+  const foldable = !isFirst;
+  const [openAnswer, setOpenAnswer]   = useState(isFirst);
+  const [openSources, setOpenSources] = useState(isFirst);
+  const showItems = isFirst || isSearch;
   const [helpful, setHelpful] = useState(false);
   const [copied, setCopied]   = useState(false);
 
@@ -353,17 +360,33 @@ function Turn({ turn, initial, isLast, showItems, aiOn, onAsk, onConfirm, onCanc
 
           {a && (
             <>
-              <div className="askai-card askai-answer">
+              <div className={`askai-card askai-answer${foldable ? ' is-foldable' : ''}${openAnswer ? ' is-open' : ''}`}>
                 <div className="askai-answer-head">
+                  {foldable && (
+                    <button
+                      type="button"
+                      className="askai-fold"
+                      onClick={() => setOpenAnswer((v) => !v)}
+                      aria-expanded={openAnswer}
+                      aria-label={openAnswer ? 'Collapse this answer' : 'Expand this answer'}
+                    >›</button>
+                  )}
                   <span className="askai-badge" data-tone={a.tone}>{a.badge}</span>
                   <span className="askai-answer-meta">
                     {a.aiUsed ? `answered in ${(turn.ms / 1000).toFixed(1)}s` : 'computed from your data'} · scope: {(turn.scope || 'everything').toLowerCase()}
                   </span>
                 </div>
                 <p className="askai-answer-text">{a.summary}</p>
+                {foldable && (
+                  <button type="button" className="askai-more" onClick={() => setOpenAnswer((v) => !v)}>
+                    {openAnswer ? 'Show less' : 'Show more'}
+                  </button>
+                )}
               </div>
 
-              {a.metrics?.length > 0 && (
+              {/* The metric strip belongs to the opening answer only — on a
+                  follow-up it is four more cards saying much the same thing. */}
+              {isFirst && a.metrics?.length > 0 && (
                 <div className="askai-metrics">
                   {a.metrics.map((m) => (
                     <div key={m.label} className="askai-metric" data-tone={m.tone}>
@@ -375,27 +398,43 @@ function Turn({ turn, initial, isLast, showItems, aiOn, onAsk, onConfirm, onCanc
                 </div>
               )}
 
-              {showItems && a.items?.length > 0 && (
+              {/* The detail table is shown once per thread — except for a
+                  search, whose whole answer is the list of matches. */}
+              {(showItems || isSearch) && a.items?.length > 0 && (
                 <div className="askai-card askai-items">
                   <div className="askai-items-head">
                     <span className="askai-items-title">{a.itemsTitle}</span>
                     <span className="askai-items-count">{a.items.length}</span>
                   </div>
-                  {a.items.map((it, i) => (
-                    <div key={`${it.title}-${i}`} className="askai-item">
-                      <span className="askai-item-dot" style={{ background: it.dot }} />
-                      <div className="askai-item-body">
-                        <div className="askai-item-title">{it.title}</div>
-                        <div className="askai-item-meta">{it.meta}</div>
-                      </div>
-                      {typeof it.bar === 'number' && (
-                        <div className="askai-item-bar">
-                          <div className="askai-item-bar-fill" data-tone={it.tone} style={{ width: `${it.bar}%` }} />
+                  {a.items.map((it, i) => {
+                    // A row that knows its task is a link into the Board —
+                    // a real <a> so it can be middle-clicked or copied.
+                    const Row = it.taskId ? 'a' : 'div';
+                    const rowProps = it.taskId
+                      ? {
+                          href: `#/board/${it.projectId || 'all'}`,
+                          className: 'askai-item is-link',
+                          onClick: (e) => { e.preventDefault(); openTask(it); },
+                          title: 'Open this task',
+                        }
+                      : { className: 'askai-item' };
+                    return (
+                      <Row key={`${it.title}-${i}`} {...rowProps}>
+                        <span className="askai-item-dot" style={{ background: it.dot }} />
+                        <div className="askai-item-body">
+                          <div className="askai-item-title">{it.title}</div>
+                          <div className="askai-item-meta">{it.meta}</div>
                         </div>
-                      )}
-                      <span className="askai-item-tag" data-tone={it.tone}>{it.tag}</span>
-                    </div>
-                  ))}
+                        {typeof it.bar === 'number' && (
+                          <div className="askai-item-bar">
+                            <div className="askai-item-bar-fill" data-tone={it.tone} style={{ width: `${it.bar}%` }} />
+                          </div>
+                        )}
+                        <span className="askai-item-tag" data-tone={it.tone}>{it.tag}</span>
+                        {it.taskId && <span className="askai-item-go" aria-hidden="true">›</span>}
+                      </Row>
+                    );
+                  })}
                 </div>
               )}
 
@@ -405,18 +444,34 @@ function Turn({ turn, initial, isLast, showItems, aiOn, onAsk, onConfirm, onCanc
                     <div className="askai-detail-title"><span className="askai-star">✦</span>What I'd do next</div>
                     <ul>{a.actions.map((ac, i) => <li key={i}>{ac}</li>)}</ul>
                   </div>
-                  <div className="askai-card askai-sources">
-                    <div className="askai-detail-title">Based on</div>
-                    <div className="askai-source-chips">
-                      {a.sources.map((s) => <span key={s} className="askai-source">{s}</span>)}
-                    </div>
-                    <div className="askai-feedback">
-                      <button className={`askai-fb ${helpful ? 'on' : ''}`} onClick={() => setHelpful((v) => !v)}>
-                        {helpful ? '✓ Thanks' : '👍 Helpful'}
+                  <div className={`askai-card askai-sources${foldable ? ' is-foldable' : ''}${openSources ? ' is-open' : ''}`}>
+                    {foldable ? (
+                      <button
+                        type="button"
+                        className="askai-detail-title askai-fold-head"
+                        onClick={() => setOpenSources((v) => !v)}
+                        aria-expanded={openSources}
+                      >
+                        <span className="askai-fold" aria-hidden="true">›</span>Based on
+                        {!openSources && <span className="askai-fold-hint">{a.sources.length}</span>}
                       </button>
-                      <button className="askai-fb" onClick={share}>{copied ? '✓ Copied' : '↗ Share'}</button>
-                      <button className="askai-fb" onClick={() => onAsk(turn.q, turn.intent)}>⟲ Retry</button>
-                    </div>
+                    ) : (
+                      <div className="askai-detail-title">Based on</div>
+                    )}
+                    {(!foldable || openSources) && (
+                      <>
+                        <div className="askai-source-chips">
+                          {a.sources.map((s) => <span key={s} className="askai-source">{s}</span>)}
+                        </div>
+                        <div className="askai-feedback">
+                          <button className={`askai-fb ${helpful ? 'on' : ''}`} onClick={() => setHelpful((v) => !v)}>
+                            {helpful ? '✓ Thanks' : '👍 Helpful'}
+                          </button>
+                          <button className="askai-fb" onClick={share}>{copied ? '✓ Copied' : '↗ Share'}</button>
+                          <button className="askai-fb" onClick={() => onAsk(turn.q, turn.intent)}>⟲ Retry</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -518,6 +573,15 @@ function ReceiptCard({ proposal, receipt }) {
       </div>
     </div>
   );
+}
+
+// Opens a result row's task: switch the Board to its project, then ask the
+// Board to open the editor. Same handshake the global search uses.
+function openTask(it) {
+  window.location.hash = `#/board/${it.projectId || 'all'}`;
+  setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('task-monitor:open-task', { detail: { taskId: it.taskId } }));
+  }, 60);
 }
 
 /* ── icons ───────────────────────────────────────────────── */
