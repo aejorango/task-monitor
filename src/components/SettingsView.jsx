@@ -43,6 +43,10 @@ import {
   getModel as getAnthropicModel,
   setModel as setAnthropicModel,
 } from '../services/anthropic';
+import {
+  setAiSettings, providerLabel, fetchBridgeUsage, pushBridgeSettings,
+} from '../services/ai';
+import { useAiStatus } from '../hooks/useAiStatus';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -78,6 +82,7 @@ export default function SettingsView() {
       { id: 'companies', label: 'Companies' },
       { id: 'users',     label: 'User Management' },
     ] : [
+      { id: 'ai-brain', label: 'AI brain' },
       { id: 'ai', label: 'AI access' },
     ]),
     ...(isSuperadmin ? [{ id: 'ai-fallback', label: 'AI — superadmin fallback' }] : []),
@@ -384,6 +389,8 @@ export default function SettingsView() {
       {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
 
+      <AiBrainSection />
+
       {!isSuperadmin && <MyCompanyAiStatus profile={profile} />}
 
       {isSuperadmin ? (
@@ -484,6 +491,162 @@ function ThemeTile({ value, label, active, onClick }) {
         {label}
       </div>
     </button>
+  );
+}
+
+// ─── AI brain ────────────────────────────────────────────────────────────
+// Which provider is answering right now, and how to change it. The default
+// is the Claude Code CLI running on this machine via the local bridge —
+// billed to the operator's Claude subscription, no API key, no per-token cost.
+function AiBrainSection() {
+  const { provider, known, bridge, hasApiKey, settings, recheck } = useAiStatus();
+  const [form, setForm] = useState(settings);
+  const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState(null);
+  const [note, setNote] = useState('');
+
+  // Adjust during render rather than in an effect: `settings` only changes
+  // identity when someone saves, so this resets the form exactly then.
+  const [seenSettings, setSeenSettings] = useState(settings);
+  if (seenSettings !== settings) { setSeenSettings(settings); setForm(settings); }
+
+  const tone = provider === 'claude-code' ? 'success'
+             : provider === 'api'         ? 'success'
+             : provider === 'none'        ? 'danger'
+             : !known                     ? 'muted' : 'warn';
+
+  const headline = provider === 'claude-code'
+      ? 'Thinking on your Claude subscription — no API billing.'
+    : provider === 'api'
+      ? 'Answering through the Anthropic API — billed per token.'
+    : provider === 'mock'
+      ? 'Placeholder answers only. Nothing here is a real AI response.'
+    : provider === 'none'
+      ? 'No AI brain is connected, so AI features are switched off.'
+      : 'Checking which AI brain is live…';
+
+  const doRecheck = async () => {
+    setBusy(true); setNote('');
+    try {
+      const next = await recheck();
+      setNote(`Re-checked — now using: ${providerLabel(next.provider)}.`);
+    } catch (err) {
+      setNote(err?.message || 'Re-check failed.');
+    } finally { setBusy(false); }
+  };
+
+  const save = async () => {
+    setBusy(true); setNote('');
+    try {
+      setAiSettings(form);
+      // Keep the bridge's own model/provider config in step when it's reachable.
+      if (bridge.ok) {
+        try { await pushBridgeSettings({ cliModel: form.cliModel }); } catch { /* bridge may be read-only */ }
+      }
+      const next = await recheck();
+      setNote(`Saved — now using: ${providerLabel(next.provider)}.`);
+    } catch (err) {
+      setNote(err?.message || 'Could not save.');
+    } finally { setBusy(false); }
+  };
+
+  const loadUsage = async () => {
+    setBusy(true); setNote('');
+    try { setUsage(await fetchBridgeUsage()); }
+    catch (err) { setNote(`Could not read usage: ${err?.message || err}`); }
+    finally { setBusy(false); }
+  };
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  return (
+    <section id="settings-ai-brain" className="review-section htu-section">
+      <h2 className="review-h2-accent">AI brain</h2>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span className={`badge badge-soft-${tone}`}>
+          {known ? providerLabel(provider) : 'Checking…'}
+        </span>
+        <button type="button" className="btn btn-sm" onClick={doRecheck} disabled={busy}>
+          {busy ? 'Working…' : 'Re-check AI'}
+        </button>
+      </div>
+      <p className="muted small" style={{ marginTop: 0 }}>{headline}</p>
+
+      <p className="muted small">
+        Bridge <span className="mono">{bridge.url}</span> ·{' '}
+        {!bridge.enabled ? 'not probed on this origin (set Bridge to "Always" to force it)'
+          : bridge.ok ? `reachable${bridge.cli?.version ? ` · CLI ${bridge.cli.version}` : ''}`
+          : `unreachable — ${bridge.error || 'no response'}`}
+        {'. '}
+        API key {hasApiKey ? 'available as fallback.' : 'not set.'}
+      </p>
+
+      {!bridge.ok && (
+        <p className="muted small">
+          To run on your Claude subscription instead of an API key:{' '}
+          <span className="mono">npm i -g @anthropic-ai/claude-code</span>, run{' '}
+          <span className="mono">claude</span> once to log in, then start the bridge with{' '}
+          <span className="mono">npm run bridge</span> and press Re-check.
+        </p>
+      )}
+
+      <div className="review-2col" style={{ marginTop: 12 }}>
+        <div className="field">
+          <label className="label">Provider</label>
+          <select className="select" value={form.provider} onChange={set('provider')}>
+            <option value="auto">Auto — Claude Code CLI, then API key</option>
+            <option value="claude-code">Claude Code CLI only</option>
+            <option value="api">Anthropic API only</option>
+            <option value="mock">Mock (offline placeholder text)</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="label">Bridge</label>
+          <select className="select" value={form.bridge} onChange={set('bridge')}>
+            <option value="auto">Auto — probe on localhost only</option>
+            <option value="on">Always probe</option>
+            <option value="off">Never probe</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="label">Bridge URL</label>
+          <input className="input" value={form.bridgeUrl} onChange={set('bridgeUrl')} placeholder="http://127.0.0.1:4319" />
+        </div>
+        <div className="field">
+          <label className="label">CLI model</label>
+          <input className="input" value={form.cliModel} onChange={set('cliModel')} placeholder="Blank = the CLI's own default" />
+        </div>
+      </div>
+
+      <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={!!form.allowMock}
+          onChange={(e) => setForm((f) => ({ ...f, allowMock: e.target.checked }))}
+        />
+        <span className="muted small">
+          Allow mock answers when no brain is available (clearly labelled as placeholder text)
+        </span>
+      </label>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={busy}>Save</button>
+        <button type="button" className="btn btn-sm" onClick={loadUsage} disabled={busy || !bridge.ok}>
+          Load usage
+        </button>
+      </div>
+      {note && <p className="muted small" style={{ marginTop: 8 }}>{note}</p>}
+
+      {usage && (
+        <p className="muted small" style={{ marginTop: 8 }}>
+          {usage.totals.calls} calls · {usage.totals.inputTokens.toLocaleString()} in /{' '}
+          {usage.totals.outputTokens.toLocaleString()} out tokens ·{' '}
+          {Math.round(usage.totals.ms / Math.max(1, usage.totals.calls))} ms average ·{' '}
+          would have cost ${usage.totals.apiEquivalentUsd.toFixed(2)} on the API.
+        </p>
+      )}
+    </section>
   );
 }
 

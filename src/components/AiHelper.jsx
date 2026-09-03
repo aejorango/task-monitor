@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { useTasks, useProjects } from '../hooks/useTasks';
-import { suggestTopTasks, generateClaudePrompt, getEffectiveApiKey } from '../services/anthropic';
+import { suggestTopTasks, generateClaudePrompt } from '../services/anthropic';
+import { useAiStatus } from '../hooks/useAiStatus';
 import { todayLocal } from '../services/firebase';
 
 export default function AiHelper() {
@@ -27,7 +28,7 @@ export default function AiHelper() {
 function AiHelperModal({ onClose }) {
   const { tasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
-  const apiKey = getEffectiveApiKey();
+  const { available: aiAvailable } = useAiStatus();
 
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
@@ -80,7 +81,7 @@ function AiHelperModal({ onClose }) {
           </div>
         </div>
 
-        {!apiKey ? (
+        {!aiAvailable ? (
           <div className="empty-state" style={{ padding: '24px 16px' }}>
             <p className="muted">AI isn't enabled for your account yet.</p>
             <p className="small muted">An admin needs to assign your account to a company that has an AI key (Settings → User Management).</p>

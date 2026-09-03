@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "bridge": "node bridge/server.mjs",
+    "test": "node --test bridge/*.test.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

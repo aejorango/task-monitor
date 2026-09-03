@@ -42,11 +42,59 @@ npm install -D gh-pages
 npm run dev
 ```
 
+## AI brain — the Claude Code CLI
+
+Every AI feature in the app (task drafts, subtask suggestions, weekly summaries,
+Ask AI, the prompt writer) runs through one provider layer with three brains,
+picked automatically in this order:
+
+| Provider | What it is | Cost |
+| --- | --- | --- |
+| `claude-code` | The local **Claude Code CLI**, reached through the bridge | **$0** — your Pro/Max subscription |
+| `api` | Anthropic Messages API with the company (or superadmin) key | Per token |
+| `mock` | Canned offline text, always labelled as placeholder | $0 |
+
+The app is a static frontend, so the browser can't spawn the CLI itself. A tiny
+zero-dependency Node bridge does it instead, on your own machine:
+
+```bash
+npm i -g @anthropic-ai/claude-code
+claude          # log in once with a Pro/Max account, then exit
+npm run bridge  # starts the AI bridge on http://127.0.0.1:4319
+npm run dev     # the app finds the bridge automatically
+```
+
+`Settings → AI brain` shows which brain is live, lets you pin a provider or CLI
+model, and has a **Re-check AI** button — logging into the CLI while the app is
+open is picked up within 60s or instantly on Re-check.
+
+**Notes**
+
+- No `ANTHROPIC_API_KEY` is needed for `claude-code`. A key is only used as a
+  fallback, and every fallback is reported as **degraded** with the reason, so a
+  failed CLI never passes as a clean success.
+- The CLI is invoked hermetically (`--safe-mode --strict-mcp-config --tools ""`),
+  so it acts as a one-shot LLM instead of booting as a coding agent that loads
+  your `CLAUDE.md`, skills, plugins, hooks and MCP servers. That is the
+  difference between ~280 and ~99,000 input tokens for a one-line question.
+- The bridge binds to `127.0.0.1` and answers a fixed origin allowlist, so a
+  random site you visit cannot spend your subscription. Add origins with
+  `TM_BRIDGE_ORIGINS="https://your.app" npm run bridge`.
+- On the deployed site the bridge is not probed by default (a page on `https://`
+  can usually only reach `127.0.0.1` in Chromium). Set `Bridge: Always` in
+  Settings → AI brain to try anyway.
+- The CLI must be on `PATH` for the process running the bridge. If a GUI launcher
+  gives it a trimmed `PATH`, set an explicit `cliPath` in
+  `~/.task-monitor/bridge-config.json`.
+- `npm test` runs the bridge's unit tests (`node --test`, no dependencies — the
+  CLI is never spawned).
+
 ## Documentation
 
 - **[docs/BUILD-GUIDE.md](docs/BUILD-GUIDE.md)** — Complete 12-phase setup walkthrough from empty GitHub repo to live deployment
 - **[docs/firestore-schema.md](docs/firestore-schema.md)** — Database schema with scalability rationale, index list, and security rules
 - **[CLAUDE.md](CLAUDE.md)** — Project context for Claude Code sessions
+- **[bridge/](bridge/)** — The local AI bridge: `ai.mjs` (provider layer), `server.mjs` (HTTP), `ai.test.mjs`
 - **[firestore.rules](firestore.rules)** — Security rules to paste into Firebase Console
 
 ## Project Structure
@@ -60,9 +108,16 @@ task-monitor/
 │   ├── hooks/
 │   │   └── useTasks.js         useAuth, useTasks, useActivities, useRecentActivities
 │   ├── services/
+│   │   ├── ai.js               THE AI module — provider detection + askAI/askAIJson
+│   │   ├── aiCredentials.js    Which key pays for an API call
+│   │   ├── anthropic.js        AI features, all built on services/ai.js
 │   │   └── firebase.js         Firestore init + all CRUD + subscriptions
 │   ├── App.jsx
 │   └── App.css
+├── bridge/
+│   ├── ai.mjs                  AI provider layer (claude-code / api / mock)
+│   ├── server.mjs              Local HTTP bridge on 127.0.0.1:4319
+│   └── ai.test.mjs             Unit tests (node --test)
 ├── docs/
 │   ├── BUILD-GUIDE.md          End-to-end setup instructions
 │   └── firestore-schema.md     Scalable schema design

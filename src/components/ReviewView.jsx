@@ -7,9 +7,9 @@ import {
   summarizeWeek,
   suggestNextTask,
   draftStatusUpdate,
-  getEffectiveApiKey as getApiKey,
 } from '../services/anthropic';
 import Markdown from './Markdown';
+import { useAiStatus } from '../hooks/useAiStatus';
 
 const RANGES = [
   { id: '7',  label: 'This week (7d)',  days: 7 },
@@ -265,14 +265,14 @@ function KpiCard({ label, value, suffix, accent }) {
 }
 
 function ReviewAiPanel({ activities, tasks, projects }) {
-  const apiKey = getApiKey();
+  const { available: aiAvailable } = useAiStatus();
   const [busy, setBusy] = useState(null);
   const [output, setOutput] = useState('');
   const [audience, setAudience] = useState('a teammate');
   const [error, setError] = useState(null);
   const [copyOk, setCopyOk] = useState(false);
 
-  if (!apiKey) {
+  if (!aiAvailable) {
     return (
       <section className="review-section">
         <h2 className="review-h2">✨ AI assist</h2>

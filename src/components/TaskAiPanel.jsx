@@ -6,12 +6,12 @@ import { useState } from 'react';
 import {
   generateSubtasks,
   generateClaudePrompt,
-  getEffectiveApiKey as getApiKey,
 } from '../services/anthropic';
+import { useAiStatus } from '../hooks/useAiStatus';
 import Markdown from './Markdown';
 
 export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) {
-  const apiKey = getApiKey();
+  const { available: aiAvailable } = useAiStatus();
   const [busy, setBusy]               = useState(null); // 'subtasks' | 'prompt' | null
   const [subtaskDrafts, setSubtaskDrafts] = useState(null);
   const [accepted, setAccepted]       = useState({});
@@ -19,7 +19,7 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
   const [copyOk, setCopyOk]           = useState(false);
   const [error, setError]             = useState(null);
 
-  if (!apiKey) {
+  if (!aiAvailable) {
     return (
       <div className="auth-error">
         <div className="auth-error-head">

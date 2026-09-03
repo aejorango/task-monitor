@@ -1,124 +1,48 @@
-// src/services/anthropic.js — direct browser calls to the Anthropic Messages API.
+// src/services/anthropic.js — the app's AI features.
 //
-// The API key is stored in localStorage (per-device, like the rest of our
-// preferences) and supplied via the `x-api-key` header. We pass the
-// `anthropic-dangerous-direct-browser-access` header so the CORS check passes.
+// Every function here goes through the provider layer in services/ai.js, so
+// the actual brain is whichever provider is live:
 //
-// This is fine for a personal app where you're the only one with the API key.
-// For a multi-user app, you'd proxy this through Firebase Functions.
+//   claude-code → the local bridge shells out to the Claude Code CLI
+//                 (the operator's subscription, no API key, no per-token cost)
+//   api         → direct Anthropic Messages API with the company key
+//   mock        → placeholder text, always visibly degraded
+//
+// Nothing in this file talks to a model directly any more. The credential
+// helpers below are re-exported unchanged so existing callers keep working.
 
-const STORAGE_KEY = 'task-monitor.anthropic-api-key.v1';
-const MODEL_KEY   = 'task-monitor.anthropic-model.v1';
-const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+import { askAI, askAIJson, isAiAvailable } from './ai';
+import {
+  getApiKey, setApiKey, getModel, setModel,
+  setCurrentUserRole, setCurrentCompanyContext, clearCurrentCompanyContext,
+  getCurrentCompanyMeta, isUsingCompanyKey,
+  getEffectiveApiKey, getEffectiveModel,
+} from './aiCredentials';
 
-// ─── Personal (localStorage) key — legacy / superadmin fallback ───────────
-export function getApiKey() {
-  try { return localStorage.getItem(STORAGE_KEY) || ''; } catch { return ''; }
-}
-export function setApiKey(key) {
-  try {
-    if (key) localStorage.setItem(STORAGE_KEY, key);
-    else localStorage.removeItem(STORAGE_KEY);
-  } catch {}
-}
-export function getModel() {
-  try { return localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; }
-}
-export function setModel(model) {
-  try { localStorage.setItem(MODEL_KEY, model); } catch {}
+export {
+  getApiKey, setApiKey, getModel, setModel,
+  setCurrentUserRole, setCurrentCompanyContext, clearCurrentCompanyContext,
+  getCurrentCompanyMeta, isUsingCompanyKey,
+  getEffectiveApiKey, getEffectiveModel,
+  // The gate every AI surface should use: true when ANY brain is live, not
+  // just when an API key exists.
+  isAiAvailable,
+};
+
+// Free-text completion. Same signature as before; returns the model's text.
+// The `degraded` reason (if any) is logged so a fallback never passes as a
+// clean success silently.
+export async function callClaude({ system, user, maxTokens = 2048, web = false, meta = {} }) {
+  const out = await askAI(system, user, { maxTokens, web, meta });
+  if (out.degraded) console.warn(`[ai] degraded (${out.provider}): ${out.reason}`);
+  return out.text;
 }
 
-// ─── Company key (in-memory; pushed by the useMyCompany hook) ─────────────
-// AI calls made by ANY user assigned to a company use this key so the
-// admin can budget Anthropic spend per company. We keep it in-memory only —
-// it lives in the company Firestore doc and is fetched on demand.
-let _companyKey = '';
-let _companyModel = '';
-let _companyMeta = null;  // { id, name } for diagnostics
-
-// ─── Current user's role (pushed from App.jsx once profile loads) ─────────
-// The personal localStorage key is ONLY a valid fallback for superadmins —
-// regular users must rely on a company key set by an admin. This is what
-// gates AI access correctly: no company key + non-admin = no AI.
-let _userRole = '';  // '', 'user', or 'superadmin'
-
-export function setCurrentUserRole(role) {
-  _userRole = role || '';
-}
-export function setCurrentCompanyContext({ apiKey, model, id, name } = {}) {
-  _companyKey = apiKey || '';
-  _companyModel = model || '';
-  _companyMeta = (id || name) ? { id: id || null, name: name || '' } : null;
-}
-export function clearCurrentCompanyContext() {
-  _companyKey = '';
-  _companyModel = '';
-  _companyMeta = null;
-}
-export function getCurrentCompanyMeta() { return _companyMeta; }
-
-// The "effective" key/model:
-//   1. The current user's company key (if assigned and admin has set one).
-//   2. Personal localStorage key fallback — superadmins only. Regular
-//      users get an empty key here, which causes UI gates and callClaude()
-//      itself to refuse the call. This is intentional: admins control AI
-//      access exclusively via company keys.
-export function getEffectiveApiKey() {
-  if (_companyKey) return _companyKey;
-  if (_userRole === 'superadmin') return getApiKey();
-  return '';
-}
-export function getEffectiveModel() {
-  if (_companyModel) return _companyModel;
-  // Same fallback policy as the key — regular users never use the
-  // localStorage model either.
-  if (_userRole === 'superadmin') return getModel();
-  return '';
-}
-export function isUsingCompanyKey() { return !!_companyKey; }
-
-export async function callClaude({ system, user, maxTokens = 2048 }) {
-  const apiKey = getEffectiveApiKey();
-  if (!apiKey) {
-    let msg;
-    if (_companyMeta) {
-      // Assigned to a company, but the company has no key set.
-      msg = `The AI feature is not available on your end — "${_companyMeta.name}" hasn't enabled it yet. Contact your company admin or reach out to hello@blueinnovation.ph to enable.`;
-    } else if (_userRole === 'superadmin') {
-      msg = 'No AI key available. Assign yourself to a company with a key, or set a personal fallback in Settings → AI.';
-    } else {
-      msg = 'The AI feature is not available on your end. To enable, contact your company admin or reach out to hello@blueinnovation.ph.';
-    }
-    const err = new Error(msg);
-    err.code = 'no-api-key';
-    throw err;
-  }
-  const model = getEffectiveModel();
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: user }],
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    const err = new Error(`AI API error ${res.status}: ${text.slice(0, 400)}`);
-    err.code = `http-${res.status}`;
-    throw err;
-  }
-  const data = await res.json();
-  // Concatenate text blocks
-  const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-  return text;
+// Structured completion with one strict retry. Returns the parsed value.
+export async function callClaudeJson({ system, user, maxTokens = 2048, web = false, meta = {} }) {
+  const out = await askAIJson(system, user, { maxTokens, web, meta });
+  if (out.degraded) console.warn(`[ai] degraded (${out.provider}): ${out.reason}`);
+  return out.data;
 }
 
 // Generate a draft list of tasks from a project name + description.
@@ -147,21 +71,8 @@ ${phaseHint}
 
 Generate ${count} tasks that, together, would deliver this project. Order them logically (earliest/foundational first).`;
 
-  const text = await callClaude({ system, user, maxTokens: 2048 });
-
-  // Find the first [ and the matching last ] in case the model wraps in markdown
-  // or adds whitespace.
-  const firstBracket = text.indexOf('[');
-  const lastBracket  = text.lastIndexOf(']');
-  if (firstBracket === -1 || lastBracket === -1) {
-    throw new Error(`Could not find JSON array in model response:\n${text.slice(0, 400)}`);
-  }
-  const jsonStr = text.slice(firstBracket, lastBracket + 1);
-  let parsed;
-  try { parsed = JSON.parse(jsonStr); }
-  catch (e) {
-    throw new Error(`Could not parse JSON: ${e.message}\nResponse:\n${text.slice(0, 400)}`);
-  }
+  // askAIJson strips fences, tolerates trailing prose and retries once strictly.
+  const parsed = await callClaudeJson({ system, user, maxTokens: 2048, meta: { kind: 'task-drafts' } });
   if (!Array.isArray(parsed)) throw new Error('Model did not return a JSON array.');
 
   // Normalize & clamp
@@ -190,11 +101,7 @@ ${task.tags?.length ? `Tags: ${task.tags.join(', ')}` : ''}
 
 Suggest ${count} subtasks that, completed in order, would deliver this task.`;
 
-  const text = await callClaude({ system, user, maxTokens: 800 });
-  const first = text.indexOf('[');
-  const last  = text.lastIndexOf(']');
-  if (first === -1 || last === -1) throw new Error(`No JSON array in response:\n${text.slice(0, 300)}`);
-  const arr = JSON.parse(text.slice(first, last + 1));
+  const arr = await callClaudeJson({ system, user, maxTokens: 800, meta: { kind: 'subtasks' } });
   if (!Array.isArray(arr)) throw new Error('Model did not return an array.');
   // Use a simple stable-enough id so React keys are unique.
   return arr.map((s, i) => ({
@@ -235,7 +142,7 @@ ${subtaskBlock}
 
 Now write the prompt I'll paste into Claude. The prompt should make it unambiguous what deliverable Claude must produce.`;
 
-  const text = await callClaude({ system, user, maxTokens: 1024 });
+  const text = await callClaude({ system, user, maxTokens: 1024, meta: { kind: 'claude-prompt' } });
   return text.trim();
 }
 
@@ -263,7 +170,7 @@ Pull from bottleneck remarks. If none, say "None recorded."
 Stay under 350 words. No emojis. No celebratory framing.`;
 
   const user = `Activities this period (${activities.length} entries):\n${lines.join('\n')}\n\nWrite the summary.`;
-  const text = await callClaude({ system, user, maxTokens: 1200 });
+  const text = await callClaude({ system, user, maxTokens: 1200, meta: { kind: 'weekly-summary' } });
   return text.trim();
 }
 
@@ -294,13 +201,7 @@ ${lines.join('\n') || '(none yet — propose sensible first actions)'}
 
 Return the top ${count} as a JSON array.`;
 
-  const text = await callClaude({ system, user, maxTokens: 700 });
-  const first = text.indexOf('[');
-  const last = text.lastIndexOf(']');
-  if (first === -1 || last === -1) throw new Error(`Could not find JSON in response:\n${text.slice(0, 300)}`);
-  let parsed;
-  try { parsed = JSON.parse(text.slice(first, last + 1)); }
-  catch (e) { throw new Error(`Could not parse suggestions: ${e.message}`); }
+  const parsed = await callClaudeJson({ system, user, maxTokens: 700, meta: { kind: 'top-tasks' } });
   if (!Array.isArray(parsed)) throw new Error('Model did not return a JSON array.');
   const known = new Set(open.map((t) => t.id));
   return parsed.slice(0, count).map((s, i) => ({
@@ -328,7 +229,7 @@ Respond in Markdown. Top of response: a "Today's focus" header listing 3 specifi
 Under 200 words total. No emojis.`;
 
   const user = `Today is ${today}.\nOpen tasks:\n${lines.join('\n')}\n\nWhat should I tackle today?`;
-  const text = await callClaude({ system, user, maxTokens: 800 });
+  const text = await callClaude({ system, user, maxTokens: 800, meta: { kind: 'next-task' } });
   return text.trim();
 }
 
@@ -349,6 +250,6 @@ Anything the recipient needs to act on. If none, say "Nothing right now."
 Under 250 words. Plain professional voice. No emojis. No celebratory framing.`;
 
   const user = `Activities to summarize:\n${lines.join('\n')}\n\nWrite the status update.`;
-  const text = await callClaude({ system, user, maxTokens: 800 });
+  const text = await callClaude({ system, user, maxTokens: 800, meta: { kind: 'status-update' } });
   return text.trim();
 }

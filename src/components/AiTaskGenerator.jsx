@@ -2,7 +2,8 @@
 // description, let the user edit/accept/reject each, then bulk-create.
 
 import { useState } from 'react';
-import { generateTaskDrafts, getEffectiveApiKey as getApiKey } from '../services/anthropic';
+import { generateTaskDrafts } from '../services/anthropic';
+import { useAiStatus } from '../hooks/useAiStatus';
 import { useAuth } from '../hooks/useTasks';
 import { addTask } from '../services/firebase';
 
@@ -70,7 +71,7 @@ function scheduleDrafts(tasks, planStart, planEnd) {
 
 export default function AiTaskGenerator({ project, onClose }) {
   const { userId } = useAuth();
-  const apiKey = getApiKey();
+  const { available: aiAvailable } = useAiStatus();
   const [count, setCount] = useState(8);
   const [planStart, setPlanStart] = useState('');  // '' → start on creation day
   const [planEnd, setPlanEnd]     = useState('');  // '' → sequential (no fixed window)
@@ -170,7 +171,7 @@ export default function AiTaskGenerator({ project, onClose }) {
           {project.description && <> · {project.description.slice(0, 80)}{project.description.length > 80 ? '…' : ''}</>}
         </p>
 
-        {!apiKey && (
+        {!aiAvailable && (
           <div className="auth-error">
             <div className="auth-error-head">
               <span className="badge badge-soft-warn">AI not available</span>
@@ -221,7 +222,7 @@ export default function AiTaskGenerator({ project, onClose }) {
             <div className="modal-actions">
               <div style={{ flex: 1 }} />
               <button className="btn" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={generate} disabled={generating || !apiKey}>
+              <button className="btn btn-primary" onClick={generate} disabled={generating || !aiAvailable}>
                 {generating ? 'Generating…' : '✨ Generate drafts'}
               </button>
             </div>

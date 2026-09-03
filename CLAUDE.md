@@ -14,6 +14,7 @@ Deployed via GitHub Pages with a Firebase Firestore backend.
 - **Backend:** Firebase Firestore + Firebase Auth (Anonymous + Google)
 - **Hosting:** GitHub Pages at `tasks.blueinnovation.ph` (custom domain, CNAME at dot.ph)
 - **Top-level container:** `workspaces` — every project/task/activity/template/comment/webhook belongs to exactly one workspace. Members of a workspace share its contents.
+- **AI brain:** all generative features go through `src/services/ai.js`. Default provider is the **Claude Code CLI** on the operator's machine, reached via the local bridge in `bridge/` (`npm run bridge`, `127.0.0.1:4319`); falls back to the Anthropic API key, then to a visibly-degraded mock.
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable`
 - **Routing:** URL hash (`#/<view>/<projectFilter>?ws=<workspaceId>&tag=…&status=…`). No react-router.
 - **Counters on each task** (`activityCount`, `totalHoursLogged`, `attachmentCount`, `lastActivityAt`) kept in sync via batched writes with `FieldValue.increment()`
@@ -94,6 +95,34 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 - **Notifications** — Service worker at `public/sw.js`. Browser notifications fired for newly-overdue tasks (deduped by `localStorage`-tracked "shown" set). Permission requested from Settings. Scan runs on load + every 5 min.
 - **Google sign-in** — `signInWithGoogle()` does `linkWithPopup` if anonymous (keeps existing data), `signInWithPopup` otherwise. `signOutUser()` signs out then re-anonymous-signs-in so the app stays usable. Sidebar footer shows avatar + name when signed in.
 
+## AI provider layer
+
+```
+bridge/ai.mjs      ← the only place that spawns `claude`; also API + mock
+bridge/server.mjs  ← localhost HTTP: /health /ai/complete /ai/json /ai/recheck
+                     /ai/settings /ai/usage. 127.0.0.1 only, origin allowlist.
+src/services/ai.js ← the only place the frontend picks a brain.
+                     askAI / askAIJson / detectProvider / aiSettings
+```
+
+- **One chokepoint.** New AI features call `askAI` / `askAIJson` (or the
+  `callClaude` / `callClaudeJson` wrappers in `anthropic.js`). Never `fetch`
+  a model directly, and never spawn the CLI from anywhere but `bridge/ai.mjs`.
+- **Hermetic CLI invocation.** `--safe-mode --strict-mcp-config --tools ""`
+  and the role in `--system-prompt` (not prefixed to the user prompt). Dropping
+  any of these turns a 280-token question into a 99,000-token one and lets the
+  operator's own MCP servers editorialise in the answer.
+- **A denied tool exits 0.** `parseCliResult` throws on non-empty
+  `permission_denials` — the model's apology must never be stored as an answer.
+- **Web access** is a provider capability: pass `{ web: true }` to `askAI`. Only
+  `claude-code` can browse; other providers return the answer marked `degraded`.
+- **Degraded ≠ success.** Every fallback sets `degraded` + `reason`. Propagate
+  it; don't render a fallback as a clean result.
+- **Gate UI with `useAiStatus()`**, not with `getEffectiveApiKey()` — the CLI
+  needs no key, so a key check would hide AI from CLI users.
+- `npm test` runs `bridge/ai.test.mjs` (`node --test`). Never spawn the CLI in
+  a unit test.
+
 ## Conventions
 
 - **Dates as YYYY-MM-DD strings** in user's local timezone (Asia/Manila). Helper: `todayLocal()` in firebase.js.
@@ -124,6 +153,10 @@ src/
 │   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
 │   └── useSettings.js        ← localStorage-backed settings + theme application
 ├── services/
+│   ├── ai.js                 ← THE AI module: provider detection + askAI/askAIJson
+│   ├── aiCredentials.js      ← company / personal API-key resolution
+│   ├── anthropic.js          ← AI features (task drafts, summaries…) on top of ai.js
+│   ├── askAi.js              ← Ask AI digest + narration
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
 ├── App.jsx                   ← root: routes view based on URL hash
 └── App.css                   ← single stylesheet, design tokens + components
@@ -168,10 +201,13 @@ src/
 - Real-time collaborative editing
 - File upload bytes (only URLs to external storage)
 - Push notifications
+- Running the AI bridge on a server (it is deliberately localhost-only)
 
 ## Development Workflow
 
 ```bash
+npm run bridge       # AI bridge on 127.0.0.1:4319 (Claude Code CLI brain)
+npm test             # bridge unit tests (node --test, no deps)
 npm run dev          # local at http://localhost:5173/task-monitor/
 npm run build        # produces dist/
 npm run deploy       # builds + pushes to gh-pages branch
@@ -188,4 +224,8 @@ npm run deploy       # builds + pushes to gh-pages branch
 - ❌ Drag-and-drop: if a card click triggers a drag, wrap inner buttons with `onPointerDown={(e) => e.stopPropagation()}` and `onClick={(e) => e.stopPropagation()}` so dnd-kit doesn't capture the gesture
 - ❌ Editing an activity's hoursSpent or attachments with `updateActivity` directly — that won't sync the parent task's denormalized counters. Use `editActivity(oldActivity, updates)` instead.
 - ❌ Swim-lanes when projectFilter is "all" — phase IDs differ across projects so the toggle is hidden in that case. The page header chip only shows when a single project is selected.
+- ❌ Calling the Anthropic API directly from a component — go through `askAI`
+- ❌ Gating an AI surface on `getEffectiveApiKey()` — CLI users have no key
+- ❌ Returning a mock or API fallback without setting `degraded` + `reason`
+- ❌ Omitting `--tools ""` when spawning the CLI (that leaves every built-in tool live)
 - ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.

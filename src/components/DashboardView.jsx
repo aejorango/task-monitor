@@ -9,7 +9,8 @@ import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, auth } from '../services/firebase';
-import { suggestNextTask, getEffectiveApiKey as getApiKey } from '../services/anthropic';
+import { suggestNextTask } from '../services/anthropic';
+import { useAiStatus } from '../hooks/useAiStatus';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
@@ -60,6 +61,7 @@ export default function DashboardView({ projectFilter, navigate }) {
   const activeWorkspaceId = useActiveWorkspaceId();
   const { workspaces, loading: wsLoading } = useWorkspaces();
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const { available: aiAvailable } = useAiStatus();
 
   const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
@@ -386,7 +388,7 @@ export default function DashboardView({ projectFilter, navigate }) {
         <section className="dash-card">
           <div className="dash-card-head">
             <h2 className="dash-card-title">Today's focus</h2>
-            {getApiKey() && (
+            {aiAvailable && (
               <button
                 className="btn btn-sm btn-primary"
                 onClick={runAiSuggest}
