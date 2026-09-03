@@ -9025,3 +9025,201 @@ a:hover { text-decoration: underline; }
   .pe-side-head, .pe-side-scroll { padding-left: 14px; padding-right: 14px; }
   .pe-foot  { padding: 12px 14px; }
 }
+
+/* ─── Task editor modal ────────────────────────────────────────────────────
+   Shares the project editor's shell (.pe-modal / hero / body / side / foot).
+   What follows is only what the task editor adds on top: the TASK tree row,
+   subtask checklist, dependency rows, attachment tiles and the inline
+   activity composer that sits above the timeline. */
+
+.pe-kind-task { color: var(--c-accent-ink); background: var(--c-accent-soft); }
+.te-tree-task { margin-left: 54px; }
+
+/* Section head with a count + inline progress bar (Subtasks). */
+.te-sect-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.te-sect-head .pe-sect { margin: 0; }
+.te-sub-bar { flex: 1; max-width: 170px; height: 7px; }
+.te-sect-pct { font-size: 11.5px; font-weight: 700; color: var(--c-accent); }
+
+/* Subtask checklist */
+.te-subs { display: flex; flex-direction: column; gap: 7px; }
+.te-sub {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 11px;
+  padding: 10px 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.te-sub:hover { border-color: var(--c-border-strong); }
+.te-sub:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 1px; }
+.te-sub.is-done { background: var(--c-surface-2); }
+.te-sub-box {
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 11px;
+  color: #fff;
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 2px var(--c-border-strong);
+}
+.te-sub.is-done .te-sub-box { background: var(--c-emerald); box-shadow: none; }
+.te-sub-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+.te-sub.is-done .te-sub-text {
+  font-weight: 500;
+  color: var(--c-text-3);
+  text-decoration: line-through;
+}
+.te-sub-ctl { display: flex; gap: 2px; flex: none; }
+
+.te-sub-add {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 11px;
+  padding: 6px 10px 6px 13px;
+}
+.te-sub-add-mark { font-size: 14px; color: var(--c-accent); flex: none; }
+.te-sub-add-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--c-text);
+  font: 500 12.5px var(--font-sans);
+  padding: 6px 0;
+}
+.te-sub-add-input:focus { outline: none; }
+.te-sub-add-input::placeholder { color: var(--c-text-muted); }
+
+/* Dependency / relation rows */
+.te-deps { display: flex; flex-direction: column; gap: 6px; }
+.te-dep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 7px 11px;
+}
+.te-dep-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--c-danger);
+  background: var(--c-danger-bg);
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  flex: none;
+}
+.te-dep-tag.is-done   { color: var(--c-success); background: var(--c-success-bg); }
+.te-dep-tag.is-blocks { color: var(--c-text);    background: var(--c-surface-3); }
+.te-dep-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c-text);
+}
+.te-warn {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--c-danger);
+  background: var(--c-danger-bg);
+  padding: 6px 11px;
+  border-radius: var(--r-sm);
+}
+
+/* Attachment tiles */
+.te-atts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.te-att {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 10px 12px;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease;
+}
+.te-att:hover { border-color: var(--c-accent); }
+.te-att-ico {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  background: var(--c-blue-deep-soft);
+  color: var(--c-blue-deep);
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 800;
+  flex: none;
+}
+.te-att-body { min-width: 0; display: flex; flex-direction: column; }
+.te-att-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.te-att-meta { font-size: 10.5px; color: var(--c-text-muted); }
+
+/* Inline activity composer, pinned between the rail head and the timeline */
+.te-log {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 14px 22px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+}
+.te-log-note  { flex: 1; min-width: 0; }
+.te-log-hours { width: 78px; flex: none; text-align: center; }
+
+/* An overdue plan-end date reads red in the field itself. */
+.te-input-danger {
+  color: var(--c-danger);
+  font-weight: 700;
+  border-color: var(--c-danger);
+}
+
+.te-presence { flex: none; }
+
+@media (max-width: 860px) {
+  .te-atts { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 720px) {
+  .te-atts { grid-template-columns: 1fr; }
+  .te-log  { padding: 12px 14px; }
+  .te-tree-task { margin-left: 24px; }
+  .te-sub-bar, .te-sect-pct { display: none; }
+}
