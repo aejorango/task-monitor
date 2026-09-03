@@ -995,14 +995,23 @@ function addDaysISO(s, n) {
   d.setDate(d.getDate() + n);
   return isoOf(d);
 }
-function addMonthsISO(s, n) {
+// Add `n` months to an ISO date, clamped to the last day of the target
+// month instead of overflowing into the following month (the classic
+// setMonth() bug: Jan 31 + 1 month must land on Feb 28, not Mar 3).
+function addMonthsClampedISO(s, n, targetDay) {
   const d = parseISO(s); if (!d) return null;
-  d.setMonth(d.getMonth() + n);
-  return isoOf(d);
+  const targetMonth = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const daysInTargetMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+  targetMonth.setDate(Math.min(targetDay, daysInTargetMonth));
+  return isoOf(targetMonth);
 }
 
 // Given a recurring task, compute the next (start, end) plan dates.
-// Returns { start, end } or null if no further occurrences.
+// The result always lands on the exact weekday/day-of-month the user
+// defined in the recurrence rule (dayOfWeek / dayOfMonth) — it does not
+// just drift forward by interval from whatever the previous instance's
+// dates happened to be. Returns { start, end } or null if no further
+// occurrences (past `until`).
 export function nextRecurrenceDates(task) {
   const r = task.recurrence;
   if (!r) return null;
@@ -1016,24 +1025,33 @@ export function nextRecurrenceDates(task) {
     return { start: t, end: t };
   }
 
-  const shiftDays = r.rule === 'daily'   ? interval :
-                    r.rule === 'weekly'  ? 7 * interval :
-                    null;
+  // Anchor off the due (end) date when available — that's the date the
+  // task is actually "placed on" in Calendar/Gantt.
+  const anchor = oldEnd || oldStart;
+  let nextAnchor;
 
-  let nextStart, nextEnd;
-  if (r.rule === 'monthly') {
-    nextStart = oldStart ? addMonthsISO(oldStart, interval) : null;
-    nextEnd   = oldEnd   ? addMonthsISO(oldEnd,   interval) : nextStart;
+  if (r.rule === 'daily') {
+    nextAnchor = addDaysISO(anchor, interval);
+  } else if (r.rule === 'weekly') {
+    const targetDow = r.dayOfWeek ?? parseISO(anchor).getDay();
+    const base = addDaysISO(anchor, 7 * interval);
+    const drift = (targetDow - parseISO(base).getDay() + 7) % 7;
+    nextAnchor = drift === 0 ? base : addDaysISO(base, drift);
   } else {
-    nextStart = oldStart ? addDaysISO(oldStart, shiftDays) : null;
-    nextEnd   = oldEnd   ? addDaysISO(oldEnd,   shiftDays) : nextStart;
+    const targetDom = r.dayOfMonth ?? parseISO(anchor).getDate();
+    nextAnchor = addMonthsClampedISO(anchor, interval, targetDom);
   }
-  if (!nextStart && !nextEnd) return null;
+  if (!nextAnchor) return null;
 
   // Respect `until`
-  if (r.until && (nextStart || nextEnd) > r.until) return null;
+  if (r.until && nextAnchor > r.until) return null;
 
-  return { start: nextStart, end: nextEnd };
+  // Preserve the original start→end duration, re-anchored on the new due date.
+  if (oldStart && oldEnd) {
+    const durationDays = Math.round((parseISO(oldEnd) - parseISO(oldStart)) / DAY);
+    return { start: addDaysISO(nextAnchor, -durationDays), end: nextAnchor };
+  }
+  return { start: nextAnchor, end: nextAnchor };
 }
 
 async function spawnNextRecurrence(task) {
