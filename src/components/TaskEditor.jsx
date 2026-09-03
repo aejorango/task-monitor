@@ -31,14 +31,9 @@ import {
 import TaskAiPanel from './TaskAiPanel';
 import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
+import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 
 // ── Small formatters ────────────────────────────────────────────────────────
-function fmtDay(ymd) {
-  if (!ymd) return '—';
-  const [y, m, d] = String(ymd).split('-').map(Number);
-  if (!y || !m || !d) return String(ymd);
-  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 function daysBetween(fromYmd, toYmd) {
   if (!fromYmd || !toYmd) return null;
   const a = new Date(`${fromYmd}T00:00:00`).getTime();
@@ -855,41 +850,9 @@ export default function TaskEditor({ task, projects, onClose }) {
                   <p>{activities.length === 0 ? 'No activities logged yet.' : 'Nothing matches this filter.'}</p>
                   {activities.length === 0 && <p className="small">Log the first one above — it stamps hours onto this task.</p>}
                 </div>
-              ) : shownActivities.map((a, i) => {
-                const tone = (a.completionStatus === 'blocked' || a.bottleneckRemarks) ? 'red'
-                  : a.completionStatus === 'completed'   ? 'green'
-                  : a.completionStatus === 'in-progress' ? 'amber'
-                  : 'navy';
-                const icon = tone === 'red' ? '!' : tone === 'green' ? '✓' : tone === 'amber' ? '◐' : '•';
-                return (
-                  <div key={a.id} className="pe-act">
-                    <div className="pe-act-rail">
-                      <span className={`pe-act-dot pe-tone-${tone}`}>{icon}</span>
-                      {i < shownActivities.length - 1 && <span className="pe-act-line" />}
-                    </div>
-                    <button type="button" className="pe-act-body" onClick={() => setEditingActivity(a)} title="Edit this activity">
-                      <div className="pe-act-head">
-                        <span className="pe-act-date">{fmtDay(a.date)}</span>
-                        {(a.hoursSpent || 0) > 0 && (
-                          <span className={`pe-act-hours pe-tone-${tone}`}>{Number(a.hoursSpent).toFixed(1)}h</span>
-                        )}
-                        {a.requestedBy && <span className="pe-act-who">{a.requestedBy}</span>}
-                      </div>
-                      {a.comment && <div className="pe-act-comment">{a.comment}</div>}
-                      {a.bottleneckRemarks && (
-                        <div className="pe-act-bottleneck">⚠ Bottleneck: {a.bottleneckRemarks}</div>
-                      )}
-                      {(a.attachments || []).length > 0 && (
-                        <div className="pe-act-files">
-                          {a.attachments.map((f, fi) => (
-                            <span key={fi} className="pe-act-file">📎 {f.name || f.url}</span>
-                          ))}
-                        </div>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+              ) : (
+                <ActivityTimeline activities={shownActivities} onSelect={setEditingActivity} />
+              )}
             </div>
           </aside>
         </div>

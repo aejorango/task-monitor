@@ -27,6 +27,7 @@ import { MarkdownEditor } from './Markdown';
 import ActivityEditor from './ActivityEditor';
 import AssigneePicker from './AssigneePicker';
 import WbsModal from './WbsModal';
+import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -838,13 +839,6 @@ function TemplateCard({ template, onUse, note }) {
 // live health pills), a scrolling left column (KPIs → structure tree → details
 // → goal/template/sharing) and a right-hand project-activity timeline.
 
-function fmtDay(ymd) {
-  if (!ymd) return '—';
-  const [y, m, d] = String(ymd).split('-').map(Number);
-  if (!y || !m || !d) return String(ymd);
-  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 // Firestore timestamps arrive as a Timestamp (toDate) or a plain {seconds}.
 function tsToDate(ts) {
   if (!ts) return null;
@@ -1518,45 +1512,18 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
                   <p>{projectActivities.length === 0 ? 'No activities logged yet.' : 'Nothing matches this filter.'}</p>
                   {projectActivities.length === 0 && <p className="small">Log activities from each task on the Board.</p>}
                 </div>
-              ) : shownActivities.map((a, i) => {
-                const tone = (a.completionStatus === 'blocked' || a.bottleneckRemarks) ? 'red'
-                  : a.completionStatus === 'completed'   ? 'green'
-                  : a.completionStatus === 'in-progress' ? 'amber'
-                  : 'navy';
-                const icon = tone === 'red' ? '!' : tone === 'green' ? '✓' : tone === 'amber' ? '◐' : '•';
-                return (
-                  <div key={a.id} className="pe-act">
-                    <div className="pe-act-rail">
-                      <span className={`pe-act-dot pe-tone-${tone}`}>{icon}</span>
-                      {i < shownActivities.length - 1 && <span className="pe-act-line" />}
+              ) : (
+                <ActivityTimeline
+                  activities={shownActivities}
+                  onSelect={setEditingActivity}
+                  renderEntryMeta={(a) => (
+                    <div className="pe-act-task">
+                      <span className="pe-act-task-dot" style={{ background: color }} />
+                      {a._task}
                     </div>
-                    <button type="button" className="pe-act-body" onClick={() => setEditingActivity(a)} title="Edit this activity">
-                      <div className="pe-act-head">
-                        <span className="pe-act-date">{fmtDay(a.date)}</span>
-                        {(a.hoursSpent || 0) > 0 && (
-                          <span className={`pe-act-hours pe-tone-${tone}`}>{Number(a.hoursSpent).toFixed(1)}h</span>
-                        )}
-                        {a.requestedBy && <span className="pe-act-who">{a.requestedBy}</span>}
-                      </div>
-                      <div className="pe-act-task">
-                        <span className="pe-act-task-dot" style={{ background: color }} />
-                        {a._task}
-                      </div>
-                      {a.comment && <div className="pe-act-comment">{a.comment}</div>}
-                      {a.bottleneckRemarks && (
-                        <div className="pe-act-bottleneck">⚠ Bottleneck: {a.bottleneckRemarks}</div>
-                      )}
-                      {a._files.length > 0 && (
-                        <div className="pe-act-files">
-                          {a._files.map((f, fi) => (
-                            <span key={fi} className="pe-act-file">📎 {f.name || f.url}</span>
-                          ))}
-                        </div>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+                  )}
+                />
+              )}
             </div>
           </aside>
         </div>
