@@ -354,27 +354,20 @@ export default function TaskEditor({ task, projects, onClose }) {
         <header className="pe-hero">
           <span className="pe-hero-glow" aria-hidden="true" />
           <div className="pe-hero-inner">
-            <div className="pe-crumbs">
-              <span className="pe-crumb">
-                <span className="pe-crumb-dot" style={{ background: workspace?.color || 'var(--c-purple)' }} />
-                {workspace?.name || 'Workspace'}
-              </span>
+            {/* Plain-text trail — no chips, no dots. The task editor's
+                breadcrumb is a path, not a set of filter pills. */}
+            <div className="pe-crumbs te-crumbs">
+              <span className="pe-crumb">{workspace?.name || 'Workspace'}</span>
               <span className="pe-crumb-sep">/</span>
               {selectedProject && (
                 <>
-                  <span className="pe-crumb">
-                    <span className="pe-crumb-dot" style={{ background: selectedProject.color || 'var(--c-blue-deep)' }} />
-                    {selectedProject.name}
-                  </span>
+                  <span className="pe-crumb">{selectedProject.name}</span>
                   <span className="pe-crumb-sep">/</span>
                 </>
               )}
               {selectedPhase && (
                 <>
-                  <span className="pe-crumb">
-                    <span className="pe-crumb-dot" style={{ background: 'var(--c-emerald)' }} />
-                    {selectedPhase.name}
-                  </span>
+                  <span className="pe-crumb">{selectedPhase.name}</span>
                   <span className="pe-crumb-sep">/</span>
                 </>
               )}

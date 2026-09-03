@@ -9042,6 +9042,15 @@ a:hover { text-decoration: underline; }
    subtask checklist, dependency rows, attachment tiles and the inline
    activity composer that sits above the timeline. */
 
+/* The task editor's breadcrumb is plain text — the capsule and the colour
+   dot belong to the project editor, where the crumbs double as chips. */
+.te-crumbs .pe-crumb {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .pe-kind-task { color: var(--c-accent-ink); background: var(--c-accent-soft); }
 .te-tree-task { margin-left: 54px; }
 
