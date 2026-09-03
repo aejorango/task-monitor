@@ -11,7 +11,13 @@
 
 import { callClaudeJson } from './anthropic';
 import { isAiAvailable as aiBrainAvailable } from './ai';
-import { todayLocal } from './firebase';
+import { parseQuickAdd } from './nlpQuickAdd';
+import {
+  todayLocal,
+  addProject, updateProject, softDeleteProject,
+  addTask, updateTask, softDeleteTask,
+  addActivity, editActivity, deleteActivity,
+} from './firebase';
 
 /* ── small helpers ───────────────────────────────────────── */
 
@@ -129,6 +135,9 @@ export function buildDigest({
     };
   });
 
+  const projectPhases = projects.filter(live).flatMap((p) =>
+    (p.phases || []).map((ph) => ({ id: ph.id, name: ph.name, projectId: p.id })));
+
   /* blockers */
   const blockedActs = acts30.filter(isBlockedAct);
   const blockersByProject = projectHealth
@@ -213,6 +222,46 @@ export function buildDigest({
     };
   }).sort((a, b) => b.tasks - a.tasks);
 
+  /* activity log — the raw entries, so answers can go down to a single log line */
+  const projName = (id) => projectHealth.find((p) => p.id === id)?.name || '—';
+  const projColor = (id) => projectHealth.find((p) => p.id === id)?.color || '#b0bcc8';
+  const activityLog = acts30
+    .slice()
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .map((a) => ({
+      id: a.id,
+      taskId: a.taskId,
+      title: a.taskTitle || 'Activity',
+      projectId: a.projectId,
+      project: projName(a.projectId),
+      color: projColor(a.projectId),
+      date: a.date || '',
+      hours: num(a.hoursSpent),
+      status: a.completionStatus || 'in-progress',
+      who: a.userId ? nameFor(a.userId) : '',
+      note: (a.comment || '').trim(),
+      bottleneck: (a.bottleneckRemarks || '').trim(),
+      attachments: (a.attachments || []).length,
+    }));
+
+  /* per-task rollup — lets a question about one task answer from its own log */
+  const taskIndex = tasks.filter(live).map((t) => {
+    const own = activityLog.filter((a) => a.taskId === t.id);
+    return {
+      id: t.id, title: t.title || 'Untitled task', status: t.status,
+      projectId: t.projectId, project: projName(t.projectId), color: projColor(t.projectId),
+      due: t.plan?.endDate || null,
+      overdue: !!(t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today),
+      hours: num(t.totalHoursLogged),
+      activityCount: own.length,
+      lastEntry: own[0] || null,
+      entries: own,
+      assignees: [...(t.assignedTo || []).map(nameFor), ...(t.assignedToExternal || [])],
+      subtasks: t.subtasks || [],
+      task: t,
+    };
+  });
+
   return {
     today,
     counts: {
@@ -229,12 +278,15 @@ export function buildDigest({
       people: people.length,
     },
     projects: projectHealth,
+    projectPhases,
     tasks: { open: openTasks, done: doneTasks, overdue: overdueTasks },
     blockers: { byProject: blockersByProject, tasks: blockedTasks, themes: blockerThemes, total: blockedActs.length },
     hours: { byProject: hoursByProject, byDay: hoursByDay, busiestDay, total7: hours7Total, prev7: hoursPrev7, acts7: acts7.length },
     people, unassigned,
     week: { movement: recentMovement, doneThisWeek, blockedCount: acts7.filter(isBlockedAct).length, hours: hours7Total },
     workspaces: wsPulse,
+    activityLog,
+    taskIndex,
   };
 }
 
@@ -264,10 +316,19 @@ function topThemes(acts, limit = 3) {
 
 export function routeIntent(q, digest) {
   const w = (q || '').toLowerCase();
-  const named = digest.projects
-    .filter((p) => p.name.length >= 3)
-    .find((p) => w.includes(p.name.toLowerCase()));
-  if (named) return { key: 'project', projectId: named.id };
+
+  // A named project or task beats any keyword — "how is X going" is a question
+  // about X. Longest name wins so "Partner API integration" is not shadowed by
+  // a project called "API".
+  const named = [
+    ...digest.projects.filter((p) => p.name.length >= 4).map((p) => ({ n: p.name, hit: { key: 'project', projectId: p.id } })),
+    ...(digest.taskIndex || []).filter((t) => t.title.length >= 8).map((t) => ({ n: t.title, hit: { key: 'task', taskId: t.id } })),
+  ]
+    .filter((c) => w.includes(c.n.toLowerCase()))
+    .sort((a, b) => b.n.length - a.n.length)[0];
+  if (named) return named.hit;
+
+  if (/activity log|activities|logged entr|log entr|what was logged|entries/.test(w)) return { key: 'activity' };
   if (/block|bottleneck|stuck|waiting/.test(w))                        return { key: 'blockers' };
   if (/overload|capacity|who|busy|workload|assign|team/.test(w))       return { key: 'people' };
   if (/workspace|compare|pulse/.test(w))                               return { key: 'workspaces' };
@@ -292,6 +353,8 @@ export function buildAnswer(intent, digest, question) {
     case 'blockers':   return blockersAnswer(digest);
     case 'hours':      return hoursAnswer(digest);
     case 'project':    return projectAnswer(digest, intent.projectId);
+    case 'activity':   return activityAnswer(digest);
+    case 'task':       return taskAnswer(digest, intent.taskId);
     default:           return fallbackAnswer(digest, question);
   }
 }
@@ -568,29 +631,125 @@ function projectAnswer(d, projectId) {
     meta: `in Doing${t.plan?.endDate ? ` · due ${t.plan.endDate}` : ''}`,
     tag: 'Doing', tone: 'amber', dot: p.color,
   }));
+  const projEntries = (d.activityLog || []).filter((e) => e.projectId === p.id);
   return {
     key: `project:${p.id}`,
     badge: `${p.name} · ${p.tone.toUpperCase()}`,
     tone: p.tone === 'grey' ? 'navy' : p.tone,
-    summary: `${p.name} is ${p.donePct}% complete${p.elapsedPct != null ? ` with ${p.elapsedPct}% of its schedule gone` : ' (no plan dates set)'}. ${plural(p.open, 'task is', 'tasks are')} still open, ${plural(p.overdue, 'is', 'are')} overdue and ${plural(stuck.length, 'is', 'are')} blocked. ${fmtHours(p.hours)} have been logged against it in the last 30 days.`,
+    summary: `${p.name} is ${p.donePct}% complete${p.elapsedPct != null ? ` with ${p.elapsedPct}% of its schedule gone` : ' (no plan dates set)'}. ${plural(p.open, 'task is', 'tasks are')} still open, ${plural(p.overdue, 'is', 'are')} overdue and ${plural(stuck.length, 'is', 'are')} blocked. ${fmtHours(p.hours)} have been logged against it in the last 30 days${projEntries[0] ? `, most recently on ${projEntries[0].date} against "${projEntries[0].title}"` : ''}.`,
     metrics: [
       { label: 'Complete',      value: `${p.donePct}%`, delta: `${p.done} of ${p.total} tasks`, tone: p.donePct >= 70 ? 'green' : 'amber' },
       { label: 'Schedule used', value: p.elapsedPct != null ? `${p.elapsedPct}%` : '—', delta: p.gap != null ? `${p.gap > 0 ? `${p.gap}-point gap` : 'ahead of plan'}` : 'no plan dates', tone: p.gap != null && p.gap >= 20 ? 'red' : p.gap != null && p.gap >= 10 ? 'amber' : 'green' },
       { label: 'Overdue',       value: String(p.overdue), delta: p.overdue ? 'past due date' : 'nothing late', tone: p.overdue ? 'red' : 'green' },
-      { label: 'Hours · 30d',   value: fmtHours(p.hours), delta: `${p.inDoing} in Doing`, tone: 'navy' },
+      { label: 'Hours · 30d',   value: fmtHours(p.hours), delta: `${plural(projEntries.length, 'log entry', 'log entries')}`, tone: 'navy' },
     ],
-    itemsTitle: rows.length ? 'What is actually stuck' : 'Nothing stuck',
-    items: rows,
+    itemsTitle: rows.length ? 'What is actually stuck' : projEntries.length ? 'Latest activity' : 'Nothing stuck',
+    // Fall back to the project's newest log entries when nothing is stuck, so
+    // a healthy project still reports what actually happened on it.
+    items: rows.length ? rows : projEntries.slice(0, 6).map(actRow),
     actions: localActions([
       stuck[0] && `Unblock "${stuck[0].task.title}" — ${plural(stuck[0].days, 'day', 'days')} stalled is the single biggest drag on this project.`,
       p.gap != null && p.gap >= 15 && `Pick one: move ${p.name}'s end date, or cut scope. A ${p.gap}-point gap does not close on optimism.`,
       overdue.length > 0 && `Re-date the ${plural(overdue.length, 'overdue task', 'overdue tasks')} so the plan reflects reality.`,
       p.inDoing > 4 && `${p.inDoing} tasks are in Doing at once — finish before starting.`,
+      !projEntries.length && `Nothing has been logged against ${p.name} in 30 days — confirm it is paused, not just unrecorded.`,
     ]),
     sources: [p.name, `${plural(p.total, 'task', 'tasks')}`, 'Activity log · 30 days', 'Plan vs. actual'],
     followUps: [
       { label: 'What is blocking us?', key: 'blockers' },
       { label: 'Who is overloaded right now?', key: 'people' },
+      { label: 'Which projects are at risk?', key: 'risk' },
+    ],
+  };
+}
+
+const ACT_TONE = { completed: 'green', blocked: 'red', 'not-started': 'grey' };
+const ACT_TAG  = { completed: 'Done', blocked: 'Blocked', 'not-started': 'Queued' };
+function actRow(e) {
+  return {
+    title: e.title,
+    meta: [
+      e.project,
+      e.date,
+      e.hours ? fmtHours(e.hours) : null,
+      e.who || null,
+      (e.bottleneck || e.note) ? (e.bottleneck || e.note).slice(0, 80) : null,
+    ].filter(Boolean).join(' · '),
+    tag: ACT_TAG[e.status] || 'Doing',
+    tone: ACT_TONE[e.status] || 'navy',
+    dot: e.color,
+  };
+}
+
+// The activity log itself — "what has been logged", down to individual entries.
+function activityAnswer(d) {
+  const log = d.activityLog;
+  const hours = log.reduce((s, e) => s + e.hours, 0);
+  const byPerson = {};
+  log.forEach((e) => { if (e.who) byPerson[e.who] = (byPerson[e.who] || 0) + 1; });
+  const topPerson = Object.entries(byPerson).sort((a, b) => b[1] - a[1])[0];
+  const withNotes = log.filter((e) => e.note || e.bottleneck).length;
+  return {
+    key: 'activity',
+    badge: log.length ? `${plural(log.length, 'entry', 'entries')} · 30 days` : 'Nothing logged',
+    tone: log.length ? 'navy' : 'grey',
+    summary: log.length
+      ? `${plural(log.length, 'activity entry', 'activity entries')} in the last 30 days, carrying ${fmtHours(hours)}${topPerson ? ` — ${topPerson[0]} logged the most (${plural(topPerson[1], 'entry', 'entries')})` : ''}. ${plural(withNotes, 'entry has', 'entries have')} a written note or bottleneck remark. The newest is "${log[0].title}" on ${log[0].date}.`
+      : `The activity log is empty for the last 30 days. Log activities against tasks and I can report progress down to the individual entry.`,
+    metrics: [
+      { label: 'Entries · 30d',  value: String(log.length), delta: `${plural(d.counts.activities7, 'in', 'in')} the last 7 days`, tone: 'navy' },
+      { label: 'Hours logged',   value: fmtHours(hours), delta: log.length ? `avg ${fmtHours(hours / log.length)} per entry` : '—', tone: 'navy' },
+      { label: 'With remarks',   value: String(withNotes), delta: 'have a note or blocker', tone: withNotes ? 'green' : 'amber' },
+      { label: 'Blocked entries', value: String(log.filter((e) => e.status === 'blocked').length), delta: 'flagged as blocked', tone: log.some((e) => e.status === 'blocked') ? 'red' : 'green' },
+    ],
+    itemsTitle: 'Newest entries',
+    items: log.slice(0, 8).map(actRow),
+    actions: localActions([
+      log[0] && `Newest entry is "${log[0].title}" (${log[0].date}) — check it is still an accurate picture.`,
+      log.length - withNotes > 0 && `${plural(log.length - withNotes, 'entry has', 'entries have')} no note; a bare hours figure tells you nothing in a month.`,
+      'Ask about a specific task or project by name and I will read its entries in detail.',
+    ]),
+    sources: ['Activity log · 30 days', `${plural(log.length, 'entry', 'entries')}`, `${plural(d.counts.projects, 'project', 'projects')}`],
+    followUps: [
+      { label: 'What is blocking us?', key: 'blockers' },
+      { label: 'Where did the hours go?', key: 'hours' },
+      { label: 'What changed this week?', key: 'week' },
+    ],
+  };
+}
+
+// One task, read through its own activity entries.
+function taskAnswer(d, taskId) {
+  const t = (d.taskIndex || []).find((x) => x.id === taskId);
+  if (!t) return fallbackAnswer(d);
+  const entries = t.entries;
+  const hours = entries.reduce((s, e) => s + e.hours, 0);
+  const blocked = entries.filter((e) => e.status === 'blocked');
+  const doneSubs = t.subtasks.filter((x) => x.done).length;
+  const lateBy = t.overdue ? Math.abs(daysBetween(t.due, d.today) || 0) : 0;
+  return {
+    key: `task:${t.id}`,
+    badge: `${t.title.slice(0, 40)} · ${t.status}`,
+    tone: t.overdue || blocked.length ? 'red' : t.status === 'done' ? 'green' : 'navy',
+    summary: `"${t.title}" sits in ${t.project} at status ${t.status}${t.due ? `, due ${t.due}${t.overdue ? ` — ${plural(lateBy, 'day', 'days')} late` : ''}` : ' with no due date'}. ${entries.length ? `${plural(entries.length, 'activity entry has', 'activity entries have')} been logged against it in the last 30 days, totalling ${fmtHours(hours)}.` : 'Nothing has been logged against it in the last 30 days.'}${blocked.length ? ` The latest blocker reads: "${(blocked[0].bottleneck || blocked[0].note).slice(0, 120)}".` : ''}${t.subtasks.length ? ` Subtasks: ${doneSubs} of ${t.subtasks.length} done.` : ''}`,
+    metrics: [
+      { label: 'Status',        value: t.status, delta: t.assignees.length ? t.assignees.join(', ').slice(0, 28) : 'unassigned', tone: t.status === 'done' ? 'green' : t.status === 'doing' ? 'navy' : 'grey' },
+      { label: 'Due',           value: t.due || '—', delta: t.overdue ? `${lateBy} days late` : t.due ? 'on the plan' : 'no date set', tone: t.overdue ? 'red' : 'green' },
+      { label: 'Hours logged',  value: fmtHours(hours), delta: `${plural(entries.length, 'entry', 'entries')} · 30d`, tone: 'navy' },
+      { label: 'Subtasks',      value: t.subtasks.length ? `${doneSubs}/${t.subtasks.length}` : '—', delta: t.subtasks.length ? 'checked off' : 'none defined', tone: t.subtasks.length && doneSubs === t.subtasks.length ? 'green' : 'amber' },
+    ],
+    itemsTitle: entries.length ? 'Its activity log' : 'No entries yet',
+    items: entries.slice(0, 8).map(actRow),
+    actions: localActions([
+      blocked[0] && `Clear the blocker logged on ${blocked[0].date}: ${(blocked[0].bottleneck || blocked[0].note).slice(0, 90)}`,
+      t.overdue && `It is ${plural(lateBy, 'day', 'days')} past due — re-date it or finish it, but do not leave the plan lying.`,
+      !entries.length && 'Log an activity against it so progress is visible to everyone else.',
+      t.subtasks.length && doneSubs < t.subtasks.length && `${plural(t.subtasks.length - doneSubs, 'subtask is', 'subtasks are')} still open.`,
+    ]),
+    sources: [t.title.slice(0, 30), t.project, `${plural(entries.length, 'activity entry', 'activity entries')}`, 'Activity log · 30 days'],
+    followUps: [
+      { label: 'What is blocking us?', key: 'blockers' },
+      { label: 'What changed this week?', key: 'week' },
       { label: 'Which projects are at risk?', key: 'risk' },
     ],
   };
@@ -636,6 +795,15 @@ function factsText(answer, digest, scope) {
     answer.items.forEach((it) => lines.push(`  - ${it.title} [${it.tag}] — ${it.meta}`));
   }
   lines.push(`Project health: ${digest.projects.map((p) => `${p.name} ${p.donePct}% done${p.elapsedPct != null ? `/${p.elapsedPct}% elapsed` : ''}, ${p.overdue} overdue`).join(' | ') || '(none)'}`);
+  // The raw activity log, so answers can quote a specific entry rather than
+  // only aggregates. Newest first, capped so the prompt stays small.
+  const log = digest.activityLog || [];
+  if (log.length) {
+    lines.push(`Activity log (newest first, ${Math.min(log.length, 25)} of ${log.length} entries in 30 days):`);
+    log.slice(0, 25).forEach((e) => lines.push(
+      `  - ${e.date} · ${e.project} · ${e.title} · ${e.hours}h · ${e.status}${e.who ? ` · ${e.who}` : ''}${e.bottleneck ? ` · BLOCKER: ${e.bottleneck.slice(0, 110)}` : e.note ? ` · note: ${e.note.slice(0, 110)}` : ''}`,
+    ));
+  }
   if (digest.blockers.tasks.length) lines.push(`Blocked tasks: ${digest.blockers.tasks.slice(0, 5).map((b) => `${b.task.title} (${b.days}d${b.why ? `: ${b.why.slice(0, 80)}` : ''})`).join(' | ')}`);
   if (digest.people.length) lines.push(`Workload: ${digest.people.map((p) => `${p.label} ${p.open} open/${p.doing} doing/${p.overdue} overdue`).join(' | ')}`);
   return lines.join('\n');
@@ -643,7 +811,7 @@ function factsText(answer, digest, scope) {
 
 const NARRATE_SYSTEM = `You are the analyst inside "Task Monitor", a project-management app. You are shown FACTS computed from the user's live database. Those facts are correct and complete — never invent, adjust or contradict a number, name or date, and never mention data you were not given.
 
-Write for a busy operator: direct, concrete, no filler, no praise, no "it looks like". Refer to projects and people by their real names from the facts.
+Write for a busy operator: direct, concrete, no filler, no praise, no "it looks like". Refer to projects, tasks and people by their real names from the facts. When the activity log is included, quote or paraphrase specific entries (with their date) rather than only aggregates — the user wants updates down to the individual log entry.
 
 Respond ONLY with a JSON object, no markdown and no code fences:
 {
@@ -718,4 +886,362 @@ export function answerToText(question, answer) {
   }
   if (answer.sources?.length) out.push('', `Based on: ${answer.sources.join(', ')}`);
   return out.join('\n');
+}
+
+/* ══════════════════════════════════════════════════════════
+   WRITE ACTIONS — propose, confirm, then apply
+   ──────────────────────────────────────────────────────────
+   Nothing here writes on its own. parseAction() turns a request into a
+   PROPOSAL that the view renders for confirmation; applyAction() only runs
+   after the user presses Confirm. Every id in a proposal is resolved against
+   real live data first, so the model can never invent a target to write to.
+   ══════════════════════════════════════════════════════════ */
+
+// The verb has to OPEN the sentence — a write request is an imperative
+// ("add a task…", "log 2 hours…"). That keeps "the activity log for SBLAF"
+// and "how is X going" on the read path, where a stray verb would otherwise
+// look like a command.
+const ACTION_START = /^\s*(?:please\s+|can you\s+|could you\s+|pls\s+)?(add|create|new|make|log|record|update|edit|change|rename|reschedule|move|set|assign|mark|delete|remove|archive)\b/i;
+const ACTION_NOUN  = /\b(task|project|activity|entry|log|subtask|due date|deadline|hours?|status|priority)\b/i;
+// "update me on X" / "any updates on X" are requests for a report, not a write.
+const NOT_ACTION   = /^\s*(?:update|give|bring)\s+(?:me|us)\b|^\s*(?:any|status)\s+updates?\b|\bupdates?\s+on\b/i;
+
+// Cheap pre-filter so plain questions never take the write path.
+export function looksLikeAction(q, digest) {
+  const s = String(q || '').trim();
+  if (!s) return false;
+  if (NOT_ACTION.test(s)) return false;
+  if (!ACTION_START.test(s)) return false;
+  if (ACTION_NOUN.test(s)) return true;
+  // "mark <task name> as done" — an imperative naming something real.
+  const w = s.toLowerCase();
+  const names = [
+    ...(digest?.projects || []).map((p) => p.name),
+    ...(digest?.taskIndex || []).map((t) => t.title),
+  ].filter((n) => n && n.length >= 6);
+  return names.some((n) => w.includes(n.toLowerCase()));
+}
+
+const PRIORITIES = ['low', 'medium', 'high'];
+const STATUSES   = ['todo', 'doing', 'done'];
+const COMPLETIONS = ['not-started', 'in-progress', 'blocked', 'completed'];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const ACTION_SYSTEM = `You turn a project-management request into ONE structured write operation against the user's live data.
+
+You are given the real projects, tasks and recent activity entries with their ids. You may ONLY reference ids from those lists — never invent one. If the request names something you cannot find, or is missing something required, or would mean more than one operation, return a "clarify" question instead.
+
+Respond ONLY with a JSON object, no markdown, no code fences:
+{
+  "op": "create" | "update" | "delete",
+  "entity": "project" | "task" | "activity",
+  "targetId": "<id from the lists, required for update/delete, null for create>",
+  "data": { ...fields to write, omit anything the user did not ask for... },
+  "clarify": "<a question, ONLY when you cannot build a safe operation; otherwise null>"
+}
+
+Field shapes:
+- project: name, description, color (#rrggbb)
+- task: title, description, projectId, phaseId, priority (low|medium|high), status (todo|doing|done), plan {startDate, endDate} as YYYY-MM-DD, tags [string], requestedBy
+- activity: taskId (required on create), date (YYYY-MM-DD), comment, hoursSpent (number), completionStatus (not-started|in-progress|blocked|completed), bottleneckRemarks
+
+Resolve relative dates ("today", "Friday", "next week") against the given date. For an update, put ONLY the fields that change in "data".`;
+
+// Request → validated proposal. Never writes. Returns { proposal } or { clarify }.
+export async function parseAction({ question, digest, workspaceId, userId }) {
+  let raw;
+  if (isAiAvailable()) {
+    const projects = digest.projects.map((p) => `  project id:${p.id} "${p.name}"`).join('\n');
+    const phases = (digest.projectPhases || []).map((p) => `  phase id:${p.id} "${p.name}" in project ${p.projectId}`).join('\n');
+    const tasks = (digest.taskIndex || []).slice(0, 80)
+      .map((t) => `  task id:${t.id} "${t.title}" [${t.status}] project:${t.projectId || 'none'}${t.due ? ` due:${t.due}` : ''}`).join('\n');
+    const acts = (digest.activityLog || []).slice(0, 25)
+      .map((a) => `  activity id:${a.id} ${a.date} task:${a.taskId} "${a.title}" ${a.hours}h ${a.status}`).join('\n');
+    const user = `Today is ${digest.today}.
+
+PROJECTS
+${projects || '  (none)'}
+${phases ? `\nPHASES\n${phases}` : ''}
+
+TASKS
+${tasks || '  (none)'}
+
+RECENT ACTIVITY ENTRIES
+${acts || '  (none)'}
+
+Request: ${question}`;
+    raw = await callClaudeJson({ system: ACTION_SYSTEM, user, maxTokens: 700, meta: { kind: 'ask-ai-action' } });
+  } else {
+    raw = localParseAction(question, digest);
+    if (!raw) {
+      return { clarify: 'I need an AI brain connected to interpret that request. Connect one in Settings → AI, or add it from the Projects / Board views.' };
+    }
+  }
+
+  if (raw?.clarify) return { clarify: String(raw.clarify) };
+  return resolveAction(raw, digest, { workspaceId, userId });
+}
+
+// Offline fallback: handles the two unambiguous shapes without a model.
+//   "add task <text>"  /  "create project <name>"
+function localParseAction(question, digest) {
+  const s = String(question || '').trim();
+  const task = s.match(/^(?:add|create|new)\s+(?:a\s+)?task\s+(.+)$/i);
+  if (task) {
+    const parsed = parseQuickAdd(task[1]);
+    if (!parsed.title) return null;
+    return {
+      op: 'create', entity: 'task', targetId: null,
+      data: {
+        title: parsed.title,
+        priority: parsed.priority || undefined,
+        tags: parsed.tags?.length ? parsed.tags : undefined,
+        requestedBy: parsed.requestedBy || undefined,
+        plan: parsed.plan?.endDate ? { endDate: parsed.plan.endDate } : undefined,
+        projectId: digest.projects.find((p) => s.toLowerCase().includes(p.name.toLowerCase()))?.id,
+      },
+    };
+  }
+  const project = s.match(/^(?:add|create|new)\s+(?:a\s+)?project\s+(.+)$/i);
+  if (project) {
+    return { op: 'create', entity: 'project', targetId: null, data: { name: project[1].replace(/^["']|["']$/g, '').trim() } };
+  }
+  return null;
+}
+
+// Validates the model's output against live data and shapes it for the
+// confirmation bubble. Anything unresolvable becomes a clarify question.
+function resolveAction(raw, digest, { workspaceId }) {
+  const op = String(raw?.op || '').toLowerCase();
+  const entity = String(raw?.entity || '').toLowerCase();
+  if (!['create', 'update', 'delete'].includes(op)) return { clarify: 'I could not tell whether you want to add, edit or delete something. Try "add a task…", "change …" or "delete …".' };
+  if (!['project', 'task', 'activity'].includes(entity)) return { clarify: 'I can add, edit or delete a project, a task or an activity log entry. Which one did you mean?' };
+
+  const data = raw?.data && typeof raw.data === 'object' ? raw.data : {};
+  const fields = [];
+  const warnings = [];
+  const add = (label, value) => { if (value !== undefined && value !== null && value !== '') fields.push({ label, value: String(value) }); };
+
+  const project = (id) => digest.projects.find((p) => p.id === id);
+  const task    = (id) => (digest.taskIndex || []).find((t) => t.id === id);
+  const act     = (id) => (digest.activityLog || []).find((a) => a.id === id);
+
+  if (op !== 'create' && !raw?.targetId) return { clarify: `Which ${entity} did you mean? Name it and I will show you the change before anything is written.` };
+
+  /* ── project ── */
+  if (entity === 'project') {
+    if (op === 'create') {
+      const name = String(data.name || '').trim();
+      if (!name) return { clarify: 'What should the project be called?' };
+      add('Name', name);
+      add('Description', data.description);
+      add('Workspace', digest.workspaces.find((w) => w.id === workspaceId)?.name || 'active workspace');
+      return { proposal: {
+        op, entity, targetId: null, targetLabel: null,
+        title: 'Create project', fields, warnings,
+        payload: { workspaceId, name, description: data.description || '', color: /^#[0-9a-f]{6}$/i.test(data.color || '') ? data.color : undefined },
+      } };
+    }
+    const p = project(raw.targetId);
+    if (!p) return { clarify: 'I could not find that project in this workspace.' };
+    if (op === 'delete') {
+      add('Project', p.name);
+      add('Holds', `${p.total} tasks · ${fmtHours(p.hours)} logged in 30 days`);
+      warnings.push('The project is soft-deleted (hidden everywhere, recoverable in Firestore). Its tasks are NOT deleted.');
+      return { proposal: { op, entity, targetId: p.id, targetLabel: p.name, title: 'Delete project', fields, warnings, payload: {} } };
+    }
+    const updates = {};
+    add('Project', p.name);
+    if (data.name)        { updates.name = String(data.name).trim(); add('Name', `${p.name} → ${updates.name}`); }
+    if (data.description !== undefined) { updates.description = String(data.description); add('Description', updates.description || '(cleared)'); }
+    if (/^#[0-9a-f]{6}$/i.test(data.color || '')) { updates.color = data.color; add('Color', data.color); }
+    if (!Object.keys(updates).length) return { clarify: `What should change on ${p.name}?` };
+    return { proposal: { op, entity, targetId: p.id, targetLabel: p.name, title: 'Edit project', fields, warnings, payload: updates } };
+  }
+
+  /* ── task ── */
+  if (entity === 'task') {
+    const clean = {};
+    if (data.priority && PRIORITIES.includes(String(data.priority).toLowerCase())) clean.priority = String(data.priority).toLowerCase();
+    if (data.status   && STATUSES.includes(String(data.status).toLowerCase()))     clean.status   = String(data.status).toLowerCase();
+    const plan = {};
+    if (ISO_DATE.test(data.plan?.startDate || '')) plan.startDate = data.plan.startDate;
+    if (ISO_DATE.test(data.plan?.endDate   || '')) plan.endDate   = data.plan.endDate;
+    if (data.plan && !Object.keys(plan).length) warnings.push('I could not read a valid date out of that, so no date is being set.');
+    const proj = data.projectId ? project(data.projectId) : null;
+    if (data.projectId && !proj) return { clarify: 'I could not find that project. Which project should this task sit in?' };
+    const tags = Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : null;
+
+    if (op === 'create') {
+      const title = String(data.title || '').trim();
+      if (!title) return { clarify: 'What should the task be called?' };
+      add('Title', title);
+      add('Project', proj ? proj.name : 'none (unfiled)');
+      add('Description', data.description);
+      add('Priority', clean.priority || 'medium');
+      add('Due', plan.endDate);
+      add('Starts', plan.startDate);
+      add('Tags', tags?.join(', '));
+      add('Requested by', data.requestedBy);
+      if (!proj) warnings.push('No project matched, so the task will be created unfiled. Name a project to place it.');
+      const phase = (digest.projectPhases || []).find((ph) => ph.id === data.phaseId && ph.projectId === proj?.id);
+      add('Phase', phase?.name);
+      return { proposal: {
+        op, entity, targetId: null, targetLabel: null,
+        title: 'Create task', fields, warnings,
+        payload: {
+          workspaceId, title,
+          description: data.description || '',
+          projectId: proj?.id || null,
+          phaseId: phase?.id || null,
+          priority: clean.priority || 'medium',
+          plan,
+          tags: tags || [],
+          requestedBy: data.requestedBy || '',
+        },
+      } };
+    }
+
+    const t = task(raw.targetId);
+    if (!t) return { clarify: 'I could not find that task. Which one did you mean?' };
+    if (op === 'delete') {
+      add('Task', t.title);
+      add('In', t.project);
+      add('Has', `${t.activityCount} activity entries · ${fmtHours(t.hours)} logged`);
+      warnings.push('The task is soft-deleted, never hard-deleted — its activity entries stay intact.');
+      return { proposal: { op, entity, targetId: t.id, targetLabel: t.title, title: 'Delete task', fields, warnings, payload: { projectId: t.projectId } } };
+    }
+    const updates = {};
+    add('Task', t.title);
+    add('In project', t.project);
+    if (data.title)       { updates.title = String(data.title).trim(); add('Title', `${t.title} → ${updates.title}`); }
+    if (data.description !== undefined) { updates.description = String(data.description); add('Description', updates.description || '(cleared)'); }
+    if (clean.priority)   { updates.priority = clean.priority; add('Priority', clean.priority); }
+    if (clean.status)     { updates.status = clean.status; add('Status', `${t.status} → ${clean.status}`); }
+    if (proj)             { updates.projectId = proj.id; add('Project', `${t.project} → ${proj.name}`); }
+    if (Object.keys(plan).length) {
+      updates.plan = { ...(t.task.plan || {}), ...plan };
+      add('Due', plan.endDate ? `${t.due || 'none'} → ${plan.endDate}` : undefined);
+      add('Starts', plan.startDate);
+    }
+    if (tags)             { updates.tags = tags; add('Tags', tags.join(', ') || '(cleared)'); }
+    if (!Object.keys(updates).length) return { clarify: `What should change on "${t.title}"?` };
+    return { proposal: { op, entity, targetId: t.id, targetLabel: t.title, title: 'Edit task', fields, warnings, payload: { updates, projectId: t.projectId } } };
+  }
+
+  /* ── activity ── */
+  const hours = data.hoursSpent === undefined ? undefined : Number(data.hoursSpent);
+  if (hours !== undefined && (!Number.isFinite(hours) || hours < 0 || hours > 24)) {
+    return { clarify: 'How many hours should I log? It has to be a number between 0 and 24.' };
+  }
+  const completion = COMPLETIONS.includes(String(data.completionStatus || '').toLowerCase())
+    ? String(data.completionStatus).toLowerCase() : undefined;
+  const date = ISO_DATE.test(data.date || '') ? data.date : undefined;
+
+  if (op === 'create') {
+    const t = task(data.taskId);
+    if (!t) return { clarify: 'Which task should this activity be logged against?' };
+    add('Task', t.title);
+    add('Project', t.project);
+    add('Date', date || digest.today);
+    add('Hours', hours ?? 0);
+    add('Comment', data.comment);
+    add('Completion', completion || 'in-progress');
+    add('Bottleneck', data.bottleneckRemarks);
+    return { proposal: {
+      op, entity, targetId: null, targetLabel: t.title,
+      title: 'Log activity', fields, warnings,
+      payload: {
+        taskId: t.id, projectId: t.projectId,
+        activity: {
+          date: date || digest.today,
+          comment: data.comment || '',
+          hoursSpent: hours ?? 0,
+          completionStatus: completion || 'in-progress',
+          bottleneckRemarks: data.bottleneckRemarks || '',
+        },
+      },
+    } };
+  }
+
+  const a = act(raw.targetId);
+  if (!a) return { clarify: 'I could not find that activity entry in the last 30 days. Which one did you mean?' };
+  if (op === 'delete') {
+    add('Entry', `${a.date} · ${a.title}`);
+    add('Hours', a.hours);
+    warnings.push("Activity entries are removed for good, and the task's logged-hours counter is adjusted down.");
+    return { proposal: { op, entity, targetId: a.id, targetLabel: `${a.date} · ${a.title}`, title: 'Delete activity entry', fields, warnings, payload: { projectId: a.projectId } } };
+  }
+  const updates = {};
+  add('Entry', `${a.date} · ${a.title}`);
+  add('In project', a.project);
+  if (date)                 { updates.date = date; add('Date', `${a.date} → ${date}`); }
+  if (hours !== undefined)  { updates.hoursSpent = hours; add('Hours', `${a.hours} → ${hours}`); }
+  if (data.comment !== undefined)           { updates.comment = String(data.comment); add('Comment', updates.comment || '(cleared)'); }
+  if (completion)           { updates.completionStatus = completion; add('Completion', `${a.status} → ${completion}`); }
+  if (data.bottleneckRemarks !== undefined) { updates.bottleneckRemarks = String(data.bottleneckRemarks); add('Bottleneck', updates.bottleneckRemarks || '(cleared)'); }
+  if (!Object.keys(updates).length) return { clarify: 'What should change on that entry?' };
+  return { proposal: { op, entity, targetId: a.id, targetLabel: `${a.date} · ${a.title}`, title: 'Edit activity entry', fields, warnings, payload: { updates, projectId: a.projectId } } };
+}
+
+/* ── apply (runs only after Confirm) ─────────────────────── */
+
+function appUrl(hash) {
+  if (typeof window === 'undefined') return hash;
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}${hash}`;
+}
+
+// Writes the proposal. Returns { url, hash, label, taskId? } for the receipt.
+export async function applyAction(proposal, { userId, digest }) {
+  const { op, entity, targetId, payload } = proposal;
+
+  if (entity === 'project') {
+    if (op === 'create') {
+      const ref = await addProject(userId, payload);
+      return { label: payload.name, hash: '#/projects', url: appUrl('#/projects'), id: ref?.id };
+    }
+    if (op === 'update') {
+      await updateProject(targetId, payload);
+      return { label: proposal.targetLabel, hash: '#/projects', url: appUrl('#/projects'), id: targetId };
+    }
+    await softDeleteProject(targetId);
+    return { label: proposal.targetLabel, hash: '#/projects', url: appUrl('#/projects'), id: targetId, deleted: true };
+  }
+
+  if (entity === 'task') {
+    if (op === 'create') {
+      const ref = await addTask(userId, payload);
+      const hash = `#/board/${payload.projectId || 'all'}`;
+      return { label: payload.title, hash, url: appUrl(hash), id: ref?.id, taskId: ref?.id };
+    }
+    if (op === 'update') {
+      await updateTask(targetId, payload.updates);
+      const hash = `#/board/${payload.projectId || 'all'}`;
+      return { label: proposal.targetLabel, hash, url: appUrl(hash), id: targetId, taskId: targetId };
+    }
+    await softDeleteTask(targetId);
+    const hash = `#/board/${payload.projectId || 'all'}`;
+    return { label: proposal.targetLabel, hash, url: appUrl(hash), id: targetId, deleted: true };
+  }
+
+  // activity
+  if (op === 'create') {
+    const t = (digest.taskIndex || []).find((x) => x.id === payload.taskId);
+    if (!t) throw new Error('That task no longer exists.');
+    await addActivity(userId, t.task, payload.activity);
+    const hash = `#/table/${payload.projectId || 'all'}`;
+    return { label: `${payload.activity.date} · ${t.title}`, hash, url: appUrl(hash), taskId: t.id };
+  }
+  const existing = (digest.activityLog || []).find((a) => a.id === targetId);
+  const raw = existing ? { id: existing.id, taskId: existing.taskId, hoursSpent: existing.hours, attachments: [] } : null;
+  if (!raw) throw new Error('That activity entry no longer exists.');
+  if (op === 'update') {
+    await editActivity(raw, payload.updates);
+    const hash = `#/table/${payload.projectId || 'all'}`;
+    return { label: proposal.targetLabel, hash, url: appUrl(hash), taskId: raw.taskId };
+  }
+  await deleteActivity(raw);
+  const hash = `#/table/${payload.projectId || 'all'}`;
+  return { label: proposal.targetLabel, hash, url: appUrl(hash), deleted: true };
 }

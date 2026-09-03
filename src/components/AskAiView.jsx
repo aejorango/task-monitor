@@ -13,6 +13,7 @@ import { auth } from '../services/firebase';
 import {
   SCOPES, THINKING, buildDigest, buildSuggestions, routeIntent, buildAnswer,
   narrate, isAiAvailable, answerToText,
+  looksLikeAction, parseAction, applyAction,
 } from '../services/askAi';
 
 const SCOPE_DEFAULT_INTENT = {
@@ -22,7 +23,7 @@ const SCOPE_DEFAULT_INTENT = {
 };
 
 export default function AskAiView() {
-  const { tasks, loading: tasksLoading } = useTasks();
+  const { tasks, loading: tasksLoading, userId, workspaceId } = useTasks();
   const { projects } = useProjects();
   const { activities } = useAllActivities();
   const { workspaces } = useWorkspaces();
@@ -73,6 +74,21 @@ export default function AskAiView() {
     const started = Date.now();
     try {
       const d = digestRef.current;
+
+      // A typed request to change something takes the write path: it comes
+      // back as a proposal to confirm, never as a write. Suggestion cards and
+      // follow-up chips always carry an intent, so they stay read-only.
+      if (!intentOverride && looksLikeAction(q, d)) {
+        const [out] = await Promise.all([
+          parseAction({ question: q, digest: d, workspaceId, userId }),
+          new Promise((r) => setTimeout(r, 400)),
+        ]);
+        setTurns((prev) => prev.map((t) => (t.id === id
+          ? { ...t, thinking: false, proposal: out.proposal || null, clarify: out.clarify || null }
+          : t)));
+        return;
+      }
+
       const intent = intentOverride || routeIntent(q, d) || SCOPE_DEFAULT_INTENT[askedScope] || null;
       const base = buildAnswer(intent, d, q);
       const [answer] = await Promise.all([
@@ -89,6 +105,21 @@ export default function AskAiView() {
         : t)));
     }
   };
+
+  const patchTurn = (id, patch) => setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+
+  // Only reached from the Confirm button on a proposal card.
+  const confirmAction = async (turn) => {
+    patchTurn(turn.id, { applying: true, error: null });
+    try {
+      const receipt = await applyAction(turn.proposal, { userId, digest: digestRef.current });
+      patchTurn(turn.id, { applying: false, applied: receipt });
+    } catch (err) {
+      console.error('[ask-ai] write failed', err);
+      patchTurn(turn.id, { applying: false, error: err?.message || 'The write failed. Nothing was changed.' });
+    }
+  };
+  const cancelAction = (turn) => patchTurn(turn.id, { cancelled: true });
 
   const submit = () => ask(draft);
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
@@ -206,8 +237,14 @@ export default function AskAiView() {
               turn={t}
               initial={initial}
               isLast={i === turns.length - 1}
+              // The detail table is shown once per thread — on the opening
+              // question — so follow-ups read as a conversation, not as the
+              // same table over and over.
+              showItems={i === 0}
               aiOn={aiOn}
               onAsk={ask}
+              onConfirm={confirmAction}
+              onCancel={cancelAction}
               tailRef={i === turns.length - 1 ? tailRef : null}
             />
           ))}
@@ -251,7 +288,7 @@ export default function AskAiView() {
 
 /* ── one question + its answer ───────────────────────────── */
 
-function Turn({ turn, initial, isLast, aiOn, onAsk, tailRef }) {
+function Turn({ turn, initial, isLast, showItems, aiOn, onAsk, onConfirm, onCancel, tailRef }) {
   const a = turn.answer;
   const [helpful, setHelpful] = useState(false);
   const [copied, setCopied]   = useState(false);
@@ -288,6 +325,32 @@ function Turn({ turn, initial, isLast, aiOn, onAsk, tailRef }) {
             </div>
           )}
 
+          {turn.clarify && (
+            <div className="askai-card askai-answer">
+              <div className="askai-answer-head">
+                <span className="askai-badge" data-tone="amber">Need one more thing</span>
+              </div>
+              <p className="askai-answer-text">{turn.clarify}</p>
+            </div>
+          )}
+
+          {turn.proposal && !turn.applied && !turn.cancelled && (
+            <ProposalCard
+              proposal={turn.proposal}
+              applying={turn.applying}
+              onConfirm={() => onConfirm(turn)}
+              onCancel={() => onCancel(turn)}
+            />
+          )}
+
+          {turn.cancelled && !turn.applied && (
+            <div className="askai-card askai-answer askai-cancelled">
+              <p className="askai-answer-text">Cancelled — nothing was written.</p>
+            </div>
+          )}
+
+          {turn.applied && <ReceiptCard proposal={turn.proposal} receipt={turn.applied} />}
+
           {a && (
             <>
               <div className="askai-card askai-answer">
@@ -312,7 +375,7 @@ function Turn({ turn, initial, isLast, aiOn, onAsk, tailRef }) {
                 </div>
               )}
 
-              {a.items?.length > 0 && (
+              {showItems && a.items?.length > 0 && (
                 <div className="askai-card askai-items">
                   <div className="askai-items-head">
                     <span className="askai-items-title">{a.itemsTitle}</span>
@@ -379,6 +442,79 @@ function Turn({ turn, initial, isLast, aiOn, onAsk, tailRef }) {
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── write actions: confirm, then receipt ────────────────── */
+
+const OP_TONE = { create: 'green', update: 'amber', delete: 'red' };
+
+function ProposalCard({ proposal, applying, onConfirm, onCancel }) {
+  return (
+    <div className="askai-card askai-proposal" data-op={proposal.op}>
+      <div className="askai-proposal-head">
+        <span className="askai-badge" data-tone={OP_TONE[proposal.op] || 'amber'}>{proposal.title}</span>
+        <span className="askai-answer-meta">Review it — nothing is written until you confirm.</span>
+      </div>
+
+      <dl className="askai-proposal-fields">
+        {proposal.fields.map((f) => (
+          <div key={f.label} className="askai-proposal-field">
+            <dt>{f.label}</dt>
+            <dd>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {proposal.warnings?.map((w) => (
+        <p key={w} className="askai-proposal-warn">⚠ {w}</p>
+      ))}
+
+      <div className="askai-proposal-actions">
+        <button className="askai-confirm" onClick={onConfirm} disabled={applying}>
+          {applying ? 'Writing…' : '✓ Confirm'}
+        </button>
+        <button className="askai-cancel" onClick={onCancel} disabled={applying}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+const OP_DONE = { create: 'Created', update: 'Updated', delete: 'Deleted' };
+
+function ReceiptCard({ proposal, receipt }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(receipt.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (err) { console.error('copy failed', err); }
+  };
+  // In-app navigation: set the hash, then ask the Board to open the task —
+  // the same handshake global search uses.
+  const open = (e) => {
+    e.preventDefault();
+    window.location.hash = receipt.hash;
+    if (receipt.taskId && receipt.hash.startsWith('#/board')) {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('task-monitor:open-task', { detail: { taskId: receipt.taskId } }));
+      }, 60);
+    }
+  };
+  return (
+    <div className="askai-card askai-receipt">
+      <div className="askai-receipt-head">
+        <span className="askai-badge" data-tone={proposal.op === 'delete' ? 'red' : 'green'}>
+          {OP_DONE[proposal.op]} {proposal.entity}
+        </span>
+        <strong className="askai-receipt-label">{receipt.label}</strong>
+      </div>
+      <div className="askai-receipt-link">
+        <a href={receipt.url} onClick={open}>{receipt.url}</a>
+        <button className="askai-fb" onClick={copy}>{copied ? '✓ Copied' : '⧉ Copy link'}</button>
       </div>
     </div>
   );
