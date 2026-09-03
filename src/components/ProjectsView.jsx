@@ -1,7 +1,7 @@
 // src/components/ProjectsView.jsx — list, create, edit projects + phases.
 
 import { useState, useEffect, useMemo } from 'react';
-import { useProjects, useTasks, useAuth, useTemplates, useAllActivities } from '../hooks/useTasks';
+import { useProjects, useTasks, useAuth, useTemplates, useAllActivities, useGoals } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
   addProject,
@@ -20,6 +20,7 @@ import {
   addSegmentToWorkspace,
   updateSegmentInWorkspace,
   deleteSegmentFromWorkspace,
+  todayLocal,
 } from '../services/firebase';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
@@ -478,7 +479,7 @@ function ProjectActivityLogModal({ project, onClose }) {
   );
 }
 
-function ProjectSharing({ project }) {
+function ProjectSharing({ project, bare = false }) {
   const [uidInput, setUidInput] = useState('');
   const [role, setRole]   = useState('viewer');
   const [busy, setBusy]   = useState(false);
@@ -609,9 +610,12 @@ function ProjectSharing({ project }) {
 
   const liveInvites = invites.filter((inv) => !inv.revoked);
 
+  // `bare` drops the divider + heading so the project editor can drop this
+  // straight into its own titled card.
+  const wrapStyle = bare ? undefined : { borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 };
   return (
-    <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
-      <label className="label">Sharing</label>
+    <div className="field" style={wrapStyle}>
+      {!bare && <label className="label">Sharing</label>}
 
       {/* Current members */}
       <p className="muted small" style={{ marginTop: 0, marginBottom: 6 }}>
@@ -749,14 +753,14 @@ function ProjectSharing({ project }) {
   );
 }
 
-function CustomFieldsEditor({ fields, onChange }) {
+function CustomFieldsEditor({ fields, onChange, bare = false }) {
   const add = () => onChange([...fields, { id: uid(), name: 'New field', type: 'text', options: [] }]);
   const remove = (id) => onChange(fields.filter((f) => f.id !== id));
   const update = (id, patch) => onChange(fields.map((f) => f.id === id ? { ...f, ...patch } : f));
 
   return (
-    <div className="field" style={{ borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
-      <label className="label">Custom fields</label>
+    <div className="field" style={bare ? undefined : { borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 }}>
+      {!bare && <label className="label">Custom fields</label>}
       <p className="muted small" style={{ marginTop: 0 }}>
         Extra fields that appear on every task in this project. Text, number, date, or select (predefined options).
       </p>
@@ -829,8 +833,49 @@ function TemplateCard({ template, onUse, note }) {
   );
 }
 
+// ─── Project editor ─────────────────────────────────────────────────────────
+// Full-bleed editor modal: navy hero header (breadcrumb, inline-editable name,
+// live health pills), a scrolling left column (KPIs → structure tree → details
+// → goal/template/sharing) and a right-hand project-activity timeline.
+
+function fmtDay(ymd) {
+  if (!ymd) return '—';
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  if (!y || !m || !d) return String(ymd);
+  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Firestore timestamps arrive as a Timestamp (toDate) or a plain {seconds}.
+function tsToDate(ts) {
+  if (!ts) return null;
+  if (typeof ts.toDate === 'function') return ts.toDate();
+  if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
+  return null;
+}
+
+function fmtAgo(ts) {
+  const d = tsToDate(ts);
+  if (!d) return null;
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+  const days = Math.round(mins / 1440);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+const ACT_FILTERS = [
+  { key: 'all',     label: 'All' },
+  { key: 'work',    label: 'Work logs' },
+  { key: 'blocked', label: 'Blocked' },
+];
+
 function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   const { projects } = useProjects();
+  const { tasks } = useTasks();
+  const { activities: allActivities } = useAllActivities();
+  const { goals } = useGoals();
   const workspaceId = workspace?.id;
   const isNew = !project;
   const seed = fromTemplate?.payload;
@@ -851,7 +896,9 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   const [assignedTo, setAssignedTo] = useState(project?.assignedTo || []);
   const [assignedToExternal, setAssignedToExternal] = useState(project?.assignedToExternal || []);
   const [saving, setSaving] = useState(false);
-  const [newSegmentInput, setNewSegmentInput] = useState('');
+  const [newSegmentInput, setNewSegmentInput] = useState(null); // null = picker, string = creating
+  const [actFilter, setActFilter] = useState('all');
+  const [editingActivity, setEditingActivity] = useState(null);
 
   // Get all segments from workspace + project segments for backward compatibility
   const allSegments = useMemo(() => {
@@ -890,6 +937,92 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   }, [ws, project, assignedTo]);
   const me = auth.currentUser;
   const fallbackLabels = me?.uid ? { [me.uid]: me.displayName || me.email || `${me.uid.slice(0, 6)}…` } : {};
+
+  // ── Derived health ────────────────────────────────────────────────────────
+  // The hero pills, KPI strip and structure bars are all computed from this
+  // project's live tasks — a project document itself carries no dates or
+  // progress of its own.
+  const health = useMemo(() => {
+    const today = todayLocal();
+    const mine  = project ? tasks.filter((t) => t.projectId === project.id) : [];
+    const done  = mine.filter((t) => t.status === 'done');
+    const overdue = mine.filter((t) => t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today);
+    const starts = mine.map((t) => t.plan?.startDate).filter(Boolean).sort();
+    const ends   = mine.map((t) => t.plan?.endDate).filter(Boolean).sort();
+    const start  = starts[0] || '';
+    const end    = ends[ends.length - 1] || '';
+
+    let schedulePct = null;
+    if (start && end) {
+      const s = new Date(`${start}T00:00:00`).getTime();
+      const e = new Date(`${end}T00:00:00`).getTime();
+      const n = new Date(`${today}T00:00:00`).getTime();
+      schedulePct = e <= s
+        ? (n >= e ? 100 : 0)
+        : Math.max(0, Math.min(100, Math.round(((n - s) / (e - s)) * 100)));
+    }
+
+    const completePct = mine.length ? Math.round((done.length / mine.length) * 100) : 0;
+    const gap = schedulePct === null ? null : schedulePct - completePct;
+
+    let tone = 'green', label = 'GREEN — on track';
+    if (!mine.length)                                          { tone = 'muted'; label = 'No tasks yet'; }
+    else if (overdue.length > 0 || (gap !== null && gap >= 20)) { tone = 'red';   label = 'RED — at risk'; }
+    else if (gap !== null && gap >= 8)                          { tone = 'amber'; label = 'AMBER — watch'; }
+
+    const daysLeft = end
+      ? Math.round((new Date(`${end}T00:00:00`) - new Date(`${today}T00:00:00`)) / 86400000)
+      : null;
+
+    return { tasks: mine, total: mine.length, done: done.length, overdue, start, end, daysLeft, schedulePct, completePct, gap, tone, label };
+  }, [tasks, project]);
+
+  // This project's activities, newest first.
+  const projectActivities = useMemo(() => {
+    if (!project) return [];
+    const byTask = {};
+    tasks.forEach((t) => { byTask[t.id] = t; });
+    return allActivities
+      .filter((a) => a.projectId === project.id)
+      .map((a) => ({
+        ...a,
+        _task:  a.taskTitle || byTask[a.taskId]?.title || 'Untitled task',
+        _files: a.attachments || [],
+      }))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }, [allActivities, tasks, project]);
+
+  const loggedHours  = projectActivities.reduce((s, a) => s + (a.hoursSpent || 0), 0);
+  const blockedCount = projectActivities.filter(
+    (a) => a.completionStatus === 'blocked' || a.bottleneckRemarks,
+  ).length;
+
+  const shownActivities = useMemo(() => {
+    if (actFilter === 'work')    return projectActivities.filter((a) => (a.hoursSpent || 0) > 0);
+    if (actFilter === 'blocked') return projectActivities.filter((a) => a.completionStatus === 'blocked' || a.bottleneckRemarks);
+    return projectActivities;
+  }, [projectActivities, actFilter]);
+
+  // Strategic goals whose deliverables link this project.
+  const linkedGoals = useMemo(() => {
+    if (!project) return [];
+    const out = [];
+    goals.forEach((g) => {
+      (g.deliverables || []).forEach((d, i) => {
+        const ids = Array.isArray(d.projectIds) ? d.projectIds : (d.projectId ? [d.projectId] : []);
+        if (ids.includes(project.id)) out.push({ goal: g, deliverable: d, index: i });
+      });
+    });
+    return out;
+  }, [goals, project]);
+
+  const phaseStats = (phaseId) => {
+    const today = todayLocal();
+    const t = health.tasks.filter((x) => x.phaseId === phaseId);
+    const done = t.filter((x) => x.status === 'done').length;
+    const overdue = t.filter((x) => x.status !== 'done' && x.plan?.endDate && x.plan.endDate < today).length;
+    return { total: t.length, done, overdue, pct: t.length ? Math.round((done / t.length) * 100) : 0 };
+  };
 
   // Saved project templates — let the user start a new project from one
   // directly inside this modal.
@@ -939,9 +1072,9 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   };
 
   const addNewSegment = () => {
-    if (!newSegmentInput.trim()) return;
+    if (!newSegmentInput?.trim()) return;
     setSegment(newSegmentInput.trim());
-    setNewSegmentInput('');
+    setNewSegmentInput(null);
   };
 
   const remove = async () => {
@@ -972,171 +1105,484 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
     }
   };
 
+  const wsProjectCount = projects.filter((p) => p.workspaceId === workspaceId).length;
+  const lastEdited = fmtAgo(project?.updatedAt);
+
+  const kpis = [
+    {
+      label: 'Complete',
+      value: health.total ? `${health.completePct}%` : '—',
+      delta: health.total ? `${health.done} of ${health.total} tasks` : 'no tasks yet',
+      tone: !health.total ? 'muted' : health.completePct >= 80 ? 'green' : health.completePct >= 40 ? 'amber' : 'red',
+    },
+    {
+      label: 'Schedule used',
+      value: health.schedulePct === null ? '—' : `${health.schedulePct}%`,
+      delta: health.gap === null ? 'no planned dates'
+        : health.gap > 0 ? `${health.gap}-point gap`
+        : `${Math.abs(health.gap)} points ahead`,
+      tone: health.gap === null ? 'muted' : health.gap >= 20 ? 'red' : health.gap >= 8 ? 'amber' : 'green',
+    },
+    {
+      label: 'Overdue',
+      value: String(health.overdue.length),
+      delta: (() => {
+        if (!health.overdue.length) return 'nothing past due';
+        const n = new Set(health.overdue.map((t) => t.phaseId)).size;
+        return `across ${n} phase${n === 1 ? '' : 's'}`;
+      })(),
+      tone: health.overdue.length ? 'red' : 'green',
+    },
+    {
+      label: 'Logged hours',
+      value: `${loggedHours.toFixed(1)}h`,
+      delta: `${projectActivities.length} session${projectActivities.length === 1 ? '' : 's'}`,
+      tone: 'navy',
+    },
+  ];
+
   return (
+    <>
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-2col" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">{isNew ? 'New project' : 'Edit project'}</h3>
+      <div className="pe-modal" onClick={(e) => e.stopPropagation()}>
 
-        {isNew && projectTemplates.length > 0 && (
-          <div className="field">
-            <label className="label">Start from a saved template</label>
-            <select
-              className="select"
-              value={templateId}
-              onChange={(e) => applyTemplate(e.target.value)}
-            >
-              <option value="">— Blank project —</option>
-              {projectTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.payload?.phases?.length || 0} phases)
-                </option>
-              ))}
-            </select>
-            <p className="muted small" style={{ marginTop: 4 }}>
-              Picking a template fills in the name, description, color and phases below — tweak anything before saving.
-            </p>
-          </div>
-        )}
-
-        <div className="modal-2col-grid">
-          <div className="modal-col-left">
-            <div className="field">
-              <label className="label">Name</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BRIDGED Compliance" />
+        {/* ── Hero header ── */}
+        <header className="pe-hero">
+          <span className="pe-hero-glow" aria-hidden="true" />
+          <div className="pe-hero-inner">
+            <div className="pe-crumbs">
+              <span className="pe-crumb">
+                <span className="pe-crumb-dot" style={{ background: workspace?.color || 'var(--c-purple)' }} />
+                {workspace?.name || 'Workspace'}
+              </span>
+              <span className="pe-crumb-sep">/</span>
+              <span className="pe-crumb pe-crumb-accent">Project</span>
             </div>
 
-            <div className="field">
-              <label className="label">Description</label>
-              <MarkdownEditor value={description} onChange={setDescription} rows={3} placeholder="What is this project about? Markdown supported." />
-            </div>
-
-            <div className="field">
-              <label className="label">Phases</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {phases.map((p, i) => (
-                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 4 }}>
-                    <input className="input input-sm" value={p.name} onChange={(e) => updatePhase(p.id, e.target.value)} />
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0}>↑</button>
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1}>↓</button>
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1}>✕</button>
-                  </div>
-                ))}
-                <button type="button" className="btn btn-sm" onClick={addPhase} style={{ alignSelf: 'flex-start', marginTop: 4 }}>+ Add phase</button>
-              </div>
-            </div>
-          </div>
-
-          <div className="modal-col-right">
-            <div className="field">
-              <label className="label">Color</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {COLORS.map((c) => (
-                  <button
-                    type="button"
-                    key={c}
-                    onClick={() => setColor(c)}
-                    title={c}
-                    style={{
-                      width: 24, height: 24, borderRadius: '50%',
-                      background: c, border: color === c ? '2px solid var(--c-text)' : '2px solid transparent',
-                      cursor: 'pointer',
-                    }}
+            <div className="pe-hero-main">
+              <div className="pe-hero-id">
+                <div className="pe-mode">{isNew ? 'New project' : 'Edit project'}</div>
+                <div className="pe-name-row">
+                  <span className="pe-name-dot" style={{ background: color, boxShadow: `0 0 0 3px ${color}40` }} />
+                  <input
+                    className="pe-name-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Untitled project"
+                    aria-label="Project name"
+                    autoFocus={isNew}
                   />
-                ))}
+                </div>
+                <div className="pe-pills">
+                  {!isNew && <span className={`pe-pill pe-pill-${health.tone}`}>● {health.label}</span>}
+                  <span className="pe-pill pe-pill-accent">{project?.archived ? 'Archived' : 'Active'}</span>
+                  {!isNew && health.total > 0 && (
+                    <span className="pe-pill pe-pill-ghost">
+                      {health.completePct}% complete
+                      {health.schedulePct !== null && ` · ${health.schedulePct}% of schedule used`}
+                    </span>
+                  )}
+                  <span className="pe-hero-meta">
+                    {isNew
+                      ? 'Not saved yet'
+                      : `${health.total} task${health.total === 1 ? '' : 's'} · ${projectActivities.length} activit${projectActivities.length === 1 ? 'y' : 'ies'}`}
+                  </span>
+                </div>
               </div>
+              <button type="button" className="pe-close" onClick={onClose} aria-label="Close">✕</button>
+            </div>
+          </div>
+        </header>
+
+        {/* ── Body ── */}
+        <div className="pe-body">
+
+          {/* LEFT — the form */}
+          <div className="pe-main">
+
+            <div className="pe-kpis">
+              {kpis.map((k) => (
+                <div key={k.label} className={`pe-kpi pe-tone-${k.tone}`}>
+                  <div className="pe-kpi-label">{k.label}</div>
+                  <div className="pe-kpi-value">{k.value}</div>
+                  <div className="pe-kpi-delta">{k.delta}</div>
+                </div>
+              ))}
             </div>
 
-            <div className="field">
-              <label className="label">Segment / Department</label>
-              <p className="muted small" style={{ marginTop: 0, marginBottom: 6 }}>
-                Organize projects by department (Sales, Finance, Engineering, etc.)
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, marginBottom: 6 }}>
-                {newSegmentInput ? (
-                  <>
-                    <input
-                      className="input"
-                      value={newSegmentInput}
-                      onChange={(e) => setNewSegmentInput(e.target.value)}
-                      placeholder="e.g. Sales, Finance, Engineering"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') addNewSegment();
-                        if (e.key === 'Escape') setNewSegmentInput('');
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={addNewSegment}
-                      disabled={!newSegmentInput.trim()}
-                    >
-                      Create
-                    </button>
-                  </>
-                ) : (
-                  <>
+            {/* Structure — workspace → project → editable phases */}
+            <section className="pe-card">
+              <h4 className="pe-sect"><span className="pe-sect-mark">⌗</span>Structure — phases and their tasks</h4>
+
+              <div className="pe-tree-row">
+                <span className="pe-kind pe-kind-ws">WS</span>
+                <div className="pe-tree-body">
+                  <div className="pe-tree-name">{workspace?.name || 'Workspace'}</div>
+                  <div className="pe-tree-meta">{(ws?.members || []).length} members · {wsProjectCount} projects</div>
+                </div>
+              </div>
+
+              <div className="pe-tree-row pe-tree-proj pe-tree-current">
+                <span className="pe-kind pe-kind-proj">PROJ</span>
+                <div className="pe-tree-body">
+                  <div className="pe-tree-name">{name.trim() || 'Untitled project'}</div>
+                  <div className="pe-tree-meta">
+                    this project · {health.total} task{health.total === 1 ? '' : 's'}
+                    {health.start && ` · ${fmtDay(health.start)} – ${fmtDay(health.end)}`}
+                  </div>
+                </div>
+                <div className="pe-bar"><span style={{ width: `${health.completePct}%`, background: color }} /></div>
+                <span className="pe-pct">{health.completePct}%</span>
+              </div>
+
+              {phases.map((p, i) => {
+                const st = phaseStats(p.id);
+                return (
+                  <div key={p.id} className="pe-tree-row pe-tree-phase">
+                    <span className="pe-kind pe-kind-phase">PHASE</span>
+                    <div className="pe-tree-body">
+                      <input
+                        className="pe-phase-input"
+                        value={p.name}
+                        onChange={(e) => updatePhase(p.id, e.target.value)}
+                        placeholder="Phase name"
+                        aria-label={`Phase ${i + 1} name`}
+                      />
+                      <div className="pe-tree-meta">
+                        {st.total} task{st.total === 1 ? '' : 's'} · {st.done} done
+                        {st.overdue > 0 && ` · ${st.overdue} overdue`}
+                      </div>
+                    </div>
+                    <div className="pe-bar">
+                      <span style={{
+                        width: `${st.total ? Math.max(st.pct, 2) : 0}%`,
+                        background: st.overdue ? 'var(--c-danger)' : st.pct === 100 ? 'var(--c-emerald)' : 'var(--c-accent)',
+                      }} />
+                    </div>
+                    <span className="pe-pct">{st.total ? `${st.pct}%` : '—'}</span>
+                    <div className="pe-phase-ctl">
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0} title="Move up">↑</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1} title="Move down">↓</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1} title="Remove phase">✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <button type="button" className="btn btn-sm pe-add-phase" onClick={addPhase}>+ Add phase</button>
+            </section>
+
+            {/* Details */}
+            <section className="pe-card">
+              <h4 className="pe-sect"><span className="pe-sect-mark">◈</span>Details</h4>
+
+              <div className="pe-grid3">
+                <div>
+                  <span className="pe-lbl">Workspace</span>
+                  <div className="pe-fld">
+                    <span className="pe-crumb-dot" style={{ background: workspace?.color || 'var(--c-purple)' }} />
+                    {workspace?.name || '—'}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Segment / department</span>
+                  {newSegmentInput === null ? (
                     <select
-                      className="select"
+                      className="select pe-input"
                       value={segment}
                       onChange={(e) => {
-                        if (e.target.value === '__new__') {
-                          setNewSegmentInput('');
-                        } else {
-                          setSegment(e.target.value);
-                        }
+                        if (e.target.value === '__new__') setNewSegmentInput('');
+                        else setSegment(e.target.value);
                       }}
                     >
-                      {allSegments.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
+                      {allSegments.map((s) => <option key={s} value={s}>{s}</option>)}
                       <option value="__new__">+ Create new segment…</option>
                     </select>
-                  </>
+                  ) : (
+                    <div className="pe-newseg">
+                      <input
+                        className="input pe-input"
+                        value={newSegmentInput}
+                        onChange={(e) => setNewSegmentInput(e.target.value)}
+                        placeholder="e.g. Sales, Finance"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') addNewSegment();
+                          if (e.key === 'Escape') setNewSegmentInput(null);
+                        }}
+                      />
+                      <button type="button" className="btn btn-sm" onClick={addNewSegment} disabled={!newSegmentInput.trim()}>Add</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => setNewSegmentInput(null)}>✕</button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Status</span>
+                  <div className="pe-fld">
+                    <span className="pe-crumb-dot" style={{ background: project?.archived ? 'var(--c-text-muted)' : 'var(--c-accent)' }} />
+                    {project?.archived ? 'Archived' : 'Active'}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Color</span>
+                  <div className="pe-fld pe-swatches">
+                    {COLORS.map((c) => (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => setColor(c)}
+                        title={c}
+                        aria-label={`Color ${c}`}
+                        aria-pressed={color === c}
+                        className={`pe-swatch${color === c ? ' is-on' : ''}`}
+                        style={{ background: c, '--sw': c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Plan start</span>
+                  <div className="pe-fld">{fmtDay(health.start)}</div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Plan end</span>
+                  <div className={`pe-fld${health.daysLeft !== null && health.daysLeft < 0 ? ' pe-fld-danger' : ''}`}>
+                    {fmtDay(health.end)}
+                    {health.daysLeft !== null && (
+                      <span className="pe-fld-note">
+                        · {health.daysLeft < 0 ? `${Math.abs(health.daysLeft)} days over` : `${health.daysLeft} days left`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Logged hours</span>
+                  <div className="pe-fld pe-fld-strong">
+                    {loggedHours.toFixed(1)}h
+                    <span className="pe-fld-note">· {projectActivities.length} sessions</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Tasks</span>
+                  <div className="pe-fld">{health.done} done / {health.total} total</div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Last edited</span>
+                  <div className="pe-fld">{lastEdited || '—'}</div>
+                </div>
+              </div>
+
+              <div className="pe-block">
+                <span className="pe-lbl">Description</span>
+                <MarkdownEditor value={description} onChange={setDescription} rows={3} placeholder="What is this project about? Markdown supported." />
+              </div>
+
+              <div className="pe-block">
+                <AssigneePicker
+                  candidates={candidates}
+                  memberProfiles={memberProfiles}
+                  assignedTo={assignedTo}
+                  assignedToExternal={assignedToExternal}
+                  onChange={({ assignedTo: a, assignedToExternal: e }) => {
+                    setAssignedTo(a);
+                    setAssignedToExternal(e);
+                  }}
+                  fallbackLabels={fallbackLabels}
+                  label="Team — project lead / responsible"
+                  helpText="Who owns this project? Click teammates to assign, or type an external name. This doesn't grant edit access — use Members & invites for that."
+                />
+              </div>
+            </section>
+
+            {/* Linked goal + template */}
+            <div className="pe-card-row">
+              <section className="pe-card">
+                <h4 className="pe-sect"><span className="pe-sect-mark">◎</span>Linked goal</h4>
+                {linkedGoals.length === 0 ? (
+                  <p className="muted small" style={{ margin: 0 }}>
+                    Not linked to a strategic goal. Link this project from a goal’s deliverable in the Goals view.
+                  </p>
+                ) : linkedGoals.map(({ goal, deliverable, index }) => (
+                  <div key={`${goal.id}-${deliverable.id || index}`} className="pe-goal">
+                    <div className="pe-goal-title">{goal.code ? `${goal.code} — ` : ''}{goal.title || 'Untitled goal'}</div>
+                    <div className="pe-goal-meta">
+                      {goal.kpi ? `KPI: ${goal.kpi} · ` : ''}
+                      deliverable {index + 1} of {(goal.deliverables || []).length}
+                    </div>
+                    {deliverable.text && <div className="pe-goal-deliv">{deliverable.text}</div>}
+                    <div className="pe-goal-bar">
+                      <span style={{ width: `${health.completePct}%`, background: goal.color || 'var(--c-accent)' }} />
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              <section className="pe-card">
+                <h4 className="pe-sect"><span className="pe-sect-mark">⎘</span>Template</h4>
+                {isNew && projectTemplates.length > 0 && (
+                  <div className="pe-block" style={{ marginTop: 0 }}>
+                    <span className="pe-lbl">Start from a saved template</span>
+                    <select className="select pe-input" value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
+                      <option value="">— Blank project —</option>
+                      {projectTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.payload?.phases?.length || 0} phases)</option>
+                      ))}
+                    </select>
+                    <p className="muted small" style={{ marginTop: 4 }}>
+                      Picking a template fills in name, description, color and phases — tweak anything before saving.
+                    </p>
+                  </div>
                 )}
+                {fromTemplate && (
+                  <div className="pe-from-tpl"><span className="pe-from-tag">FROM</span>{fromTemplate.name}</div>
+                )}
+                <button type="button" className="btn btn-sm" onClick={saveAsTemplate} disabled={saving || !name.trim()} style={{ marginTop: 8 }}>
+                  Save as template
+                </button>
+                {isNew && (
+                  <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>
+                    Members and invite links become available once the project is saved.
+                  </p>
+                )}
+              </section>
+            </div>
+
+            {!isNew && (
+              <section className="pe-card">
+                <h4 className="pe-sect"><span className="pe-sect-mark">⇄</span>Members &amp; invites</h4>
+                <ProjectSharing project={project} bare />
+              </section>
+            )}
+
+            <section className="pe-card">
+              <h4 className="pe-sect"><span className="pe-sect-mark">▤</span>Custom fields</h4>
+              <CustomFieldsEditor fields={customFields} onChange={setCustomFields} bare />
+            </section>
+          </div>
+
+          {/* RIGHT — project activity timeline */}
+          <aside className="pe-side">
+            <div className="pe-side-head">
+              <div className="pe-side-title">
+                <span>Project activity</span>
+                <span className="pe-side-count">{shownActivities.length} entries</span>
+              </div>
+
+              <div className="pe-side-stats">
+                <div className="pe-sstat pe-tone-navy">
+                  <div className="pe-kpi-label">Logged</div>
+                  <div className="pe-sstat-value">{loggedHours.toFixed(1)}h</div>
+                </div>
+                <div className="pe-sstat pe-tone-amber">
+                  <div className="pe-kpi-label">Sessions</div>
+                  <div className="pe-sstat-value">{projectActivities.length}</div>
+                </div>
+                <div className="pe-sstat pe-tone-red">
+                  <div className="pe-kpi-label">Blocked</div>
+                  <div className="pe-sstat-value">{blockedCount}</div>
+                </div>
+              </div>
+
+              <div className="pe-side-filters">
+                {ACT_FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    className={`pe-chip${actFilter === f.key ? ' is-on' : ''}`}
+                    onClick={() => setActFilter(f.key)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="field">
-              <AssigneePicker
-                candidates={candidates}
-                memberProfiles={memberProfiles}
-                assignedTo={assignedTo}
-                assignedToExternal={assignedToExternal}
-                onChange={({ assignedTo: a, assignedToExternal: e }) => {
-                  setAssignedTo(a);
-                  setAssignedToExternal(e);
-                }}
-                fallbackLabels={fallbackLabels}
-                label="Assigned to (project lead / responsible)"
-                helpText="Who owns this project? Click teammates to assign, or type an external name. This doesn't grant edit access — use Sharing below for that."
-              />
+            <div className="pe-side-scroll">
+              {isNew ? (
+                <div className="pe-side-empty">
+                  <div className="pe-side-empty-icon">◷</div>
+                  <p>No activity yet.</p>
+                  <p className="small">Save the project, add tasks, and every logged hour lands here.</p>
+                </div>
+              ) : shownActivities.length === 0 ? (
+                <div className="pe-side-empty">
+                  <div className="pe-side-empty-icon">☰</div>
+                  <p>{projectActivities.length === 0 ? 'No activities logged yet.' : 'Nothing matches this filter.'}</p>
+                  {projectActivities.length === 0 && <p className="small">Log activities from each task on the Board.</p>}
+                </div>
+              ) : shownActivities.map((a, i) => {
+                const tone = (a.completionStatus === 'blocked' || a.bottleneckRemarks) ? 'red'
+                  : a.completionStatus === 'completed'   ? 'green'
+                  : a.completionStatus === 'in-progress' ? 'amber'
+                  : 'navy';
+                const icon = tone === 'red' ? '!' : tone === 'green' ? '✓' : tone === 'amber' ? '◐' : '•';
+                return (
+                  <div key={a.id} className="pe-act">
+                    <div className="pe-act-rail">
+                      <span className={`pe-act-dot pe-tone-${tone}`}>{icon}</span>
+                      {i < shownActivities.length - 1 && <span className="pe-act-line" />}
+                    </div>
+                    <button type="button" className="pe-act-body" onClick={() => setEditingActivity(a)} title="Edit this activity">
+                      <div className="pe-act-head">
+                        <span className="pe-act-date">{fmtDay(a.date)}</span>
+                        {(a.hoursSpent || 0) > 0 && (
+                          <span className={`pe-act-hours pe-tone-${tone}`}>{Number(a.hoursSpent).toFixed(1)}h</span>
+                        )}
+                        {a.requestedBy && <span className="pe-act-who">{a.requestedBy}</span>}
+                      </div>
+                      <div className="pe-act-task">
+                        <span className="pe-act-task-dot" style={{ background: color }} />
+                        {a._task}
+                      </div>
+                      {a.comment && <div className="pe-act-comment">{a.comment}</div>}
+                      {a.bottleneckRemarks && (
+                        <div className="pe-act-bottleneck">⚠ Bottleneck: {a.bottleneckRemarks}</div>
+                      )}
+                      {a._files.length > 0 && (
+                        <div className="pe-act-files">
+                          {a._files.map((f, fi) => (
+                            <span key={fi} className="pe-act-file">📎 {f.name || f.url}</span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-
-            <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
-
-            {!isNew && (
-              <ProjectSharing project={project} />
-            )}
-          </div>
+          </aside>
         </div>
 
-        <div className="modal-actions">
+        {/* ── Footer ── */}
+        <footer className="pe-foot">
           {!isNew && (
             <>
-              <button className="btn btn-danger" onClick={remove} disabled={saving}>Delete</button>
-              <button className="btn" onClick={archive} disabled={saving}>Archive</button>
+              <button type="button" className="btn btn-danger btn-sm" onClick={remove} disabled={saving}>Delete project</button>
+              <button type="button" className="btn btn-sm" onClick={archive} disabled={saving}>Archive</button>
             </>
           )}
-          <button className="btn" onClick={saveAsTemplate} disabled={saving || !name.trim()}>Save as template</button>
-          <div style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving || !name.trim()}>
-            {saving ? 'Saving…' : 'Save'}
+          {lastEdited && <span className="pe-foot-note">Last edited {lastEdited}</span>}
+          <div className="pe-foot-spacer" />
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving || !name.trim()}>
+            {saving ? 'Saving…' : isNew ? 'Create project' : 'Save changes'}
           </button>
-        </div>
+        </footer>
       </div>
     </div>
+
+    {editingActivity && (
+      <ActivityEditor activity={editingActivity} onClose={() => setEditingActivity(null)} />
+    )}
+    </>
   );
 }
 
