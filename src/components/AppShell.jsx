@@ -12,6 +12,7 @@ import TaskDoneCelebration from './TaskDoneCelebration';
 import TutorialGuide from './TutorialGuide';
 
 const VIEWS = [
+  { id: 'ask-ai',         label: 'Ask AI',           icon: 'sparkles' },
   { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
   { id: 'projects',       label: 'Projects',         icon: 'projects' },
   { id: 'board',          label: 'Kanban',           icon: 'board' },

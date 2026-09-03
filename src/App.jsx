@@ -31,6 +31,7 @@ const WBSView           = lazy(() => import('./components/WBSView'));
 const GoalsView         = lazy(() => import('./components/GoalsView'));
 const MessagesView      = lazy(() => import('./components/MessagesView'));
 const MinutesView       = lazy(() => import('./components/MinutesView'));
+const AskAiView         = lazy(() => import('./components/AskAiView'));
 
 function ViewSpinner() {
   return (
@@ -141,6 +142,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
     >
       <Suspense fallback={<ViewSpinner />}>
         {route.view === 'invite'    && <InviteClaimView inviteId={route.projectFilter} navigate={navigate} />}
+        {route.view === 'ask-ai'    && <AskAiView />}
         {route.view === 'dashboard' && <DashboardView projectFilter={route.projectFilter} navigate={navigate} />}
         {route.view === 'board'     && <Board    projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} initialStatusFilter={route.statusFilter} onlyMine={route.onlyMine} />}
         {route.view === 'table'     && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
