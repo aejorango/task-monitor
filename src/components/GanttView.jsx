@@ -212,6 +212,12 @@ export default function GanttView({ projectFilter }) {
   const phaseWidth   = 120;
   const taskWidth    = 240;
   const labelWidth   = phaseWidth + taskWidth;
+  // Rows must have an explicit width equal to their track sum — without it,
+  // a grid row with fixed-px tracks wider than its auto width just overflows
+  // visually, and that undersized box corrupts position:sticky's offset math
+  // for any frozen column past the first (it starts drifting off-screen on
+  // scroll instead of staying pinned next to the first).
+  const rowWidth     = labelWidth + totalWidth;
   const rowHeight    = 40;       // CSS .gantt-row height
   const groupHeight  = 32;       // CSS .gantt-row.group-header height
   const headerHeight = 33;       // CSS .gantt-row.header height
@@ -298,9 +304,9 @@ export default function GanttView({ projectFilter }) {
       />
 
       <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px`, position: 'relative' }}>
-        <div className="gantt-row header" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}>
+        <div className="gantt-row header" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px`, width: rowWidth }}>
           <div className="gantt-label gantt-label-phase">Phase</div>
-          <div className="gantt-label">Task</div>
+          <div className="gantt-label" style={{ left: phaseWidth }}>Task</div>
           <div className="gantt-track" style={{ display: 'grid', gridTemplateColumns: `repeat(${range.total}, ${zoomConf.dayWidth}px)` }}>
             {dayHeaders.map((h, i) => (
               <div
@@ -405,7 +411,7 @@ export default function GanttView({ projectFilter }) {
               <div
                 key={`g-${i}`}
                 className="gantt-row group-header"
-                style={{ gridTemplateColumns: `${phaseWidth + taskWidth}px ${totalWidth}px` }}
+                style={{ gridTemplateColumns: `${phaseWidth + taskWidth}px ${totalWidth}px`, width: rowWidth }}
               >
                 <div className="gantt-label">
                   {proj ? (
@@ -436,6 +442,7 @@ export default function GanttView({ projectFilter }) {
               totalWidth={totalWidth}
               phaseWidth={phaseWidth}
               taskWidth={taskWidth}
+              rowWidth={rowWidth}
               today={today}
               onClick={() => setViewingTask(t)}
             />
@@ -478,7 +485,7 @@ export default function GanttView({ projectFilter }) {
 
 // ─── Individual row with draggable plan bar ────────────────────────────────
 
-function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, today, onClick }) {
+function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, rowWidth, today, onClick }) {
   const planStart = parseDate(task.plan?.startDate);
   const planEnd   = parseDate(task.plan?.endDate);
   const actStart  = parseDate(task.actual?.startDate);
@@ -575,7 +582,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
   return (
     <div
       className="gantt-row task-row"
-      style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px` }}
+      style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px`, width: rowWidth }}
     >
       <div className="gantt-label gantt-label-phase" onClick={handleLabelClick}>
         {phaseName ? (
@@ -584,7 +591,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
           <span className="muted small">—</span>
         )}
       </div>
-      <div className="gantt-label" onClick={handleLabelClick}>
+      <div className="gantt-label" onClick={handleLabelClick} style={{ left: phaseWidth }}>
         <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <span style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</span>
         </div>
