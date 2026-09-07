@@ -57,7 +57,7 @@ async function copyText(text) {
 /* ── component ─────────────────────────────────────────────────────────── */
 
 export default function DueTaskAlertModal({ navigate }) {
-  const { current, remaining, today, prefs, snooze, skip, markDone } = useDueAlertQueue();
+  const { current, remaining, today, prefs, snooze, skip, markDone, muteAll } = useDueAlertQueue();
   const { byId } = useProjects();
   const { available: aiAvailable, provider } = useAiStatus();
 
@@ -96,6 +96,12 @@ export default function DueTaskAlertModal({ navigate }) {
     finally { setBusy(false); }
   }, [busy, markDone, showToast]);
 
+  const onCloseAll = useCallback(() => {
+    const n = remaining;
+    muteAll();
+    showToast(`Closed ${n} alert${n === 1 ? '' : 's'} for today — resume from the 🔔 in the top bar`);
+  }, [remaining, muteAll, showToast]);
+
   const onOpen = useCallback(() => {
     if (!current) return;
     const task = current;
@@ -127,6 +133,7 @@ export default function DueTaskAlertModal({ navigate }) {
           onSkip={onSkip}
           onSnooze={onSnooze}
           onOpen={onOpen}
+          onCloseAll={onCloseAll}
         />
       )}
       {toast && <div className="due-alert-toast" role="status">{toast}</div>}
@@ -138,7 +145,7 @@ export default function DueTaskAlertModal({ navigate }) {
 
 export function AlertDialog({
   task, project, today, remaining, prefs, aiAvailable, provider, busy,
-  onDone, onSkip, onSnooze, onOpen,
+  onDone, onSkip, onSnooze, onOpen, onCloseAll,
 }) {
   const dialogRef = useRef(null);
   const snoozeBtnRef = useRef(null);
@@ -196,7 +203,16 @@ export function AlertDialog({
       >
         <div className="due-alert-head">
           <span className={`badge badge-soft-${dueTone} due-alert-badge`}>{dueLabel}</span>
-          {remaining > 1 && <span className="muted small">{remaining - 1} more due after this</span>}
+          <span className="due-alert-head-right">
+            {remaining > 1 && <span className="muted small">{remaining - 1} more due after this</span>}
+            <button
+              type="button"
+              className="due-alert-close"
+              onClick={onCloseAll}
+              aria-label={`Close all ${remaining} due-task alerts for today`}
+              title={`Close all alerts for today (${remaining}). Resume any time from the 🔔 in the top bar.`}
+            >×</button>
+          </span>
         </div>
 
         <h3 id={titleId} className="modal-title due-alert-title">{task.title}</h3>

@@ -47,7 +47,7 @@ import {
   setAiSettings, providerLabel, fetchBridgeUsage, pushBridgeSettings,
 } from '../services/ai';
 import { useAiStatus } from '../hooks/useAiStatus';
-import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState } from '../services/dueAlerts';
+import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -672,7 +672,7 @@ function DueAlertSettings({ settings, update }) {
     // Clear this device's snooze/skip state so the next eligible task shows
     // on the next queue tick — the storage write also wakes other tabs.
     const uid = auth.currentUser?.uid;
-    if (uid) saveAlertState(uid, { snoozes: {}, skips: [] });
+    if (uid) { saveAlertState(uid, { snoozes: {}, skips: [] }); setMutedOn(uid, null); }
     window.dispatchEvent(new CustomEvent('task-monitor:due-alerts-refresh'));
     setPinged(true);
     setTimeout(() => setPinged(false), 1500);
@@ -746,7 +746,7 @@ function DueAlertSettings({ settings, update }) {
         <button className="btn" onClick={showNow} disabled={!prefs.enabled}>
           {pinged ? '✓ Snoozes cleared' : 'Show next due task now'}
         </button>
-        <span className="muted small">Clears snoozed and skipped alerts on this device; the next due task appears within a moment.</span>
+        <span className="muted small">Clears snoozed, skipped and closed alerts on this device; the next due task appears within a moment.</span>
       </div>
     </>
   );

@@ -160,6 +160,30 @@ export function saveAlertState(userId, { snoozes = {}, skips = [] } = {}, { stor
   } catch { return false; }
 }
 
+// "Close all" on the modal pauses every alert for the rest of the day on this
+// device. Stored as the date it was set, so it lifts itself tomorrow.
+export const MUTE_KEY_PREFIX = 'task-monitor.dueAlerts.mutedOn.v1.';
+
+export function loadMutedOn(userId, { store } = {}) {
+  const s = storage(store);
+  if (!s || !userId) return null;
+  try { return s.getItem(MUTE_KEY_PREFIX + userId) || null; } catch { return null; }
+}
+
+export function isMutedToday(userId, today, { store } = {}) {
+  return !!today && loadMutedOn(userId, { store }) === today;
+}
+
+export function setMutedOn(userId, dateOrNull, { store } = {}) {
+  const s = storage(store);
+  if (!s || !userId) return false;
+  try {
+    if (dateOrNull) s.setItem(MUTE_KEY_PREFIX + userId, dateOrNull);
+    else s.removeItem(MUTE_KEY_PREFIX + userId);
+    return true;
+  } catch { return false; }
+}
+
 export function snoozeUntil(minutes, now = Date.now()) {
   const m = Math.min(1440, Math.max(1, Number(minutes) || 1));
   return now + m * 60_000;

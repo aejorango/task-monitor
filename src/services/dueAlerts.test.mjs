@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   isDueForAlert, buildAlertQueue, alertKey, overdueDays, isQuietNow,
   loadAlertState, saveAlertState, snoozeUntil, buildFallbackPrompt,
-  addDaysISO, daysBetween,
+  addDaysISO, daysBetween, isMutedToday, setMutedOn, loadMutedOn,
 } from './dueAlerts.js';
 
 const TODAY = '2026-09-07';
@@ -16,6 +16,7 @@ class MemStore {
   constructor() { this.m = new Map(); }
   getItem(k) { return this.m.has(k) ? this.m.get(k) : null; }
   setItem(k, v) { this.m.set(k, String(v)); }
+  removeItem(k) { this.m.delete(k); }
 }
 
 test('date helpers cross month and year boundaries', () => {
@@ -132,4 +133,16 @@ test('buildFallbackPrompt names title, due date and each open subtask', () => {
   assert.doesNotMatch(p, /Collect numbers/);
   assert.match(p, /Project: Finance/);
   assert.equal(buildFallbackPrompt(null), '');
+});
+
+test('close-all mute applies to the day it was set and lifts tomorrow', () => {
+  const store = new MemStore();
+  assert.equal(isMutedToday('u1', TODAY, { store }), false);
+  setMutedOn('u1', TODAY, { store });
+  assert.equal(isMutedToday('u1', TODAY, { store }), true);
+  assert.equal(isMutedToday('u1', addDaysISO(TODAY, 1), { store }), false);
+  assert.equal(isMutedToday('u2', TODAY, { store }), false);
+  setMutedOn('u1', null, { store });
+  assert.equal(loadMutedOn('u1', { store }), null);
+  assert.equal(setMutedOn('u1', TODAY, { store: null }), false);
 });

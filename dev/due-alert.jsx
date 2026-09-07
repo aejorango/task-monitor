@@ -26,7 +26,7 @@ const TASKS = [
 ];
 const PROJECTS = { p1: { name: 'BRIDGED', color: '#1D7CC7', description: 'Loan marketplace operations' }, p2: { name: 'AIM', color: '#1DA449' } };
 
-function Harness() {
+export function Harness() {
   const [queue, setQueue] = useState(TASKS);
   const [log, setLog] = useState([]);
   const ai = useAiStatus();
@@ -55,6 +55,7 @@ function Harness() {
           onSkip={() => { note(`skip: ${task.title}`); advance(); }}
           onSnooze={(m) => { note(`snooze ${m} min: ${task.title}`); advance(); }}
           onOpen={() => note(`open: ${task.title}`)}
+          onCloseAll={() => { note(`close all (${queue.length})`); setQueue([]); }}
         />
       )}
     </div>

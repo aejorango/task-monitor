@@ -9436,3 +9436,29 @@ a:hover { text-decoration: underline; }
   .due-alert-snooze-custom .input { font-size: 16px; }  /* stop iOS zoom-on-focus */
   .due-alert-toast { bottom: calc(72px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); text-align: center; }
 }
+
+/* due-alert: close-all × and topbar bell */
+.due-alert-head-right { display: inline-flex; align-items: center; gap: 10px; }
+.due-alert-close {
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid transparent;
+  background: transparent; color: var(--c-text-3); font-size: 22px; line-height: 1;
+  cursor: pointer; display: grid; place-items: center; margin: -4px -6px -4px 0;
+}
+.due-alert-close:hover { background: var(--c-surface-2); color: var(--c-text); border-color: var(--c-border); }
+.due-alert-close:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.topbar-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 32px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text);
+  font-size: 15px; cursor: pointer; flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s;
+}
+.topbar-bell:hover { background: var(--c-surface-2); }
+.topbar-bell.is-muted { color: var(--c-text-3); border-style: dashed; }
+.topbar-bell-count {
+  position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: var(--r-pill); background: var(--c-danger); color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+  border: 2px solid var(--c-surface);
+}
+.topbar-bell.is-muted .topbar-bell-count { background: var(--c-text-3); }

@@ -939,6 +939,7 @@ const WORKFLOWS = [
       'Finished? Press Done (or D) — the task closes and the next due task appears, if any.',
       'Busy? Press Snooze (or Esc) for the default interval, or open the ▾ menu for 5 min to 2 h or a custom number of minutes. It comes back at that time.',
       'Not today? Press Skip (or S) — it stays quiet until tomorrow. Open task → jumps to the full editor.',
+      'Too many at once? The × in the corner closes every alert for the rest of the day. The 🔔 in the top bar shows how many are waiting and turns them back on.',
     ],
   },
   {

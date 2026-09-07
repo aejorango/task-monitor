@@ -9,6 +9,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher';
 import Icon from './Icon';
 import AiHelper from './AiHelper';
 import TaskDoneCelebration from './TaskDoneCelebration';
+import DueAlertBell from './DueAlertBell';
 import TutorialGuide from './TutorialGuide';
 
 const VIEWS = [
@@ -223,6 +224,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         )}
         <TutorialGuide route={route} navigate={navigate} />
         <AiHelper />
+        <DueAlertBell />
         {timerWidget}
         <GlobalSearch projects={projects} navigate={navigate} />
       </header>

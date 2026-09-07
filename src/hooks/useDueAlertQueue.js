@@ -12,8 +12,14 @@ import { useTimer } from './useTimer';
 import { setTaskStatus, todayLocal } from '../services/firebase';
 import {
   buildAlertQueue, alertKey, loadAlertState, saveAlertState, snoozeUntil,
-  isQuietNow, SNOOZE_KEY_PREFIX, SKIP_KEY_PREFIX, DEFAULT_DUE_ALERT_SETTINGS,
+  isQuietNow, isMutedToday, setMutedOn,
+  SNOOZE_KEY_PREFIX, SKIP_KEY_PREFIX, MUTE_KEY_PREFIX, DEFAULT_DUE_ALERT_SETTINGS,
 } from '../services/dueAlerts';
+
+// Every hook instance in this tab (modal + topbar bell) re-reads localStorage
+// when this fires; other tabs get the native `storage` event instead.
+export const REFRESH_EVENT = 'task-monitor:due-alerts-refresh';
+const notifyLocal = () => window.dispatchEvent(new CustomEvent(REFRESH_EVENT));
 
 const TICK_MS = 60_000;
 // TaskDoneCelebration auto-dismisses after 4.2 s; advance a little later so
@@ -55,20 +61,24 @@ export function useDueAlertQueue() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [userId, today, storeVersion],
   );
+  const muted = useMemo(
+    () => isMutedToday(userId, today),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [userId, today, storeVersion],
+  );
 
   useEffect(() => {
     if (!userId) return;
     const onStorage = (e) => {
       if (!e.key) return;
-      if (e.key === SNOOZE_KEY_PREFIX + userId || e.key === SKIP_KEY_PREFIX + userId) reloadStore();
+      if (e.key === SNOOZE_KEY_PREFIX + userId || e.key === SKIP_KEY_PREFIX + userId
+        || e.key === MUTE_KEY_PREFIX + userId) reloadStore();
     };
-    // Settings → "Show next due task now" clears the store in THIS tab (no
-    // storage event fires locally), so it also dispatches this event.
     window.addEventListener('storage', onStorage);
-    window.addEventListener('task-monitor:due-alerts-refresh', reloadStore);
+    window.addEventListener(REFRESH_EVENT, reloadStore);
     return () => {
       window.removeEventListener('storage', onStorage);
-      window.removeEventListener('task-monitor:due-alerts-refresh', reloadStore);
+      window.removeEventListener(REFRESH_EVENT, reloadStore);
     };
   }, [userId, reloadStore]);
 
@@ -116,6 +126,7 @@ export function useDueAlertQueue() {
 
   // Suppression hides the modal without dequeuing anything.
   const suppressed = paused
+    || muted
     || now === 0
     || isQuietNow(prefs, new Date(now))
     || (current && timerState?.taskId === current.id)
@@ -123,8 +134,20 @@ export function useDueAlertQueue() {
 
   const persist = useCallback((next) => {
     saveAlertState(userId, next);
-    reloadStore();
-  }, [userId, reloadStore]);
+    notifyLocal();
+  }, [userId]);
+
+  // "Close all": hide every alert for the rest of today on this device.
+  // Nothing is skipped or snoozed, so resuming brings the same queue back.
+  const muteAll = useCallback(() => {
+    setMutedOn(userId, today);
+    notifyLocal();
+  }, [userId, today]);
+
+  const unmute = useCallback(() => {
+    setMutedOn(userId, null);
+    notifyLocal();
+  }, [userId]);
 
   const snooze = useCallback((minutes = prefs.defaultSnoozeMin) => {
     if (!current) return null;
@@ -156,12 +179,16 @@ export function useDueAlertQueue() {
 
   return {
     current: suppressed ? null : current,
-    remaining: queue.length,
+    remaining: queue.length,   // due alerts not yet handled (even while muted)
+    muted,
+    enabled: prefs.enabled,
     today,
     prefs,
     snooze,
     skip,
     markDone,
+    muteAll,
+    unmute,
     refresh,
   };
 }
