@@ -9321,3 +9321,118 @@ a:hover { text-decoration: underline; }
   .te-tree-task { margin-left: 24px; }
   .te-sub-bar, .te-sect-pct { display: none; }
 }
+
+/* ─── Due-task alert modal ──────────────────────────────────────────────
+   One task at a time; sits above ordinary modals (100) and below the
+   celebration (300) and toasts (1000). Mobile: bottom sheet. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.due-alert-backdrop { z-index: 120; }
+.due-alert { max-width: 640px; }
+.due-alert-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 10px;
+}
+.due-alert-badge { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.due-alert-title { margin-bottom: 6px; }
+.due-alert-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  color: var(--c-text-2);
+}
+.due-alert-project { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.due-alert-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.due-alert-desc {
+  margin: 10px 0 0; padding: 10px 12px;
+  background: var(--c-surface-2); border: 1px solid var(--c-border);
+  border-radius: var(--r-md); max-height: 22vh; overflow-y: auto;
+  font-size: 13px; color: var(--c-text-2);
+}
+.due-alert-prompt {
+  margin-top: 14px; padding: 12px;
+  border: 1px solid var(--c-border); border-radius: var(--r-lg);
+  background: var(--c-surface-2);
+}
+.due-alert-prompt-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 8px;
+}
+.due-alert-prompt-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: none; border: 0; padding: 0; color: var(--c-text); cursor: pointer;
+  font: inherit; text-align: left;
+}
+.due-alert-prompt-toggle:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; border-radius: 4px; }
+.due-alert-pre,
+.due-alert-textarea {
+  margin: 0; width: 100%; box-sizing: border-box;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+  background: var(--c-surface); color: var(--c-text);
+  border: 1px solid var(--c-border); border-radius: var(--r-md);
+  padding: 10px 12px; max-height: 40vh; overflow-y: auto;
+}
+.due-alert-textarea { max-height: none; resize: vertical; }
+.due-alert-prompt-actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 8px;
+}
+.due-alert-note { margin: 8px 0 0; }
+.due-alert-error {
+  margin-top: 8px; padding: 8px 10px; font-size: 12.5px;
+  background: var(--c-danger-bg); color: var(--c-danger);
+  border: 1px solid var(--c-danger); border-radius: var(--r-md);
+}
+.due-alert-answer {
+  margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--c-border);
+}
+.due-alert-answer-body { max-height: 40vh; overflow-y: auto; }
+.due-alert-actions { flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.due-alert-actions .btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+/* snooze split button */
+.due-alert-snooze { position: relative; display: inline-flex; }
+.due-alert-snooze > .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.due-alert-snooze-caret {
+  border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px;
+  padding-left: 8px; padding-right: 8px;
+}
+.due-alert-snooze-menu {
+  position: absolute; right: 0; bottom: calc(100% + 6px); min-width: 220px;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-xl); padding: 6px; z-index: 2;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.due-alert-snooze-item {
+  display: flex; justify-content: space-between; gap: 12px; width: 100%;
+  background: none; border: 0; padding: 7px 10px; border-radius: var(--r-sm);
+  color: var(--c-text); font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+}
+.due-alert-snooze-item:hover,
+.due-alert-snooze-item:focus-visible { background: var(--c-surface-2); outline: none; }
+.due-alert-snooze-custom {
+  display: flex; gap: 6px; padding: 6px 4px 2px; border-top: 1px solid var(--c-border); margin-top: 4px;
+}
+.due-alert-snooze-custom .input { flex: 1; min-width: 0; }
+
+/* toast (outlives the dialog) */
+.due-alert-toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--c-text); color: var(--c-bg);
+  padding: 10px 16px; border-radius: var(--r-pill); font-size: 13px;
+  box-shadow: var(--shadow-xl); z-index: 1000; pointer-events: none;
+  animation: backdrop-in 0.18s ease;
+}
+
+@media (max-width: 720px) {
+  .due-alert-backdrop { z-index: 200; }           /* above the bottom-nav (150) */
+  .due-alert { max-width: 100%; max-height: 92dvh; border-radius: var(--r-xl) var(--r-xl) 0 0; }
+  .due-alert-actions { flex-direction: column; align-items: stretch; }
+  .due-alert-actions .btn,
+  .due-alert-snooze { width: 100%; }
+  .due-alert-snooze > .btn:first-child { flex: 1; }
+  .due-alert-snooze-menu { left: 0; right: 0; }
+  .due-alert-textarea,
+  .due-alert-snooze-custom .input { font-size: 16px; }  /* stop iOS zoom-on-focus */
+  .due-alert-toast { bottom: calc(72px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); text-align: center; }
+}

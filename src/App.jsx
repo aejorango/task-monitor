@@ -11,6 +11,7 @@ import { useSettings } from './hooks/useSettings';
 import AppShell, { useRoute } from './components/AppShell';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
+import DueTaskAlertModal from './components/DueTaskAlertModal';
 import LandingView from './components/LandingView';
 import PendingApprovalView from './components/PendingApprovalView';
 import './App.css';
@@ -130,7 +131,23 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
   }, [profile?.role]);
   useOverdueScan();
 
+  // Deep link from a browser notification: #/board/<project>?task=<id>.
+  // Board opens the editor on this event; retry briefly because the task
+  // list may still be loading when the page first mounts.
+  useEffect(() => {
+    const id = route.openTaskId;
+    if (!id) return;
+    const fire = () => window.dispatchEvent(new CustomEvent('task-monitor:open-task', { detail: { taskId: id } }));
+    const timers = [300, 1500, 4000].map((ms) => setTimeout(() => {
+      if (!document.querySelector('.modal-backdrop:not(.due-alert-backdrop)')) fire();
+    }, ms));
+    return () => timers.forEach(clearTimeout);
+  }, [route.openTaskId]);
+
   return (
+    <>
+    {/* In-app due-task alert: one task at a time, on every view. */}
+    <DueTaskAlertModal navigate={navigate} />
     <AppShell
       userId={userId}
       ready={ready}
@@ -161,5 +178,6 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'how-to-use'     && <HowToUseView />}
       </Suspense>
     </AppShell>
+    </>
   );
 }

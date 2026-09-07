@@ -932,6 +932,16 @@ function Scenarios() {
 
 const WORKFLOWS = [
   {
+    title: 'When a task comes due',
+    steps: [
+      'On the due date (or earlier, per Settings → Due-task alerts) an alert opens on whatever view you are in. It shows one task at a time.',
+      'Read the ready-made GenAI prompt. Press Edit to tweak it, Copy to paste it into any GenAI tool, or Run to get the deliverable right there.',
+      'Finished? Press Done (or D) — the task closes and the next due task appears, if any.',
+      'Busy? Press Snooze (or Esc) for the default interval, or open the ▾ menu for 5 min to 2 h or a custom number of minutes. It comes back at that time.',
+      'Not today? Press Skip (or S) — it stays quiet until tomorrow. Open task → jumps to the full editor.',
+    ],
+  },
+  {
     title: 'Starting a new initiative',
     steps: [
       'Decide: is this really a Project (has an outcome) or just a Task? If unsure, start as a Task — you can promote later.',

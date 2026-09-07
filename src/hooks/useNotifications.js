@@ -3,7 +3,9 @@
 
 import { useEffect, useState } from 'react';
 import { useTasks } from './useTasks';
+import { useSettings } from './useSettings';
 import { todayLocal } from '../services/firebase';
+import { buildAlertQueue, loadAlertState, DEFAULT_DUE_ALERT_SETTINGS } from '../services/dueAlerts';
 
 const LAST_CHECK_KEY = 'task-monitor.notif.lastCheck.v1';
 const SHOWN_KEY      = 'task-monitor.notif.shown.v1';
@@ -45,19 +47,26 @@ function saveShown(set) {
   try { localStorage.setItem(SHOWN_KEY, JSON.stringify([...set])); } catch {}
 }
 
-async function fireOverdueNotification(task) {
-  const title = '⚠️ Task overdue';
-  const body  = `${task.title} was due ${task.plan.endDate}.`;
+async function fireOverdueNotification(task, today) {
+  const due = task.plan.endDate;
+  const overdue = due < today;
+  const title = overdue ? '⚠️ Task overdue' : '⏰ Task due today';
+  const body  = overdue ? `${task.title} was due ${due}.` : `${task.title} is due today.`;
+  // Deep-link to the board for this task's project; the in-app alert modal is
+  // already showing the same task there (same eligibility rules).
+  const url = `${import.meta.env.BASE_URL}#/board/${task.projectId || 'all'}?task=${encodeURIComponent(task.id)}`;
   const reg = await navigator.serviceWorker?.getRegistration?.();
   if (reg && reg.showNotification) {
-    reg.showNotification(title, { body, tag: `overdue-${task.id}`, data: { url: import.meta.env.BASE_URL } });
+    reg.showNotification(title, { body, tag: `overdue-${task.id}`, data: { url } });
   } else if (typeof Notification !== 'undefined') {
     new Notification(title, { body, tag: `overdue-${task.id}` });
   }
 }
 
 export function useOverdueScan() {
-  const { tasks } = useTasks();
+  const { tasks, userId } = useTasks();
+  const { settings } = useSettings();
+  const prefs = { ...DEFAULT_DUE_ALERT_SETTINGS, ...(settings.dueAlerts || {}) };
   const [permission, setPermission] = useState(getNotificationPermission());
 
   // Listen for permission changes (some browsers fire a 'change' event)
@@ -78,18 +87,19 @@ export function useOverdueScan() {
 
     const scan = async () => {
       const today = todayLocal();
-      const overdue = tasks.filter((t) =>
-        t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today
-      );
-      if (overdue.length === 0) return;
+      // Same eligibility, ordering, snooze and skip rules as the in-app
+      // alert modal, so the two never disagree about what is "due".
+      const { snoozes, skips } = loadAlertState(userId, { today });
+      const due = buildAlertQueue(tasks, { today, leadDays: prefs.leadDays, snoozes, skips });
+      if (due.length === 0) return;
       const shown = loadShown();
       let added = false;
-      for (const t of overdue) {
+      for (const t of due) {
         const key = `${t.id}|${t.plan.endDate}`;
         if (shown.has(key)) continue;
         shown.add(key);
         added = true;
-        try { await fireOverdueNotification(t); } catch (e) { console.error(e); }
+        try { await fireOverdueNotification(t, today); } catch (e) { console.error(e); }
       }
       if (added) saveShown(shown);
       try { localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString()); } catch {}
@@ -98,7 +108,7 @@ export function useOverdueScan() {
     scan();
     const id = setInterval(() => { if (!cancelled) scan(); }, 5 * 60 * 1000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [tasks, permission]);
+  }, [tasks, permission, userId, prefs.leadDays]);
 
   return { permission, refresh: () => setPermission(getNotificationPermission()) };
 }

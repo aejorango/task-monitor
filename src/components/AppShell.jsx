@@ -73,6 +73,7 @@ function parseHash() {
     statusFilter: params.get('status') || null,
     savedViewId:  params.get('saved')  || null,
     onlyMine:     params.get('mine')   === '1',
+    openTaskId:   params.get('task')   || null,   // one-shot: open this task's editor
   };
 }
 

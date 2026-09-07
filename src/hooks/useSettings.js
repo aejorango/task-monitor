@@ -2,6 +2,7 @@
 // Per-device by design (matches the anonymous-auth model).
 
 import { useEffect, useState, useCallback } from 'react';
+import { DEFAULT_DUE_ALERT_SETTINGS } from '../services/dueAlerts';
 
 const STORAGE_KEY = 'task-monitor.settings.v1';
 
@@ -9,13 +10,22 @@ const DEFAULTS = {
   theme:           'light',   // 'system' | 'light' | 'dark'
   defaultProject:  null,      // projectId to preselect in quick-add
   weekStart:       1,         // 0=Sun, 1=Mon
+  dueAlerts:       { ...DEFAULT_DUE_ALERT_SETTINGS }, // in-app due-task modal
 };
+
+// Shallow merge, except nested settings objects (dueAlerts) which merge one
+// level deep so users who saved settings before a key existed get its default.
+function merge(base, patch) {
+  const next = { ...base, ...patch };
+  if (patch && patch.dueAlerts) next.dueAlerts = { ...base.dueAlerts, ...patch.dueAlerts };
+  return next;
+}
 
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    return merge(DEFAULTS, JSON.parse(raw));
   } catch {
     return { ...DEFAULTS };
   }
@@ -47,7 +57,7 @@ export function useSettings() {
   }, []);
 
   const update = useCallback((patch) => {
-    setAll({ ...current, ...patch });
+    setAll(merge(current, patch));
   }, []);
 
   const reset = useCallback(() => setAll({ ...DEFAULTS }), []);

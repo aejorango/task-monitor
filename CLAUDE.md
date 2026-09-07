@@ -94,6 +94,7 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 - **Templates** — Two kinds: `task` and `project`. Save-as-template button in editors. Picker in TaskForm (task) and as click-to-use cards in Projects view (project).
 - **Notifications** — Service worker at `public/sw.js`. Browser notifications fired for newly-overdue tasks (deduped by `localStorage`-tracked "shown" set). Permission requested from Settings. Scan runs on load + every 5 min.
 - **Google sign-in** — `signInWithGoogle()` does `linkWithPopup` if anonymous (keeps existing data), `signInWithPopup` otherwise. `signOutUser()` signs out then re-anonymous-signs-in so the app stays usable. Sidebar footer shows avatar + name when signed in.
+- **Due-task alerts** — `DueTaskAlertModal` is mounted once in `ApprovedApp` (App.jsx) and shows **one task at a time**. Eligibility lives in the pure module `src/services/dueAlerts.js` (`isDueForAlert`, `buildAlertQueue`): not done, has `plan.endDate`, and `plan.endDate <= today + leadDays`. Queue order: most overdue → priority → title. `useDueAlertQueue` recomputes every 60 s and on task changes, keeps the on-screen task pinned, and hides (without dequeuing) during quiet hours, while another `.modal-backdrop` / the celebration is open, or while the timer runs for that task. **Snooze / skip are per-device localStorage** (`task-monitor.dueAlerts.{snooze,skip}.v1.<uid>`) — tasks are shared, so never persist them on the task doc. The prompt block calls `generateClaudePrompt` once per task and caches it in `task-monitor.dueAlerts.prompt.v1.<taskId>` keyed by `updatedAt` (user edits are kept); **Run** goes through `askAI` (`meta.kind = 'due-alert-run'`). The browser notification scan (`useOverdueScan`) uses the same `buildAlertQueue`, so both surfaces agree. Settings → *Due-task alerts* stores `settings.dueAlerts` `{ enabled, leadDays, defaultSnoozeMin, quietFrom, quietTo }`. Keyboard: Esc = default snooze, D = done, S = skip.
 
 ## AI provider layer
 
@@ -141,6 +142,7 @@ src/
 │   ├── Board.jsx             ← kanban with drag-drop + swim-lanes + tag filter
 │   ├── TaskForm.jsx          ← quick-add (top of Board)
 │   ├── TaskEditor.jsx        ← modal with tabs: Details / Subtasks / Dependencies
+│   ├── DueTaskAlertModal.jsx ← one-task-at-a-time due alert + GenAI prompt (edit / copy / run)
 │   ├── ActivityLogger.jsx    ← modal: log new activity
 │   ├── ActivityEditor.jsx    ← modal: edit existing activity (atomic counter sync)
 │   ├── TableView.jsx         ← activity table + bulk actions + CSV
@@ -151,12 +153,15 @@ src/
 │   └── SettingsView.jsx      ← per-device prefs + data export
 ├── hooks/
 │   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
+│   ├── useDueAlertQueue.js   ← one current due task + snooze / skip / markDone
+│   ├── useNotifications.js   ← service worker, permission, browser-notification scan
 │   └── useSettings.js        ← localStorage-backed settings + theme application
 ├── services/
 │   ├── ai.js                 ← THE AI module: provider detection + askAI/askAIJson
 │   ├── aiCredentials.js      ← company / personal API-key resolution
 │   ├── anthropic.js          ← AI features (task drafts, summaries…) on top of ai.js
 │   ├── askAi.js              ← Ask AI digest + narration
+│   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
 ├── App.jsx                   ← root: routes view based on URL hash
 └── App.css                   ← single stylesheet, design tokens + components
@@ -207,8 +212,10 @@ src/
 
 ```bash
 npm run bridge       # AI bridge on 127.0.0.1:4319 (Claude Code CLI brain)
-npm test             # bridge unit tests (node --test, no deps)
+npm test             # unit tests: bridge/*.test.mjs + src/**/*.test.mjs (node --test, no deps)
 npm run dev          # local at http://localhost:5173/task-monitor/
+                     # dev/due-alert.html — harness that renders the due-task
+                     # AlertDialog with sample tasks (no sign-in needed); ?ai=0 forces the offline template
 npm run build        # produces dist/
 npm run deploy       # builds + pushes to gh-pages branch
 ```
@@ -228,4 +235,6 @@ npm run deploy       # builds + pushes to gh-pages branch
 - ❌ Gating an AI surface on `getEffectiveApiKey()` — CLI users have no key
 - ❌ Returning a mock or API fallback without setting `degraded` + `reason`
 - ❌ Omitting `--tools ""` when spawning the CLI (that leaves every built-in tool live)
+- ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
+- ❌ Gating the due-alert prompt block on an API key — use `useAiStatus().available`; CLI users have no key. When AI is unavailable the block falls back to `buildFallbackPrompt` and labels it as a template.
 - ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.

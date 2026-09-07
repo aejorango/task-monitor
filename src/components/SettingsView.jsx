@@ -47,6 +47,7 @@ import {
   setAiSettings, providerLabel, fetchBridgeUsage, pushBridgeSettings,
 } from '../services/ai';
 import { useAiStatus } from '../hooks/useAiStatus';
+import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState } from '../services/dueAlerts';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -76,6 +77,7 @@ export default function SettingsView() {
     { id: 'appearance',    label: 'Appearance' },
     { id: 'account',       label: 'Account' },
     { id: 'notifications', label: 'Notifications' },
+    { id: 'due-alerts',    label: 'Due-task alerts' },
     { id: 'defaults',      label: 'Defaults' },
     { id: 'data',          label: 'Your data on this device' },
     ...(isSuperadmin ? [
@@ -330,8 +332,18 @@ export default function SettingsView() {
             )}
           </div>
           <p className="muted small" style={{ marginTop: 8 }}>
-            You’ll be pinged when a task with a plan-end date becomes overdue. Scanned on app load and every 5 min.
+            You’ll be pinged when a task with a plan-end date is due today or overdue (same rules as the
+            in-app alert below, including snooze). Scanned on app load and every 5 min.
           </p>
+        </section>
+
+        <section id="settings-due-alerts" className="review-section htu-section">
+          <h2 className="review-h2-accent">Due-task alerts</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            An in-app alert opens for one due task at a time with a ready-to-run GenAI prompt.
+            Snooze and skip are remembered on this device only.
+          </p>
+          <DueAlertSettings settings={settings} update={update} />
         </section>
 
         <section id="settings-defaults" className="review-section htu-section">
@@ -652,6 +664,94 @@ function AiBrainSection() {
 
 // Collapsed-by-default section — native <details> so no extra state is
 // needed. Header keeps the same accent-dot title look as the other cards.
+function DueAlertSettings({ settings, update }) {
+  const prefs = { ...DEFAULT_DUE_ALERT_SETTINGS, ...(settings.dueAlerts || {}) };
+  const set = (patch) => update({ dueAlerts: { ...prefs, ...patch } });
+  const [pinged, setPinged] = useState(false);
+  const showNow = () => {
+    // Clear this device's snooze/skip state so the next eligible task shows
+    // on the next queue tick — the storage write also wakes other tabs.
+    const uid = auth.currentUser?.uid;
+    if (uid) saveAlertState(uid, { snoozes: {}, skips: [] });
+    window.dispatchEvent(new CustomEvent('task-monitor:due-alerts-refresh'));
+    setPinged(true);
+    setTimeout(() => setPinged(false), 1500);
+  };
+  return (
+    <>
+      <div className="field-row">
+        <div className="field">
+          <label className="label">In-app alerts</label>
+          <select
+            className="select"
+            value={prefs.enabled ? 'on' : 'off'}
+            onChange={(e) => set({ enabled: e.target.value === 'on' })}
+          >
+            <option value="on">Enabled</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="label">Alert how early</label>
+          <select
+            className="select"
+            value={prefs.leadDays}
+            onChange={(e) => set({ leadDays: Number(e.target.value) })}
+            disabled={!prefs.enabled}
+          >
+            <option value={0}>On the due date (and overdue)</option>
+            <option value={1}>1 day before</option>
+            <option value={2}>2 days before</option>
+            <option value={3}>3 days before</option>
+            <option value={7}>1 week before</option>
+          </select>
+        </div>
+      </div>
+      <div className="field-row">
+        <div className="field">
+          <label className="label">Default snooze</label>
+          <select
+            className="select"
+            value={prefs.defaultSnoozeMin}
+            onChange={(e) => set({ defaultSnoozeMin: Number(e.target.value) })}
+            disabled={!prefs.enabled}
+          >
+            <option value={5}>5 minutes</option>
+            <option value={15}>15 minutes</option>
+            <option value={30}>30 minutes</option>
+            <option value={60}>1 hour</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="label">Quiet hours (no alerts between)</label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              className="input" type="time" value={prefs.quietFrom}
+              onChange={(e) => set({ quietFrom: e.target.value })} disabled={!prefs.enabled}
+              aria-label="Quiet hours start"
+            />
+            <span className="muted small">to</span>
+            <input
+              className="input" type="time" value={prefs.quietTo}
+              onChange={(e) => set({ quietTo: e.target.value })} disabled={!prefs.enabled}
+              aria-label="Quiet hours end"
+            />
+            {(prefs.quietFrom || prefs.quietTo) && (
+              <button className="btn btn-sm btn-ghost" onClick={() => set({ quietFrom: '', quietTo: '' })}>Clear</button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+        <button className="btn" onClick={showNow} disabled={!prefs.enabled}>
+          {pinged ? '✓ Snoozes cleared' : 'Show next due task now'}
+        </button>
+        <span className="muted small">Clears snoozed and skipped alerts on this device; the next due task appears within a moment.</span>
+      </div>
+    </>
+  );
+}
+
 function CollapsibleSection({ id, title, children }) {
   return (
     <details id={id} className="review-section settings-collapsible htu-section">
