@@ -2,6 +2,8 @@
 // a sample task so it can be inspected without a signed-in Firestore session.
 // Not part of the production build (vite builds index.html only).
 // Open: http://localhost:5173/dev/due-alert.html?ai=1 (ai=1 → treat AI as available)
+// Add &nb=1 to pretend the workspace has a NotebookLM notebook configured, so
+// the "Ground in this project's notebook" toggle renders.
 
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -25,6 +27,9 @@ const TASKS = [
     plan: { endDate: today }, subtasks: [] },
 ];
 const PROJECTS = { p1: { name: 'BRIDGED', color: '#1D7CC7', description: 'Loan marketplace operations' }, p2: { name: 'AIM', color: '#1DA449' } };
+const WORKSPACE = params.get('nb') === '1'
+  ? { id: 'w1', name: 'Dev workspace', knowledge: { notebookId: 'demo-notebook', notebookTitle: 'Ops handbook' } }
+  : { id: 'w1', name: 'Dev workspace' };
 
 export function Harness() {
   const [queue, setQueue] = useState(TASKS);
@@ -45,6 +50,7 @@ export function Harness() {
           key={task.id}
           task={task}
           project={PROJECTS[task.projectId]}
+          workspace={WORKSPACE}
           today={today}
           remaining={queue.length}
           prefs={{ defaultSnoozeMin: 15 }}

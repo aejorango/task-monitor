@@ -9,15 +9,21 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDueAlertQueue } from '../hooks/useDueAlertQueue';
 import { useProjects } from '../hooks/useTasks';
+import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { useAiStatus } from '../hooks/useAiStatus';
-import { generateClaudePrompt } from '../services/anthropic';
+import { generateClaudePromptFull } from '../services/anthropic';
 import { askAI } from '../services/ai';
+import { useKnowledgeStatus } from '../hooks/useKnowledgeStatus';
+import { resolveNotebookFor, addSource } from '../services/knowledge';
 import {
   buildFallbackPrompt, overdueDays, formatClock, snoozeUntil, SNOOZE_PRESETS_MIN,
 } from '../services/dueAlerts';
 import Markdown from './Markdown';
 
 const PROMPT_KEY_PREFIX = 'task-monitor.dueAlerts.prompt.v1.';
+// Per-device, like snooze/skip: one person grounding their prompts must not
+// change what a teammate sees on the same shared task.
+const GROUND_KEY = 'task-monitor.dueAlerts.ground.v1';
 const RUN_SYSTEM = 'You are completing a task for the user. Produce the deliverable directly, ready to use — no preamble, no commentary about the prompt.';
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -43,6 +49,13 @@ function saveCachedPrompt(task, entry) {
   } catch { /* private mode */ }
 }
 
+function loadGroundPref() {
+  try { return localStorage.getItem(GROUND_KEY) !== '0'; } catch { return true; }
+}
+function saveGroundPref(on) {
+  try { localStorage.setItem(GROUND_KEY, on ? '1' : '0'); } catch { /* private mode */ }
+}
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -59,6 +72,8 @@ async function copyText(text) {
 export default function DueTaskAlertModal({ navigate }) {
   const { current, remaining, today, prefs, snooze, skip, markDone, muteAll } = useDueAlertQueue();
   const { byId } = useProjects();
+  const { workspaces } = useWorkspaces();
+  const activeWorkspaceId = useActiveWorkspaceId();
   const { available: aiAvailable, provider } = useAiStatus();
 
   const [toast, setToast] = useState(null);
@@ -77,6 +92,7 @@ export default function DueTaskAlertModal({ navigate }) {
   const live = current ? `Next due task: ${current.title}` : '';
 
   const project = current ? byId[current.projectId] : null;
+  const workspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
 
   const onSnooze = useCallback((minutes) => {
     const r = snooze(minutes);
@@ -123,6 +139,7 @@ export default function DueTaskAlertModal({ navigate }) {
           key={current.id}
           task={current}
           project={project}
+          workspace={workspace}
           today={today}
           remaining={remaining}
           prefs={prefs}
@@ -144,7 +161,7 @@ export default function DueTaskAlertModal({ navigate }) {
 /* ── the dialog itself (remounts per task via key) ─────────────────────── */
 
 export function AlertDialog({
-  task, project, today, remaining, prefs, aiAvailable, provider, busy,
+  task, project, workspace, today, remaining, prefs, aiAvailable, provider, busy,
   onDone, onSkip, onSnooze, onOpen, onCloseAll,
 }) {
   const dialogRef = useRef(null);
@@ -157,7 +174,9 @@ export function AlertDialog({
     ? `Overdue by ${late} day${late === 1 ? '' : 's'}`
     : late === 0 ? 'Due today' : `Due in ${-late} day${late === -1 ? '' : 's'}`;
   const dueTone = late > 0 ? 'danger' : late === 0 ? 'warn' : 'info';
-  const openSubtasks = (task.subtasks || []).filter((s) => s && !s.done).length;
+  const subtasks = (task.subtasks || []).filter(Boolean);
+  const openTodo = subtasks.filter((st) => !st.done);
+  const doneCount = subtasks.length - openTodo.length;
 
   /* focus trap + shortcuts. Handlers are read through a ref so the effect
      runs once per task and never steals focus back to Snooze mid-edit. */
@@ -195,7 +214,7 @@ export function AlertDialog({
     <div className="modal-backdrop due-alert-backdrop">
       <div
         ref={dialogRef}
-        className="modal due-alert"
+        className="modal due-alert modal-2col"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -215,35 +234,56 @@ export function AlertDialog({
           </span>
         </div>
 
-        <h3 id={titleId} className="modal-title due-alert-title">{task.title}</h3>
-        <p id={descId} className="modal-sub due-alert-meta">
-          {project && (
-            <span className="due-alert-project">
-              <span className="due-alert-dot" style={{ background: project.color || 'var(--c-accent)' }} />
-              {project.name}
-            </span>
-          )}
-          {task.priority && <span className={`badge badge-soft-${task.priority === 'high' || task.priority === 'urgent' ? 'danger' : task.priority === 'low' ? 'muted' : 'info'}`}>{task.priority}</span>}
-          {task.plan?.endDate && <span>Due {task.plan.endDate}</span>}
-          {task.requestedBy && <span>For {task.requestedBy}</span>}
-          {openSubtasks > 0 && <span>{openSubtasks} open subtask{openSubtasks === 1 ? '' : 's'}</span>}
-        </p>
+        {/* DOM order IS tab order: the task and its buttons come before the
+            prompt column, so Tab from Snooze walks the actions first and only
+            then enters the prompt — and the mobile stack needs no reordering. */}
+        <div className="due-alert-grid">
+          <div className="due-alert-main">
+            <h3 id={titleId} className="modal-title due-alert-title">{task.title}</h3>
+            <p id={descId} className="modal-sub due-alert-meta">
+              {project && (
+                <span className="due-alert-project">
+                  <span className="due-alert-dot" style={{ background: project.color || 'var(--c-accent)' }} />
+                  {project.name}
+                </span>
+              )}
+              {task.priority && <span className={`badge badge-soft-${task.priority === 'high' || task.priority === 'urgent' ? 'danger' : task.priority === 'low' ? 'muted' : 'info'}`}>{task.priority}</span>}
+              {task.plan?.endDate && <span>Due {task.plan.endDate}</span>}
+              {task.requestedBy && <span>For {task.requestedBy}</span>}
+            </p>
 
-        {task.description && (
-          <div className="due-alert-desc markdown-preview">
-            <Markdown src={task.description} />
+            {task.description && (
+              <div className="due-alert-desc markdown-preview">
+                <Markdown src={task.description} />
+              </div>
+            )}
+
+            {openTodo.length > 0 && (
+              <div className="due-alert-subtasks">
+                <div className="due-alert-subtasks-head">
+                  {openTodo.length} open subtask{openTodo.length === 1 ? '' : 's'}
+                  {doneCount > 0 && <span className="muted small"> · {doneCount} done</span>}
+                </div>
+                <ul>
+                  {openTodo.slice(0, 8).map((st) => <li key={st.id || st.text}>{st.text}</li>)}
+                  {openTodo.length > 8 && <li className="muted">+{openTodo.length - 8} more</li>}
+                </ul>
+              </div>
+            )}
+
+            <div className="modal-actions due-alert-actions">
+              <button className="btn btn-primary" onClick={onDone} disabled={busy} title="Shortcut: D">
+                {busy ? 'Saving…' : '✓ Done'}
+              </button>
+              <SnoozeButton ref={snoozeBtnRef} defaultMin={prefs.defaultSnoozeMin} onSnooze={onSnooze} />
+              <button className="btn" onClick={onSkip} title="Hide for the rest of today. Shortcut: S">Skip today</button>
+              <button className="btn btn-ghost" onClick={onOpen}>Open task →</button>
+            </div>
           </div>
-        )}
 
-        <PromptBlock task={task} project={project} aiAvailable={aiAvailable} provider={provider} />
-
-        <div className="modal-actions due-alert-actions">
-          <button className="btn btn-primary" onClick={onDone} disabled={busy} title="Shortcut: D">
-            {busy ? 'Saving…' : '✓ Done'}
-          </button>
-          <SnoozeButton ref={snoozeBtnRef} defaultMin={prefs.defaultSnoozeMin} onSnooze={onSnooze} />
-          <button className="btn" onClick={onSkip} title="Hide for the rest of today. Shortcut: S">Skip today</button>
-          <button className="btn btn-ghost" onClick={onOpen}>Open task →</button>
+          <div className="due-alert-aside">
+            <PromptBlock task={task} project={project} workspace={workspace} aiAvailable={aiAvailable} provider={provider} />
+          </div>
         </div>
       </div>
     </div>
@@ -309,7 +349,12 @@ const SnoozeButton = forwardRef(function SnoozeButton({ defaultMin, onSnooze }, 
 
 /* ── GenAI prompt: generate (cached) → edit → copy → run ───────────────── */
 
-function PromptBlock({ task, project, aiAvailable, provider }) {
+function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
+  const knowledge = useKnowledgeStatus();
+  const notebookId = resolveNotebookFor({ project, workspace });
+  const canGround = knowledge.available && !!notebookId;
+  const [groundOn, setGroundOn] = useState(loadGroundPref);
+  const grounded = canGround && groundOn;
   const [entry, setEntry] = useState(() => loadCachedPrompt(task));
   const [generating, setGenerating] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -319,6 +364,7 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
   const [answer, setAnswer] = useState(null);     // { text, degraded, reason }
   const [error, setError] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [savingSource, setSavingSource] = useState(null);   // null | 'saving' | 'saved'
 
   const fallback = useMemo(() => buildFallbackPrompt(task, project), [task, project]);
   const promptText = entry?.text || fallback;
@@ -330,13 +376,19 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
     setGenerating(true);
     setError(null);
     try {
-      const text = await generateClaudePrompt({
+      const out = await generateClaudePromptFull({
         task,
         projectName: project?.name,
         projectDescription: project?.description,
         subtasks: task.subtasks || [],
+        ground: grounded ? { notebookId, projectId: task.projectId, taskId: task.id } : null,
       });
-      const next = { text, edited: false };
+      const next = {
+        text: out.text,
+        edited: false,
+        grounding: out.grounding || null,
+        groundDegraded: out.degraded ? (out.reason || null) : null,
+      };
       setEntry(next);
       saveCachedPrompt(task, next);
     } catch (err) {
@@ -345,7 +397,7 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
     } finally {
       setGenerating(false);
     }
-  }, [aiAvailable, entry?.text, task, project]);
+  }, [aiAvailable, entry?.text, task, project, grounded, notebookId]);
 
   // First display of a task: generate once, then serve from cache. Deferred a
   // tick so the dialog paints (with the template) before the AI call starts.
@@ -366,14 +418,40 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
     if (await copyText(promptText)) { setCopyOk(true); setTimeout(() => setCopyOk(false), 1500); }
   };
 
+  // Push the finished deliverable back into the notebook, so the next task in
+  // this project can be grounded in it. One at a time — Google processes each.
+  const saveAnswerToNotebook = async () => {
+    if (!answer?.text || savingSource === 'saving') return;
+    setSavingSource('saving');
+    try {
+      await addSource(notebookId, {
+        kind: 'text',
+        title: `${task.title.slice(0, 80)} — ${new Date().toISOString().slice(0, 10)}`,
+        text: answer.text,
+      });
+      setSavingSource('saved');
+    } catch (err) {
+      console.error(err);
+      setSavingSource(null);
+      setError(err.message || String(err));
+    }
+  };
+
   const run = async () => {
     if (!aiAvailable || running) return;
     setRunning(true);
     setError(null);
     setAnswer(null);
+    setSavingSource(null);   // a new answer has not been saved anywhere yet
     try {
-      const res = await askAI(RUN_SYSTEM, promptText, { meta: { kind: 'due-alert-run', taskId: task.id } });
-      setAnswer({ text: res.text, degraded: !!res.degraded, reason: res.reason, provider: res.provider });
+      const res = await askAI(RUN_SYSTEM, promptText, {
+        meta: { kind: 'due-alert-run', taskId: task.id },
+        ground: grounded ? { notebookId, projectId: task.projectId, taskId: task.id } : null,
+      });
+      setAnswer({
+        text: res.text, degraded: !!res.degraded, reason: res.reason,
+        provider: res.provider, grounding: res.grounding || null,
+      });
     } catch (err) {
       console.error(err);
       const msg = err.message || String(err);
@@ -392,8 +470,18 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
           <strong>✨ Prompt to fulfil this task</strong>
           <span className="muted small">{collapsed ? 'show' : 'hide'}</span>
         </button>
-        <span className={`badge badge-soft-${isTemplate ? 'warn' : entry?.edited ? 'info' : 'success'}`}>
-          {generating ? 'generating…' : isTemplate ? (aiAvailable ? 'template' : 'Template (AI offline)') : entry?.edited ? 'edited' : 'AI generated'}
+        <span className="due-alert-prompt-badges">
+          {entry?.grounding && (
+            <span className="badge badge-soft-accent" title="Written with material from your NotebookLM notebook">
+              ◇ grounded · {entry.grounding.citations?.length || 0} source{(entry.grounding.citations?.length || 0) === 1 ? '' : 's'}
+            </span>
+          )}
+          {entry?.groundDegraded && (
+            <span className="badge badge-soft-warn" title={entry.groundDegraded}>◇ not grounded</span>
+          )}
+          <span className={`badge badge-soft-${isTemplate ? 'warn' : entry?.edited ? 'info' : 'success'}`}>
+            {generating ? 'generating…' : isTemplate ? (aiAvailable ? 'template' : 'Template (AI offline)') : entry?.edited ? 'edited' : 'AI generated'}
+          </span>
         </span>
       </div>
 
@@ -410,6 +498,19 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
           ) : (
             <pre className="due-alert-pre">{generating && !entry?.text ? 'Writing a prompt for this task…' : promptText}</pre>
           )}
+
+          {canGround && (
+            <label className="due-alert-ground" title={`Retrieve from “${project?.knowledge?.notebookTitle || workspace?.knowledge?.notebookTitle || notebookId}” before writing`}>
+              <input
+                type="checkbox"
+                checked={groundOn}
+                onChange={(e) => { setGroundOn(e.target.checked); saveGroundPref(e.target.checked); }}
+              />
+              <span>Ground in this project's notebook</span>
+            </label>
+          )}
+
+          {entry?.groundDegraded && <p className="field-note is-warning">{entry.groundDegraded}</p>}
 
           <div className="due-alert-prompt-actions">
             {editing ? (
@@ -450,11 +551,25 @@ function PromptBlock({ task, project, aiAvailable, provider }) {
             <div className="due-alert-answer">
               <div className="due-alert-prompt-head">
                 <strong>Result</strong>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {answer.grounding && (
+                    <span className="badge badge-soft-accent">
+                      ◇ grounded · {answer.grounding.citations?.length || 0} source{(answer.grounding.citations?.length || 0) === 1 ? '' : 's'}
+                    </span>
+                  )}
                   {answer.degraded && (
                     <span className="badge badge-soft-warn" title={answer.reason}>degraded</span>
                   )}
                   <button className="btn btn-sm" onClick={() => copyText(answer.text)}>⎘ Copy answer</button>
+                  {canGround && (
+                    <button
+                      className="btn btn-sm"
+                      disabled={savingSource === 'saving'}
+                      onClick={saveAnswerToNotebook}
+                    >
+                      {savingSource === 'saving' ? 'Adding…' : savingSource === 'saved' ? '✓ In notebook' : '＋ Notebook'}
+                    </button>
+                  )}
                 </div>
               </div>
               {answer.degraded && answer.reason && <p className="muted small due-alert-note">{answer.reason}</p>}

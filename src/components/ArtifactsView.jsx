@@ -3,6 +3,8 @@
 
 import { useState, useMemo } from 'react';
 import { useAllActivities, useProjects, useTasks } from '../hooks/useTasks';
+import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
+import AddToNotebookButton from './AddToNotebookButton';
 
 const COLUMNS = [
   { key: 'project', label: 'Project' },
@@ -15,6 +17,9 @@ const COLUMNS = [
 export default function ArtifactsView({ projectFilter }) {
   const { activities, loading } = useAllActivities();
   const { byId: projectById } = useProjects();
+  const { workspaces } = useWorkspaces();
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const workspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const { tasks } = useTasks();
   const taskById = useMemo(() => {
     const m = {}; tasks.forEach((t) => { m[t.id] = t; }); return m;
@@ -38,6 +43,7 @@ export default function ArtifactsView({ projectFilter }) {
           _phase:   phase?.name || '—',
           _task:    a.taskTitle || task?.title || '—',
           _color:   project?.color || '#a1a1aa',
+          _projectObj: project || null,
           name:     att.name || 'Untitled',
           url:      att.url,
           type:     att.type,
@@ -106,9 +112,12 @@ export default function ArtifactsView({ projectFilter }) {
                   <td className="table-cell-wrap"><strong>{r._task}</strong></td>
                   <td className="table-cell-wrap">
                     {r.url ? (
-                      <a className="table-link" href={r.url} target="_blank" rel="noreferrer">
-                        {r.type === 'image' ? '🖼️' : '📎'} {r.name}
-                      </a>
+                      <span className="af-link-cell">
+                        <a className="table-link" href={r.url} target="_blank" rel="noreferrer">
+                          {r.type === 'image' ? '🖼️' : '📎'} {r.name}
+                        </a>
+                        <AddToNotebookButton url={r.url} project={r._projectObj} workspace={workspace} />
+                      </span>
                     ) : r.name}
                   </td>
                   <td className="mono small">{r.date}</td>

@@ -9,6 +9,9 @@
 //   1. item         → <ol><li>
 //   > quote         → <blockquote>
 //   ---             → <hr>
+//   ```lang …```    → <pre><code>
+//   | a | b |       → <table> (GitHub pipe tables, with an optional
+//   |---|---|         alignment row; cells are inline-rendered)
 //   line breaks: blank line splits paragraphs, single newline stays inline
 //
 // Sanitization: HTML tags are escaped before any inline parsing, so the only
@@ -48,6 +51,22 @@ function renderInline(s) {
   return out;
 }
 
+// A pipe-table row → its cells. Leading/trailing pipes are optional, and an
+// escaped \| stays literal.
+function splitRow(line) {
+  const body = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return body.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
+}
+const isTableRow    = (l) => /\|/.test(l) && /\S/.test(l);
+// The separator row is what makes a table a table: |---|:--:|
+const isTableDivider = (l) => /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/.test(l);
+const alignOf = (cell) => {
+  const c = cell.trim();
+  if (c.startsWith(':') && c.endsWith(':')) return 'center';
+  if (c.endsWith(':')) return 'right';
+  return null;
+};
+
 export function renderMarkdown(src) {
   if (!src) return '';
   const lines = String(src).replace(/\r\n/g, '\n').split('\n');
@@ -71,11 +90,56 @@ export function renderMarkdown(src) {
       i++; continue;
     }
 
-    // Horizontal rule
-    if (/^---+\s*$/.test(trimmed)) {
+    // Fenced code block — content is escaped, never inline-parsed.
+    const fence = trimmed.match(/^(```+|~~~+)\s*([\w+-]*)\s*$/);
+    if (fence) {
+      flushPara();
+      const marker = fence[1][0].repeat(3);
+      const lang = fence[2];
+      const body = [];
+      i++;
+      while (i < lines.length && !new RegExp(`^\\s*${marker}+\\s*$`).test(lines[i])) {
+        body.push(lines[i]);
+        i++;
+      }
+      i++;   // consume the closing fence (or fall off the end)
+      const cls = lang ? ` class="language-${escapeHtml(lang)}"` : '';
+      html.push(`<pre><code${cls}>${escapeHtml(body.join('\n'))}</code></pre>`);
+      continue;
+    }
+
+    // Horizontal rule. Checked after the table branch's divider so a real
+    // table separator is never mistaken for a rule.
+    if (/^---+\s*$/.test(trimmed) && !(isTableRow(trimmed) && isTableDivider(trimmed))) {
       flushPara();
       html.push('<hr>');
       i++; continue;
+    }
+
+    // Pipe table: a header row followed by a |---|---| divider.
+    if (isTableRow(trimmed) && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      flushPara();
+      const head = splitRow(trimmed);
+      const aligns = splitRow(lines[i + 1]).map(alignOf);
+      i += 2;
+      const body = [];
+      while (i < lines.length && isTableRow(lines[i]) && lines[i].includes('|')) {
+        body.push(splitRow(lines[i]));
+        i++;
+      }
+      const cell = (tag, text, n) => {
+        const a = aligns[n] ? ` style="text-align:${aligns[n]}"` : '';
+        return `<${tag}${a}>${renderInline(text ?? '')}</${tag}>`;
+      };
+      const thead = `<thead><tr>${head.map((h, n) => cell('th', h, n)).join('')}</tr></thead>`;
+      const tbody = body.length
+        ? `<tbody>${body.map((r) =>
+            // Pad/trim every row to the header width so a ragged row from the
+            // model cannot break the column grid.
+            `<tr>${head.map((_, n) => cell('td', r[n], n)).join('')}</tr>`).join('')}</tbody>`
+        : '';
+      html.push(`<div class="markdown-table-wrap"><table>${thead}${tbody}</table></div>`);
+      continue;
     }
 
     // Heading
@@ -154,7 +218,7 @@ export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '' }) 
           onClick={() => setMode('preview')}
         >Preview</button>
         <span className="muted small" style={{ marginLeft: 'auto' }}>
-          Markdown supported: **bold**, *italic*, [link](url), lists, &gt; quote, ---
+          Markdown supported: **bold**, *italic*, [link](url), lists, tables, `code`, &gt; quote, ---
         </span>
       </div>
       {mode === 'edit' ? (

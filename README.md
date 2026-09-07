@@ -89,12 +89,61 @@ open is picked up within 60s or instantly on Re-check.
 - `npm test` runs the bridge's unit tests (`node --test`, no dependencies — the
   CLI is never spawned).
 
+## Knowledge base — NotebookLM (optional)
+
+By default the AI answers from the model's general knowledge. Point it at your
+own Google **NotebookLM** notebooks and it answers from *your* documents
+instead — policies, specs, meeting notes, contracts — with citations.
+
+Two surfaces use it:
+
+- **Ask AI → "My notebook"** — ask your sources directly and get a cited answer.
+- **Grounding** — NotebookLM retrieves the relevant material first, then Claude
+  reasons over it together with your live task data. Toggle it per workspace or
+  per project (`Settings → Knowledge base`, and the picker in each editor).
+
+### Operator setup
+
+This runs on the machine that runs the bridge, and it is a **one-time** setup:
+
+```bash
+brew install pipx && pipx ensurepath
+pipx install "notebooklm-py[browser]"
+notebooklm login    # use a DEDICATED Google account (see below)
+```
+
+Then create a notebook at [notebooklm.google.com](https://notebooklm.google.com),
+add sources to it, and pick it in `Settings → Knowledge base` (or on a
+workspace / project). Press **Re-check** — no restart needed.
+
+**Notes**
+
+- **Use a dedicated Google account.** `notebooklm login` drives a real browser
+  session and stores its cookies on disk; that session can read every notebook
+  the account can see. Don't point it at a personal or an admin account.
+- Optional isolation: create `~/.notebooklm-sandbox` and the bridge sets
+  `NOTEBOOKLM_HOME` to it automatically, keeping CLI state out of `~/.notebooklm`.
+  An explicit `NOTEBOOKLM_HOME` in the environment always wins.
+- **The whole feature is optional.** With the CLI absent the app installs,
+  starts, builds and passes its tests exactly as before — Settings shows the
+  install commands instead of a notebook list, and nothing else changes.
+- `bridge/notebooklm.mjs` is the only place in the repo that spawns
+  `notebooklm`, exactly as `bridge/ai.mjs` is the only place that spawns
+  `claude`. It never passes `ask --new`, which would **delete** a notebook's
+  server-side conversation.
+- Asks are logged locally in `~/.task-monitor/knowledge-asks.json` (capped at
+  500) so `Settings → Knowledge base → Usage` can answer "what depends on this
+  notebook, and how often is it asked" — NotebookLM keeps no history of its own.
+  Nothing beyond the question itself is sent to Google.
+- `TM_NOTEBOOKLM_BIN=none npm run bridge` forces the not-installed path, which
+  is how to check the degraded states look right.
+
 ## Documentation
 
 - **[docs/BUILD-GUIDE.md](docs/BUILD-GUIDE.md)** — Complete 12-phase setup walkthrough from empty GitHub repo to live deployment
 - **[docs/firestore-schema.md](docs/firestore-schema.md)** — Database schema with scalability rationale, index list, and security rules
 - **[CLAUDE.md](CLAUDE.md)** — Project context for Claude Code sessions
-- **[bridge/](bridge/)** — The local AI bridge: `ai.mjs` (provider layer), `server.mjs` (HTTP), `ai.test.mjs`
+- **[bridge/](bridge/)** — The local AI bridge: `ai.mjs` (provider layer), `notebooklm.mjs` (NotebookLM knowledge base), `server.mjs` (HTTP), `*.test.mjs`
 - **[firestore.rules](firestore.rules)** — Security rules to paste into Firebase Console
 
 ## Project Structure

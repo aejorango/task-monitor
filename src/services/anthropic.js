@@ -32,17 +32,34 @@ export {
 // Free-text completion. Same signature as before; returns the model's text.
 // The `degraded` reason (if any) is logged so a fallback never passes as a
 // clean success silently.
-export async function callClaude({ system, user, maxTokens = 2048, web = false, meta = {} }) {
-  const out = await askAI(system, user, { maxTokens, web, meta });
+export async function callClaude({ system, user, maxTokens = 2048, web = false, meta = {}, ground = null }) {
+  const out = await askAI(system, user, { maxTokens, web, meta, ground });
   if (out.degraded) console.warn(`[ai] degraded (${out.provider}): ${out.reason}`);
   return out.text;
 }
 
+// Same call, but the caller wants the envelope (grounding badge, degraded
+// reason) and not only the prose.
+export async function callClaudeFull({ system, user, maxTokens = 2048, web = false, meta = {}, ground = null }) {
+  const out = await askAI(system, user, { maxTokens, web, meta, ground });
+  if (out.degraded) console.warn(`[ai] degraded (${out.provider}): ${out.reason}`);
+  return out;
+}
+
 // Structured completion with one strict retry. Returns the parsed value.
-export async function callClaudeJson({ system, user, maxTokens = 2048, web = false, meta = {} }) {
-  const out = await askAIJson(system, user, { maxTokens, web, meta });
+export async function callClaudeJson({ system, user, maxTokens = 2048, web = false, meta = {}, ground = null }) {
+  const out = await askAIJson(system, user, { maxTokens, web, meta, ground });
   if (out.degraded) console.warn(`[ai] degraded (${out.provider}): ${out.reason}`);
   return out.data;
+}
+
+// The same call, keeping the envelope: { data, provider, grounding, degraded,
+// reason }. Use it wherever the UI shows a grounding badge or has to say out
+// loud that an answer was degraded.
+export async function callClaudeJsonFull({ system, user, maxTokens = 2048, web = false, meta = {}, ground = null }) {
+  const out = await askAIJson(system, user, { maxTokens, web, meta, ground });
+  if (out.degraded) console.warn(`[ai] degraded (${out.provider}): ${out.reason}`);
+  return out;
 }
 
 // Generate a draft list of tasks from a project name + description.
@@ -114,7 +131,12 @@ Suggest ${count} subtasks that, completed in order, would deliver this task.`;
 // Generate a Claude-ready prompt that the user can paste into a fresh Claude
 // chat (or claude.ai project) to actually produce the deliverable for this
 // task. Returns plain text — NOT JSON — so the user can copy it directly.
-export async function generateClaudePrompt({ task, projectName, projectDescription, subtasks = [] }) {
+export async function generateClaudePrompt(opts) {
+  return (await generateClaudePromptFull(opts)).text;
+}
+
+// The system + user halves, shared by both entry points.
+function claudePromptParts({ task, projectName, projectDescription, subtasks = [] }) {
   const system = `You write prompts for someone else to give to Claude. Your job is to produce a single, well-structured prompt that, when pasted into Claude, will produce the actual deliverable described.
 
 Output ONLY the prompt itself (no preamble like "Here is the prompt:" and no markdown code fences). The prompt should:
@@ -142,8 +164,25 @@ ${subtaskBlock}
 
 Now write the prompt I'll paste into Claude. The prompt should make it unambiguous what deliverable Claude must produce.`;
 
-  const text = await callClaude({ system, user, maxTokens: 1024, meta: { kind: 'claude-prompt' } });
-  return text.trim();
+  return { system, user };
+}
+
+// Same prompt, but with the envelope a caller needs to show a "grounded ·
+// N sources" badge or the reason grounding did not happen.
+// → { text, grounding, degraded, reason }
+export async function generateClaudePromptFull(opts) {
+  const { task, projectName, projectDescription, subtasks = [], ground = null } = opts;
+  const { system, user } = claudePromptParts({ task, projectName, projectDescription, subtasks });
+  const out = await callClaudeFull({
+    system, user, maxTokens: 1024, ground,
+    meta: { kind: 'claude-prompt', taskId: task.id, projectId: task.projectId },
+  });
+  return {
+    text: out.text.trim(),
+    grounding: out.grounding || null,
+    degraded: !!out.degraded,
+    reason: out.reason || null,
+  };
 }
 
 // "Summarize my week" — given a list of activities, produce a Markdown summary.

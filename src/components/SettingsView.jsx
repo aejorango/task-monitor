@@ -48,6 +48,7 @@ import {
 } from '../services/ai';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
+import KnowledgeSection from './KnowledgeSection';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -79,6 +80,7 @@ export default function SettingsView() {
     { id: 'notifications', label: 'Notifications' },
     { id: 'due-alerts',    label: 'Due-task alerts' },
     { id: 'defaults',      label: 'Defaults' },
+    { id: 'knowledge',     label: 'Knowledge base' },
     { id: 'data',          label: 'Your data on this device' },
     ...(isSuperadmin ? [
       { id: 'companies', label: 'Companies' },
@@ -400,6 +402,8 @@ export default function SettingsView() {
 
       {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
+
+      <KnowledgeSection />
 
       {isSuperadmin && <AiBrainSection />}
 

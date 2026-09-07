@@ -27,6 +27,7 @@ workspaces/{workspaceId}:                ← v10 top-level container
   members: [uid, ...]                    ← array-contains query
   acl: { [uid]: 'owner'|'admin'|'editor'|'viewer' }
   pendingInvites: [{ email, role, token }]
+  knowledge: { notebookId, notebookTitle, setAt } | null   ← NotebookLM default
   archived, deleted, createdAt, updatedAt
 
 projects/{projectId}:
@@ -34,6 +35,7 @@ projects/{projectId}:
   phases: [{ id, name, order }]
   acl: { [uid]: role }                   ← per-project ACL inside the workspace
   members: [uid, ...]
+  knowledge: { notebookId, notebookTitle, setAt } | null   ← null = inherit ws
   archived, deleted, createdAt, updatedAt
 
 tasks/{taskId}:
@@ -84,7 +86,7 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 5. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
 6. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
-7. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. Data export.
+7. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
 
 ## v5 Cross-cutting features
 
@@ -99,12 +101,37 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 ## AI provider layer
 
 ```
-bridge/ai.mjs      ← the only place that spawns `claude`; also API + mock
-bridge/server.mjs  ← localhost HTTP: /health /ai/complete /ai/json /ai/recheck
-                     /ai/settings /ai/usage. 127.0.0.1 only, origin allowlist.
-src/services/ai.js ← the only place the frontend picks a brain.
-                     askAI / askAIJson / detectProvider / aiSettings
+bridge/ai.mjs         ← the only place that spawns `claude`; also API + mock
+bridge/notebooklm.mjs ← the only place that spawns `notebooklm` (knowledge base)
+bridge/server.mjs     ← localhost HTTP: /health /ai/complete /ai/json /ai/recheck
+                        /ai/settings /ai/usage /knowledge/*.
+                        127.0.0.1 only, origin allowlist.
+src/services/ai.js        ← the only place the frontend picks a brain.
+                            askAI / askAIJson / detectProvider / aiSettings
+src/services/knowledge.js ← the only door to /knowledge/*; shared probe + cache
 ```
+
+`/knowledge/*` routes (all on the same origin allowlist; a CLI failure is a
+**502** carrying the CLI's own message):
+
+| Route | Does |
+| --- | --- |
+| `GET /knowledge/status` | cliFound / authenticated / hint / notebooks (cached 60 s) |
+| `POST /knowledge/status/refresh` | Re-check: clear caches and re-probe |
+| `GET /knowledge/notebooks` | `[{ id, title, sourceCount }]` (cached 5 min) |
+| `GET /knowledge/sources?notebook=` | `[{ id, title, kind }]` |
+| `POST /knowledge/sources` | `{ notebook, kind:'url'\|'text', url \| title+text }` |
+| `POST /knowledge/ask` | `{ notebook, question, conversationId?, source? }` → answer + citations |
+| `GET /knowledge/usage?notebook=` | `{ stats, recent }` from the local ask log |
+| `PATCH /knowledge/asks/<id>` | `{ helpful }` — local log only |
+
+**Grounding.** `askAI(system, user, { ground: { notebookId } })` asks the
+notebook first and prepends its answer to the system prompt as authoritative
+source material (truncated to 8 000 chars). Only `claude-code` can ground; the
+other providers return `degraded` with the reason. A failed lookup still
+answers — with `degraded` + `grounding: null` — never a swallowed question.
+Surfaces: Ask AI ("Ground with my notebook"), the due-task alert prompt block,
+and `generateClaudePromptFull`.
 
 - **One chokepoint.** New AI features call `askAI` / `askAIJson` (or the
   `callClaude` / `callClaudeJson` wrappers in `anthropic.js`). Never `fetch`
@@ -142,7 +169,10 @@ src/
 │   ├── Board.jsx             ← kanban with drag-drop + swim-lanes + tag filter
 │   ├── TaskForm.jsx          ← quick-add (top of Board)
 │   ├── TaskEditor.jsx        ← modal with tabs: Details / Subtasks / Dependencies
-│   ├── DueTaskAlertModal.jsx ← one-task-at-a-time due alert + GenAI prompt (edit / copy / run)
+│   ├── DueTaskAlertModal.jsx ← two-column due alert: task + actions left, GenAI prompt right
+│   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
+│   ├── NotebookPicker.jsx    ← cache-only notebook select (never spawns the CLI)
+│   ├── AddToNotebookButton.jsx ← ＋ Notebook on a task/artifact URL
 │   ├── DueAlertBell.jsx      ← topbar 🔔: waiting count, pause / resume alerts for today
 │   ├── ActivityLogger.jsx    ← modal: log new activity
 │   ├── ActivityEditor.jsx    ← modal: edit existing activity (atomic counter sync)
@@ -155,6 +185,7 @@ src/
 ├── hooks/
 │   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
 │   ├── useDueAlertQueue.js   ← one current due task + snooze / skip / markDone
+│   ├── useKnowledgeStatus.js ← is the knowledge base usable + which notebooks
 │   ├── useNotifications.js   ← service worker, permission, browser-notification scan
 │   └── useSettings.js        ← localStorage-backed settings + theme application
 ├── services/
@@ -163,6 +194,7 @@ src/
 │   ├── anthropic.js          ← AI features (task drafts, summaries…) on top of ai.js
 │   ├── askAi.js              ← Ask AI digest + narration
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
+│   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
 ├── App.jsx                   ← root: routes view based on URL hash
 └── App.css                   ← single stylesheet, design tokens + components
@@ -214,9 +246,14 @@ src/
 ```bash
 npm run bridge       # AI bridge on 127.0.0.1:4319 (Claude Code CLI brain)
 npm test             # unit tests: bridge/*.test.mjs + src/**/*.test.mjs (node --test, no deps)
+                     # never spawns `claude` or `notebooklm` — fixtures only
+notebooklm login     # optional: connect the NotebookLM knowledge base (see README)
 npm run dev          # local at http://localhost:5173/task-monitor/
                      # dev/due-alert.html — harness that renders the due-task
-                     # AlertDialog with sample tasks (no sign-in needed); ?ai=0 forces the offline template
+                     # AlertDialog with sample tasks (no sign-in needed); ?ai=0 forces the offline template,
+                     # &nb=1 pretends a notebook is configured
+                     # dev/knowledge.html — harness for Settings → Knowledge base +
+                     # NotebookPicker against the live bridge (no sign-in needed)
 npm run build        # produces dist/
 npm run deploy       # builds + deploys dist/ to Firebase Hosting
 npm run deploy:rules # Firestore + Storage rules
@@ -241,3 +278,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
 - ❌ Gating the due-alert prompt block on an API key — use `useAiStatus().available`; CLI users have no key. When AI is unavailable the block falls back to `buildFallbackPrompt` and labels it as a template.
 - ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.
+- ❌ Spawning `notebooklm` anywhere but `bridge/notebooklm.mjs` — same rule as `claude` in `bridge/ai.mjs`. A component, a hook and `src/services/*` all reach it through `/knowledge/*`.
+- ❌ Passing `ask --new`. It **deletes** the notebook's server-side conversation and the turns are not recoverable. Continue with `-c <conversationId>` instead.
+- ❌ Using `payload.error` as an error message. In this CLI `error` is a **boolean** flag — read `payload.message`, or the user is told the problem is "true". Covered by `bridge/notebooklm.test.mjs`.
+- ❌ Letting a picker or a validator call the CLI. `NotebookPicker` and `validateNotebookChoice` read `cachedNotebooks()` only; a `null` cache means "don't know", never "it's gone" — a saved `notebookId` is kept with a warning, never cleared.
+- ❌ Rendering a failed grounding as a clean answer. Propagate `degraded` + `reason` and show the "not grounded" badge; `grounding` is `null` when the lookup failed.

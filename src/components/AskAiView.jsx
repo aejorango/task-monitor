@@ -10,6 +10,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useAllActivities, useAllWorkspaceProjects, useAllWorkspaceTasks } from '../hooks/useTasks';
 import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { auth } from '../services/firebase';
+import Markdown from './Markdown';
+import NotebookPicker from './NotebookPicker';
+import { useKnowledgeStatus } from '../hooks/useKnowledgeStatus';
+import {
+  askNotebook as askMyNotebook, rateAsk, resolveNotebookFor, addSource,
+} from '../services/knowledge';
 import {
   SCOPES, THINKING, buildDigest, buildSuggestions, routeIntent, buildAnswer,
   narrate, isAiAvailable, answerToText,
@@ -34,13 +40,47 @@ export default function AskAiView() {
   const [draft, setDraft]   = useState('');
   const [turns, setTurns]   = useState([]);
   const [scope, setScope]   = useState('Everything');
+  // 'data' = the local digest + Claude narration; 'notebook' = ask the user's
+  // own NotebookLM sources through the bridge.
+  const [mode, setMode]     = useState('data');
   const seqRef  = useRef(0);
   const tailRef = useRef(null);
+  const knowledge = useKnowledgeStatus();
+  // One conversation per notebook, so a follow-up continues the same thread
+  // instead of starting a fresh one (which would also DELETE the old one).
+  const convoRef = useRef({});
 
-  const memberProfiles = useMemo(
-    () => workspaces.find((w) => w.id === activeWorkspaceId)?.memberProfiles || {},
+  const activeWorkspace = useMemo(
+    () => workspaces.find((w) => w.id === activeWorkspaceId) || null,
     [workspaces, activeWorkspaceId],
   );
+  // Memoised: it feeds the digest's dependency array, and a fresh {} every
+  // render would rebuild the whole digest on every keystroke.
+  const memberProfiles = useMemo(
+    () => activeWorkspace?.memberProfiles || {},
+    [activeWorkspace],
+  );
+
+  const [notebookId, setNotebookId] = useState(null);
+  const [notebookTitle, setNotebookTitle] = useState(null);
+  // In "My data" mode the notebook can still be used as a retrieval step:
+  // NotebookLM finds the material, Claude reasons over it together with the
+  // live task data. On by default once a notebook is configured.
+  const [groundOn, setGroundOn] = useState(true);
+  // Default to the workspace's notebook, but never overwrite a manual pick.
+  useEffect(() => {
+    if (notebookId) return;
+    const fromWs = resolveNotebookFor({ workspace: activeWorkspace });
+    if (fromWs) {
+      setNotebookId(fromWs);
+      setNotebookTitle(activeWorkspace?.knowledge?.notebookTitle || null);
+    }
+  }, [activeWorkspace, notebookId]);
+
+  // The notebook mode cannot be the active one if the bridge is not there.
+  useEffect(() => {
+    if (mode === 'notebook' && knowledge.probed && !knowledge.available) setMode('data');
+  }, [mode, knowledge.probed, knowledge.available]);
 
   const digest = useMemo(() => buildDigest({
     tasks, projects, activities, workspaces,
@@ -66,13 +106,40 @@ export default function AskAiView() {
     const id = ++seqRef.current;
     const askedScope = scope;
     setTurns((prev) => [...prev, {
-      id, q, scope: askedScope, thinking: true,
-      thinkingLabel: THINKING[id % THINKING.length],
+      id, q, scope: askedScope, thinking: true, mode,
+      thinkingLabel: mode === 'notebook'
+        // NotebookLM round-trips through a real browser session; a few
+        // seconds of silence here is normal, so say so up front.
+        ? 'Reading your notebook… this can take a minute'
+        : THINKING[id % THINKING.length],
     }]);
     setDraft('');
 
     const started = Date.now();
     try {
+      // ── Notebook mode: the answer comes from the user's own documents.
+      if (mode === 'notebook') {
+        if (!notebookId) {
+          setTurns((prev) => prev.map((t) => (t.id === id
+            ? { ...t, thinking: false, error: 'Pick a notebook first — see the picker above the question box.' }
+            : t)));
+          return;
+        }
+        const nbId = notebookId;
+        const out = await askMyNotebook({
+          notebook: nbId,
+          question: q,
+          conversationId: convoRef.current[nbId] || null,
+          source: 'ask-ai',
+          workspaceId,
+        });
+        if (out.conversationId) convoRef.current[nbId] = out.conversationId;
+        setTurns((prev) => prev.map((t) => (t.id === id
+          ? { ...t, thinking: false, ms: Date.now() - started, nb: { ...out, notebookId: nbId, notebookTitle } }
+          : t)));
+        return;
+      }
+
       const d = digestRef.current;
 
       // A typed request to change something takes the write path: it comes
@@ -91,8 +158,11 @@ export default function AskAiView() {
 
       const intent = intentOverride || routeIntent(q, d) || SCOPE_DEFAULT_INTENT[askedScope] || null;
       const base = buildAnswer(intent, d, q);
+      const grounding = (groundOn && knowledge.available && notebookId)
+        ? { notebookId, workspaceId }
+        : null;
       const [answer] = await Promise.all([
-        narrate({ question: q, answer: base, digest: d, scope: askedScope }),
+        narrate({ question: q, answer: base, digest: d, scope: askedScope, ground: grounding }),
         // Floor the "thinking" state so it never flashes when AI is off.
         new Promise((r) => setTimeout(r, 500)),
       ]);
@@ -124,6 +194,49 @@ export default function AskAiView() {
   const submit = () => ask(draft);
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
   const hasThread = turns.length > 0;
+
+  // The mode switch + notebook picker, shared by the hero and the sticky
+  // composer so both surfaces stay in step.
+  const modeBar = (tone) => (
+    <>
+      <div className="askai-mode-row">
+        <span className={`askai-scope-label${tone === 'dark' ? '' : ' light'}`}>Ask</span>
+        <button
+          className={`askai-chip ${tone} ${mode === 'data' ? 'active' : ''}`}
+          onClick={() => setMode('data')}
+        >My data</button>
+        {knowledge.available ? (
+          <button
+            className={`askai-chip ${tone} ${mode === 'notebook' ? 'active' : ''}`}
+            onClick={() => setMode('notebook')}
+            title="Answer from the sources in your NotebookLM notebook"
+          >My notebook</button>
+        ) : (
+          <span className="askai-composer-hint" title={knowledge.hint || ''}>
+            Notebook answers need the knowledge base —{' '}
+            <a className="link" href="#/settings">set it up in Settings</a>
+          </span>
+        )}
+      </div>
+      {mode === 'data' && knowledge.available && notebookId && (
+        <label className="askai-ground-toggle" title={`Retrieve from “${notebookTitle || notebookId}” before answering`}>
+          <input type="checkbox" checked={groundOn} onChange={(e) => setGroundOn(e.target.checked)} />
+          <span>Ground with my notebook{notebookTitle ? ` (${notebookTitle})` : ''}</span>
+        </label>
+      )}
+      {mode === 'notebook' && (
+        <div className="askai-notebook-pick">
+          <NotebookPicker
+            label="Notebook"
+            value={notebookId}
+            title={notebookTitle}
+            required
+            onChange={(id, title) => { setNotebookId(id); setNotebookTitle(title); }}
+          />
+        </div>
+      )}
+    </>
+  );
 
   const user = auth.currentUser;
   const initial = (user?.displayName || user?.email || '?')[0].toUpperCase();
@@ -163,7 +276,9 @@ export default function AskAiView() {
                 conversation going with follow-up messages.
               </p>
 
-              <div className="askai-scope-row">
+              {modeBar('dark')}
+
+              <div className="askai-scope-row" hidden={mode === 'notebook'}>
                 <span className="askai-scope-label">Scope</span>
                 {SCOPES.map((s) => (
                   <button
@@ -179,7 +294,9 @@ export default function AskAiView() {
                 <input
                   className="askai-prompt-input"
                   type="text"
-                  placeholder="e.g. Which projects are at risk and why?"
+                  placeholder={mode === 'notebook'
+                    ? 'e.g. What does the SBLAF policy say about co-borrowers?'
+                    : 'e.g. Which projects are at risk and why?'}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={onKey}
@@ -255,15 +372,24 @@ export default function AskAiView() {
       {hasThread && (
         <div className="askai-composer">
           <div className="askai-composer-top">
-            <span className="askai-scope-label light">Scope</span>
-            {SCOPES.map((s) => (
-              <button
-                key={s}
-                className={`askai-chip light ${s === scope ? 'active' : ''}`}
-                onClick={() => setScope(s)}
-              >{s}</button>
-            ))}
-            <span className="askai-composer-hint">Follow-ups keep the thread's context</span>
+            {modeBar('light')}
+            {mode === 'data' && (
+              <>
+                <span className="askai-scope-label light">Scope</span>
+                {SCOPES.map((s) => (
+                  <button
+                    key={s}
+                    className={`askai-chip light ${s === scope ? 'active' : ''}`}
+                    onClick={() => setScope(s)}
+                  >{s}</button>
+                ))}
+              </>
+            )}
+            <span className="askai-composer-hint">
+              {mode === 'notebook'
+                ? 'Follow-ups continue the same notebook conversation'
+                : "Follow-ups keep the thread's context"}
+            </span>
           </div>
           <div className="askai-composer-bar">
             <ChatIcon />
@@ -281,6 +407,98 @@ export default function AskAiView() {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ── an answer from the user's own NotebookLM sources ────── */
+
+function NotebookAnswer({ nb, question, ms }) {
+  const [rated, setRated] = useState(null);       // true | false | null
+  const [copied, setCopied] = useState(false);
+  const [saveState, setSaveState] = useState(null); // null | 'saving' | 'saved' | error string
+
+  const rate = async (helpful) => {
+    const next = rated === helpful ? null : helpful;
+    setRated(next);
+    // The rating lives in the bridge's local log. It is never sent to Google.
+    if (nb.askId) { try { await rateAsk(nb.askId, next); } catch (err) { console.error(err); } }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`**Q: ${question}**\n\n${nb.answer}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (err) { console.error(err); }
+  };
+
+  // Push the answer back into the notebook it came from, so the next question
+  // can cite it. One add at a time — Google processes each source.
+  const saveAsSource = async () => {
+    if (saveState === 'saving') return;
+    setSaveState('saving');
+    try {
+      await addSource(nb.notebookId, {
+        kind: 'text',
+        title: `${question.slice(0, 80)} — ${new Date().toISOString().slice(0, 10)}`,
+        text: nb.answer,
+      });
+      setSaveState('saved');
+    } catch (err) {
+      setSaveState(err.message || String(err));
+    }
+  };
+
+  return (
+    <div className="askai-card askai-answer">
+      <div className="askai-answer-head">
+        <span className="askai-badge">My notebook</span>
+        <span className="askai-answer-meta">
+          {nb.notebookTitle || nb.notebookId}
+          {' · '}answered in {((nb.ms ?? ms ?? 0) / 1000).toFixed(1)}s
+          {nb.citations?.length ? ` · ${nb.citations.length} source${nb.citations.length === 1 ? '' : 's'}` : ' · no citations'}
+        </span>
+      </div>
+
+      <Markdown src={nb.answer || '_The notebook returned an empty answer._'} className="askai-answer-text markdown" />
+
+      {nb.citations?.length > 0 && (
+        <div className="askai-citations">
+          <div className="askai-detail-title">Sources</div>
+          <ol>
+            {nb.citations.map((c, i) => (
+              <li key={c.sourceId || `${c.title}-${i}`}>
+                {c.url
+                  ? <a className="link" href={c.url} target="_blank" rel="noreferrer noopener">{c.title}</a>
+                  : <span>{c.title}</span>}
+                {c.sourceId && <span className="muted small"> · {c.sourceId}</span>}
+              </li>
+            ))}
+          </ol>
+          <p className="muted small">
+            Open the notebook at{' '}
+            <a className="link" href="https://notebooklm.google.com" target="_blank" rel="noreferrer noopener">
+              notebooklm.google.com
+            </a>{' '}to read a source in full.
+          </p>
+        </div>
+      )}
+
+      <div className="askai-feedback">
+        <button className={`askai-fb ${rated === true ? 'on' : ''}`} onClick={() => rate(true)}>👍 Helpful</button>
+        <button className={`askai-fb ${rated === false ? 'on' : ''}`} onClick={() => rate(false)}>👎 Not helpful</button>
+        <button className="askai-fb" onClick={copy}>{copied ? '✓ Copied' : '⎘ Copy'}</button>
+        <button className="askai-fb" onClick={saveAsSource} disabled={saveState === 'saving'}>
+          {saveState === 'saving' ? 'Adding…' : saveState === 'saved' ? '✓ In notebook' : '＋ Save to notebook'}
+        </button>
+      </div>
+      {saveState && saveState !== 'saving' && saveState !== 'saved' && (
+        <p className="field-note is-error" role="alert">{saveState}</p>
+      )}
+      {saveState === 'saved' && (
+        <p className="muted small">Added as a text source. Google processes it in the background.</p>
       )}
     </div>
   );
@@ -358,6 +576,8 @@ function Turn({ turn, initial, isLast, isFirst, aiOn, onAsk, onConfirm, onCancel
 
           {turn.applied && <ReceiptCard proposal={turn.proposal} receipt={turn.applied} />}
 
+          {turn.nb && <NotebookAnswer nb={turn.nb} question={turn.q} ms={turn.ms} />}
+
           {a && (
             <>
               <div className={`askai-card askai-answer${foldable ? ' is-foldable' : ''}${openAnswer ? ' is-open' : ''}`}>
@@ -375,8 +595,17 @@ function Turn({ turn, initial, isLast, isFirst, aiOn, onAsk, onConfirm, onCancel
                   <span className="askai-answer-meta">
                     {a.aiUsed ? `answered in ${(turn.ms / 1000).toFixed(1)}s` : 'computed from your data'} · scope: {(turn.scope || 'everything').toLowerCase()}
                   </span>
+                  {a.grounding && (
+                    <span className="askai-ground-badge" title="Answered with material retrieved from your NotebookLM notebook">
+                      ◇ grounded · {a.grounding.citations?.length || 0} source{(a.grounding.citations?.length || 0) === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  {a.groundDegraded && (
+                    <span className="askai-ground-badge is-degraded" title={a.groundDegraded}>◇ not grounded</span>
+                  )}
                 </div>
-                <p className="askai-answer-text">{a.summary}</p>
+                <Markdown src={a.summary} className="askai-answer-text markdown" />
+                {a.groundDegraded && <p className="field-note is-warning">{a.groundDegraded}</p>}
                 {foldable && (
                   <button type="button" className="askai-more" onClick={() => setOpenAnswer((v) => !v)}>
                     {openAnswer ? 'Show less' : 'Show more'}

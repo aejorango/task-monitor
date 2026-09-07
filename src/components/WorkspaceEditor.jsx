@@ -1,6 +1,7 @@
 // src/components/WorkspaceEditor.jsx — create / edit a workspace.
 
 import { useRef, useState } from 'react';
+import NotebookPicker from './NotebookPicker';
 import { useAuth } from '../hooks/useTasks';
 import {
   addWorkspace,
@@ -28,6 +29,7 @@ export default function WorkspaceEditor({ workspace, onClose }) {
   const [logoError, setLogoError] = useState(null);
   const [logoPreviewError, setLogoPreviewError] = useState(false);
   const fileInputRef = useRef(null);
+  const [knowledge, setKnowledge] = useState(workspace?.knowledge || null);
   const [saving, setSaving]       = useState(false);
 
   const pickLogo = () => fileInputRef.current?.click();
@@ -115,6 +117,9 @@ export default function WorkspaceEditor({ workspace, onClose }) {
         icon,
         logoUrl: logoUrl || '',
         logoPath: logoPath || '',
+        // null = this workspace has no knowledge base; every project in it
+        // then answers from general knowledge unless it names its own.
+        knowledge: knowledge || null,
       };
       if (isNew) {
         const result = await addWorkspace(userId, payload);
@@ -257,6 +262,15 @@ export default function WorkspaceEditor({ workspace, onClose }) {
             ))}
           </div>
         </div>
+
+        <NotebookPicker
+          value={knowledge?.notebookId || null}
+          title={knowledge?.notebookTitle}
+          onChange={(notebookId, notebookTitle) => setKnowledge(
+            notebookId ? { notebookId, notebookTitle, setAt: new Date().toISOString() } : null,
+          )}
+          hint="Every project in this workspace uses this notebook unless it picks its own. AI answers can then be grounded in your own documents."
+        />
 
         <div className="modal-actions">
           {!isNew && <button className="btn btn-danger" onClick={remove} disabled={saving}>Delete</button>}

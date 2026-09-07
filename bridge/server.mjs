@@ -16,6 +16,11 @@ import {
   askAI, askAIJson, detectProvider, recheckProvider,
   aiSettings, setAiSettings, getUsage, cliVersion, providerLabel, PROVIDERS,
 } from './ai.mjs';
+import {
+  knowledgeStatus, listNotebooks, resetKnowledgeCaches, knowledgeHint,
+  listSources, addSourceUrl, addSourceText, askNotebook,
+  notebookAskStats, recentAsks, rateAsk,
+} from './notebooklm.mjs';
 
 const PORT = Number(process.env.TM_BRIDGE_PORT || 4319);
 const HOST = '127.0.0.1';
@@ -36,7 +41,7 @@ function corsHeaders(origin) {
   if (!allowed) return null;
   return {
     'access-control-allow-origin': allowed,
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
     'access-control-allow-headers': 'content-type',
     // Chrome's Private Network Access preflight for public https → localhost.
     'access-control-allow-private-network': 'true',
@@ -84,7 +89,130 @@ function healthPayload() {
     cli: { available: mode === 'claude-code', version: cliVersion() },
     settings: aiSettings(),
     providers: PROVIDERS,
+    // Read from the cached status only. /health is polled on every page load,
+    // and spawning `notebooklm auth check` from here would put a Google
+    // round-trip in front of the app starting up.
+    knowledge: knowledgeSnapshot(),
   };
+}
+
+// The last knowledge status we happen to know, without probing for a new one.
+let _lastKnowledge = { cliFound: null, authenticated: null };
+function knowledgeSnapshot() { return { ..._lastKnowledge }; }
+function rememberKnowledge(status) {
+  _lastKnowledge = { cliFound: !!status.cliFound, authenticated: !!status.authenticated };
+  return status;
+}
+
+// A CLI failure is an upstream-dependency failure, not a bug in the bridge —
+// 502, with the CLI's own already-user-readable message.
+function knowledgeError(err) {
+  const e = new Error(err?.message || String(err));
+  e.status = 502;
+  return e;
+}
+
+/* ── /knowledge/* — the NotebookLM knowledge base ──────────────────────────
+   Optional by design: with the CLI missing or signed out these routes still
+   answer, they just answer "not set up yet" with the command that fixes it.
+   Anything that actually needed the CLI and could not reach it is a 502. */
+
+async function handleKnowledge(route, url, req) {
+  switch (route) {
+    case 'GET /knowledge/status': {
+      const status = rememberKnowledge(await knowledgeStatus());
+      // Notebooks are best-effort here: a signed-out CLI must still return a
+      // status (with its hint) rather than a 502 on the status route itself.
+      let notebooks = null;
+      if (status.authenticated) {
+        try { notebooks = await listNotebooks(); } catch { notebooks = null; }
+      }
+      return { status: 200, body: { ...status, notebooks, hint: knowledgeHint(status, notebooks) || status.hint } };
+    }
+
+    case 'POST /knowledge/status/refresh': {
+      // The whole point of Re-check: an operator who just ran `notebooklm
+      // login` gets picked up without restarting the bridge.
+      resetKnowledgeCaches();
+      const status = rememberKnowledge(await knowledgeStatus({ force: true }));
+      let notebooks = null;
+      if (status.authenticated) {
+        try { notebooks = await listNotebooks({ force: true }); } catch { notebooks = null; }
+      }
+      return { status: 200, body: { ...status, notebooks, hint: knowledgeHint(status, notebooks) || status.hint } };
+    }
+
+    case 'GET /knowledge/notebooks': {
+      const force = url.searchParams.get('force') === '1';
+      try {
+        return { status: 200, body: { notebooks: await listNotebooks({ force }) } };
+      } catch (err) { throw knowledgeError(err); }
+    }
+
+    case 'GET /knowledge/sources': {
+      const notebook = url.searchParams.get('notebook');
+      if (!notebook) return { status: 400, body: { error: '`notebook` is required.' } };
+      try {
+        return { status: 200, body: { sources: await listSources(notebook) } };
+      } catch (err) { throw knowledgeError(err); }
+    }
+
+    case 'POST /knowledge/sources': {
+      const { notebook, kind, url: srcUrl, title, text } = await readBody(req);
+      if (!notebook) return { status: 400, body: { error: '`notebook` is required.' } };
+      if (kind !== 'url' && kind !== 'text') {
+        return { status: 400, body: { error: "`kind` must be 'url' or 'text'." } };
+      }
+      if (kind === 'url' && !/^https?:\/\//i.test(String(srcUrl || ''))) {
+        return { status: 400, body: { error: 'A source URL must start with http:// or https://' } };
+      }
+      if (kind === 'text' && !String(text || '').trim()) {
+        return { status: 400, body: { error: '`text` is required for a text source.' } };
+      }
+      try {
+        const data = kind === 'url'
+          ? await addSourceUrl(notebook, srcUrl)
+          : await addSourceText(notebook, title, text);
+        return { status: 200, body: { ok: true, data } };
+      } catch (err) { throw knowledgeError(err); }
+    }
+
+    case 'POST /knowledge/ask': {
+      const b = await readBody(req);
+      if (!b.notebook) return { status: 400, body: { error: '`notebook` is required.' } };
+      if (!String(b.question || '').trim()) return { status: 400, body: { error: '`question` is required.' } };
+      try {
+        const out = await askNotebook(b.notebook, b.question, {
+          conversationId: b.conversationId || null,
+          source: b.source || 'manual',
+          workspaceId: b.workspaceId || null,
+          projectId: b.projectId || null,
+          taskId: b.taskId || null,
+        });
+        return { status: 200, body: out };
+      } catch (err) { throw knowledgeError(err); }
+    }
+
+    case 'GET /knowledge/usage': {
+      const notebook = url.searchParams.get('notebook');
+      if (!notebook) return { status: 400, body: { error: '`notebook` is required.' } };
+      // Local log only — no CLI, no network, so this can never 502.
+      return {
+        status: 200,
+        body: { stats: notebookAskStats(notebook), recent: recentAsks(notebook, 10) },
+      };
+    }
+
+    default: {
+      // PATCH /knowledge/asks/<id> — the only route with an id in the path.
+      const m = route.match(/^PATCH \/knowledge\/asks\/([^/]+)$/);
+      if (!m) return null;
+      const { helpful } = await readBody(req);
+      const row = rateAsk(decodeURIComponent(m[1]), helpful === null ? null : !!helpful);
+      if (!row) return { status: 404, body: { error: 'No such ask in the local log.' } };
+      return { status: 200, body: { ok: true, ask: row } };
+    }
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -108,6 +236,11 @@ const server = http.createServer(async (req, res) => {
   const route = `${req.method} ${url.pathname}`;
 
   try {
+    if (url.pathname.startsWith('/knowledge/')) {
+      const out = await handleKnowledge(route, url, req);
+      if (out) return send(res, out.status, out.body, cors);
+    }
+
     switch (route) {
       case 'GET /health':
         return send(res, 200, healthPayload(), cors);
@@ -128,16 +261,16 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, getUsage(), cors);
 
       case 'POST /ai/complete': {
-        const { system, user, maxTokens, web, meta } = await readBody(req);
+        const { system, user, maxTokens, web, meta, ground } = await readBody(req);
         if (!system || !user) return send(res, 400, { error: '`system` and `user` are required.' }, cors);
-        const out = await askAI(String(system), String(user), { maxTokens, web: !!web, meta: meta || {} });
+        const out = await askAI(String(system), String(user), { maxTokens, web: !!web, meta: meta || {}, ground: ground || null });
         return send(res, 200, out, cors);
       }
 
       case 'POST /ai/json': {
-        const { system, user, maxTokens, web, meta } = await readBody(req);
+        const { system, user, maxTokens, web, meta, ground } = await readBody(req);
         if (!system || !user) return send(res, 400, { error: '`system` and `user` are required.' }, cors);
-        const out = await askAIJson(String(system), String(user), { maxTokens, web: !!web, meta: meta || {} });
+        const out = await askAIJson(String(system), String(user), { maxTokens, web: !!web, meta: meta || {}, ground: ground || null });
         return send(res, 200, out, cors);
       }
 
@@ -146,7 +279,7 @@ const server = http.createServer(async (req, res) => {
     }
   } catch (err) {
     console.error(`[bridge] ${route} failed:`, err.message);
-    return send(res, 500, { error: err.message || String(err) }, cors);
+    return send(res, err.status || 500, { error: err.message || String(err) }, cors);
   }
 });
 
@@ -159,4 +292,12 @@ server.listen(PORT, HOST, () => {
     console.log('  → Or export ANTHROPIC_API_KEY, then POST /ai/recheck.');
   }
   console.log(`Allowed origins: ${ALLOW_ANY ? '(any — TM_BRIDGE_ORIGINS=*)' : [...ORIGINS].join(', ')}`);
+  // Optional layer: probe it in the background so the first /knowledge/status
+  // is warm, and never let its absence delay or fail startup.
+  knowledgeStatus().then((k) => {
+    rememberKnowledge(k);
+    console.log(k.cliFound
+      ? `Knowledge base: notebooklm ${k.authenticated ? 'signed in' : 'found but signed out (run `notebooklm login`)'}`
+      : 'Knowledge base: notebooklm CLI not installed (optional — see README)');
+  }).catch(() => {});
 });

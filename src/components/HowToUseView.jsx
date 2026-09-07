@@ -943,6 +943,18 @@ const WORKFLOWS = [
     ],
   },
   {
+    title: 'Teach the app your documents',
+    steps: [
+      'By default the AI answers from general knowledge. Point it at your own Google NotebookLM notebooks and it answers from your policies, specs and notes instead — with citations.',
+      'One-time setup on the machine running the AI bridge: Settings → Knowledge base prints the exact commands (pipx install, then notebooklm login with a DEDICATED Google account). Press Re-check when done — no restart.',
+      'Create a notebook at notebooklm.google.com and add sources to it: PDFs, Google Docs, web pages, pasted text.',
+      'Pick that notebook on the workspace (Edit workspace) so every project inherits it, or on a single project (Project editor → Knowledge base) to override.',
+      'Feed it as you work: ＋ Notebook on any task attachment or artifact link adds it as a source, and "Save to notebook" stores a finished AI answer as one.',
+      'Ask it directly: Ask AI → "My notebook" gives a cited answer, and follow-ups continue the same conversation.',
+      'Or let it work behind the scenes: leave "Ground with my notebook" on and NotebookLM finds the relevant material before Claude writes the answer. A "grounded · N sources" badge says when that happened — and "not grounded" says when it did not.',
+    ],
+  },
+  {
     title: 'Starting a new initiative',
     steps: [
       'Decide: is this really a Project (has an outcome) or just a Task? If unsure, start as a Task — you can promote later.',

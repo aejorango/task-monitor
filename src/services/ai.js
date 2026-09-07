@@ -90,7 +90,7 @@ function isLocalHost() {
   return ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(location.hostname);
 }
 
-function bridgeEnabled() {
+export function bridgeEnabled() {
   const { bridge } = aiSettings();
   if (bridge === 'off') return false;
   if (bridge === 'on') return true;
@@ -100,7 +100,9 @@ function bridgeEnabled() {
   return isLocalHost();
 }
 
-async function bridgeFetch(path, { method = 'GET', body, timeout = BRIDGE_PROBE_MS } = {}) {
+// Exported for services/knowledge.js — the NotebookLM client talks to the same
+// bridge over the same origin allowlist, and must not re-implement any of it.
+export async function bridgeFetch(path, { method = 'GET', body, timeout = BRIDGE_PROBE_MS } = {}) {
   const { bridgeUrl } = aiSettings();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -305,6 +307,9 @@ function mockReply(system, userPrompt) {
   ].join('\n');
 }
 
+const GROUND_UNAVAILABLE =
+  'Grounding needs the Claude Code bridge, so this answer is not grounded in your notebook.';
+
 const WEB_UNAVAILABLE = (provider) =>
   `Live web access was requested but the "${provider}" provider cannot browse. ` +
   'This answer comes from training data and may be stale.';
@@ -318,7 +323,11 @@ const noBrain = () => {
 /* ── the public API ───────────────────────────────────────────────────── */
 
 // → { text, provider, usage, ms, degraded?, reason? }
-export async function askAI(system, userPrompt, { meta = {}, web = false, maxTokens } = {}) {
+// `ground: { notebookId, workspaceId?, projectId?, taskId? }` asks the user's
+// own NotebookLM notebook first and hands its answer to the model as source
+// material. Only the bridge can do that — it is the only process that can
+// reach the CLI — so other providers answer ungrounded and say so.
+export async function askAI(system, userPrompt, { meta = {}, web = false, maxTokens, ground = null } = {}) {
   const provider = await detectProvider();
   const started = Date.now();
 
@@ -341,7 +350,7 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
       const out = await bridgeFetch('/ai/complete', {
         method: 'POST',
         timeout: web ? BRIDGE_WEB_TIMEOUT_MS : BRIDGE_TIMEOUT_MS,
-        body: { system, user: userPrompt, maxTokens: maxTokens || aiSettings().maxTokens, web, meta },
+        body: { system, user: userPrompt, maxTokens: maxTokens || aiSettings().maxTokens, web, meta, ground },
       });
       // The bridge already recorded this call and may have degraded it itself.
       return { ...out, ms: out.ms ?? (Date.now() - started) };
@@ -353,7 +362,8 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
         const { text, usage } = await callApi(system, userPrompt, { maxTokens });
         return finish(text, 'api (fallback)', usage,
           `The Claude Code bridge failed (${why}) — used the Anthropic API key instead.` +
-          (web ? ` ${WEB_UNAVAILABLE('api')}` : ''));
+          (web ? ` ${WEB_UNAVAILABLE('api')}` : '') +
+          (ground ? ` ${GROUND_UNAVAILABLE}` : ''));
       }
       if (aiSettings().allowMock) {
         return finish(`${mockReply(system, userPrompt)}\n\n[bridge error: ${why}]`, 'mock (fallback)', null,
@@ -371,7 +381,8 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
 
   if (provider === 'api') {
     const { text, usage } = await callApi(system, userPrompt, { maxTokens });
-    return finish(text, provider, usage, web ? WEB_UNAVAILABLE('api') : undefined);
+    return finish(text, provider, usage,
+      [web ? WEB_UNAVAILABLE('api') : null, ground ? GROUND_UNAVAILABLE : null].filter(Boolean).join(' ') || undefined);
   }
 
   return finish(mockReply(system, userPrompt), 'mock', null,
@@ -409,7 +420,10 @@ export async function askAIJson(system, userPrompt, opts = {}) {
   }
 
   const first = await askAI(system + JSON_RULE, userPrompt, opts);
-  const wrap = (data, r) => ({ data, provider: r.provider, ...(r.degraded ? { degraded: true, reason: r.reason } : {}) });
+  const wrap = (data, r) => ({
+    data, provider: r.provider, grounding: r.grounding || null,
+    ...(r.degraded ? { degraded: true, reason: r.reason } : {}),
+  });
   if (String(first.provider).startsWith('mock')) {
     throw new Error(first.reason || 'No AI brain is connected, so structured output is unavailable.');
   }
@@ -419,7 +433,8 @@ export async function askAIJson(system, userPrompt, opts = {}) {
     const retry = await askAI(
       system + JSON_RULE,
       `${userPrompt}\n\nYour previous reply was not valid JSON. Return ONLY the JSON object.`,
-      opts,
+      // Grounding already ran on the first attempt.
+      { ...opts, ground: null },
     );
     return wrap(extractJson(retry.text), retry);
   }

@@ -9,7 +9,7 @@
 //      available (no company key) or the call fails, every answer still has a
 //      locally-written summary + actions, so the page works without AI.
 
-import { callClaudeJson } from './anthropic';
+import { callClaudeJson, callClaudeJsonFull } from './anthropic';
 import { isAiAvailable as aiBrainAvailable } from './ai';
 import { parseQuickAdd } from './nlpQuickAdd';
 import {
@@ -1064,17 +1064,33 @@ const NARRATE_SYSTEM = `You are the analyst inside "Task Monitor", a project-man
 
 Write for a busy operator: direct, concrete, no filler, no praise, no "it looks like". Refer to projects, tasks and people by their real names from the facts. Never say something does not exist unless the facts say so — when a search result is given, it is the complete answer, so report it as found. When the activity log is included, quote or paraphrase specific entries (with their date) rather than only aggregates — the user wants updates down to the individual log entry.
 
-Respond ONLY with a JSON object, no markdown and no code fences:
+Respond ONLY with a JSON object. Do not wrap the object itself in code fences:
 {
-  "summary": "2-4 sentences answering the question using the facts",
+  "summary": "the answer, as GitHub-flavoured Markdown (see below)",
   "actions": ["3 short, specific, imperative next steps"],
   "followUps": ["3 short follow-up questions the user might ask next, max 40 chars each"]
-}`;
+}
+
+FORMATTING \`summary\`
+Write it as Markdown, and use the structure the answer actually needs:
+- Lead with 1-3 sentences of prose that answer the question directly.
+- Use "## " / "### " headings only when the answer really has sections.
+- Use "- " bullets or "1. " numbers for anything that is a list.
+- Use **bold** for names, numbers and verdicts worth scanning for.
+- Use a pipe table when you are comparing the same fields across several
+  projects, people or weeks:
+  | Project | Hours | Overdue |
+  | --- | ---: | ---: |
+  | SBLAF | 12.5 | 3 |
+- Use \`inline code\` for ids, field names and literal values.
+Never emit raw HTML, and never wrap the whole summary in a code fence.
+Keep it tight — a busy operator should get the answer in the first two lines,
+with the structure underneath for anyone who wants the detail.`;
 
 // Upgrades a locally-built answer's prose with Claude. Returns the answer
 // unchanged (plus `aiError`) when AI is unavailable or the call fails — the
 // numbers, items and metrics are never touched either way.
-export async function narrate({ question, answer, digest, scope = 'Everything' }) {
+export async function narrate({ question, answer, digest, scope = 'Everything', ground = null }) {
   if (!isAiAvailable()) return { ...answer, aiUsed: false };
   try {
     const user = `Question: ${question}
@@ -1083,11 +1099,17 @@ FACTS
 ${factsText(answer, digest, scope)}
 
 Answer the question from these facts.`;
-    const parsed = await callClaudeJson({
-      system: NARRATE_SYSTEM, user, maxTokens: 900, meta: { kind: 'ask-ai-narrate', scope },
+    const out = await callClaudeJsonFull({
+      system: NARRATE_SYSTEM, user, maxTokens: 1400, ground,
+      meta: { kind: 'ask-ai-narrate', scope },
     });
+    const parsed = out.data;
     return {
       ...answer,
+      // Grounded ≠ succeeded: the badge and the degraded reason both travel
+      // with the answer so the view can never render a fallback as clean.
+      grounding: out.grounding || null,
+      groundDegraded: out.degraded ? (out.reason || 'The answer was degraded.') : null,
       summary: String(parsed.summary || answer.summary).trim() || answer.summary,
       actions: Array.isArray(parsed.actions) && parsed.actions.length
         ? parsed.actions.slice(0, 4).map((a) => String(a).trim()).filter(Boolean)
@@ -1124,18 +1146,20 @@ export function buildSuggestions(digest) {
 
 /* ── plain-text export (Share button) ────────────────────── */
 
+// The summary is already Markdown (see NARRATE_SYSTEM), so the wrapper is
+// Markdown too — the clipboard content pastes cleanly into a doc or chat.
 export function answerToText(question, answer) {
-  const out = [`Q: ${question}`, '', answer.summary];
+  const out = [`**Q: ${question}**`, '', answer.summary];
   if (answer.metrics?.length) {
-    out.push('', ...answer.metrics.map((m) => `• ${m.label}: ${m.value} (${m.delta})`));
+    out.push('', ...answer.metrics.map((m) => `- **${m.label}:** ${m.value} (${m.delta})`));
   }
   if (answer.items?.length) {
-    out.push('', `${answer.itemsTitle}:`, ...answer.items.map((i) => `• ${i.title} [${i.tag}] — ${i.meta}`));
+    out.push('', `### ${answer.itemsTitle}`, ...answer.items.map((i) => `- ${i.title} [${i.tag}] — ${i.meta}`));
   }
   if (answer.actions?.length) {
-    out.push('', "What I'd do next:", ...answer.actions.map((a) => `• ${a}`));
+    out.push('', "### What I'd do next", ...answer.actions.map((a) => `- ${a}`));
   }
-  if (answer.sources?.length) out.push('', `Based on: ${answer.sources.join(', ')}`);
+  if (answer.sources?.length) out.push('', `_Based on: ${answer.sources.join(', ')}_`);
   return out.join('\n');
 }
 

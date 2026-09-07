@@ -15,6 +15,7 @@
 // instead of ~300.
 
 import { spawn, spawnSync } from 'node:child_process';
+import { askNotebook } from './notebooklm.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -273,26 +274,78 @@ const WEB_UNAVAILABLE = (provider) =>
   `Live web access was requested but the "${provider}" provider cannot browse. ` +
   'This answer comes from training data and may be stale.';
 
+/* ── grounding: NotebookLM retrieves, Claude reasons ──────────────────── */
+
+export const GROUNDING_CHARS = 8000;
+
+// The notebook is a retrieval engine, not a chat partner: ask it for the
+// material, not for the finished answer.
+export function groundingQuestion(userPrompt) {
+  const q = String(userPrompt).trim().slice(0, 1500);
+  return 'From my sources, give me every fact, figure, name, date, policy and ' +
+    'constraint that is relevant to the following request. Quote the source ' +
+    'wording where it matters. Do not answer the request itself.\n\n' + q;
+}
+
+export function groundedSystem(system, answer) {
+  return `Grounding context from the user's NotebookLM knowledge base ` +
+    `(treat as authoritative source material):\n${String(answer).slice(0, GROUNDING_CHARS)}\n\n${system}`;
+}
+
 /* ── the public API ───────────────────────────────────────────────────── */
 
-export async function askAI(system, userPrompt, { meta = {}, web = false, maxTokens } = {}) {
+export async function askAI(system, userPrompt, { meta = {}, web = false, maxTokens, ground = null } = {}) {
   const provider = detectProvider();
   const started = Date.now();
 
+  // Filled in below when grounding runs; read by finish().
+  let grounding = null;
+  let groundingFailure = null;
+
   const finish = (text, prov, usage, degraded) => {
     const ms = Date.now() - started;
+    const why = degraded || groundingFailure || undefined;
     recordAiCall({
       provider: prov, ms, ...meta,
       inputTokens:  usage?.inputTokens  ?? null,
       outputTokens: usage?.outputTokens ?? null,
       costUsd:      usage?.costUsd      ?? null,
-      degraded: !!degraded,
+      degraded: !!why,
+      grounded: !!grounding,
+      notebookId: ground?.notebookId || null,
     });
     return {
       text, provider: prov, usage: usage || null, ms,
-      ...(degraded ? { degraded: true, reason: degraded } : {}),
+      grounding,
+      ...(why ? { degraded: true, reason: why } : {}),
     };
   };
+
+  // Retrieval first, then reasoning. A notebook that cannot be reached must
+  // never swallow the question: we answer anyway and say it was ungrounded.
+  if (ground?.notebookId) {
+    try {
+      const g = await askNotebook(ground.notebookId, groundingQuestion(userPrompt), {
+        source: 'grounding',
+        workspaceId: ground.workspaceId || meta.workspaceId || null,
+        projectId:   ground.projectId   || meta.projectId   || null,
+        taskId:      ground.taskId      || meta.taskId      || null,
+      });
+      if (String(g.answer || '').trim()) {
+        system = groundedSystem(system, g.answer);
+        grounding = {
+          notebookId: ground.notebookId,
+          citations: g.citations || [],
+          ms: g.ms,
+          askId: g.askId,
+        };
+      } else {
+        groundingFailure = 'The notebook returned nothing for this request — answered without grounding.';
+      }
+    } catch (err) {
+      groundingFailure = `Notebook lookup failed: ${err.message || err} — answered without grounding.`;
+    }
+  }
 
   const webSystem = web
     ? `${system}\n\nYou have live web access via WebSearch and WebFetch. Use them for anything time-sensitive, and cite the source URL for every such claim.`
@@ -356,16 +409,22 @@ export async function askAIJson(system, userPrompt, opts = {}) {
     throw new Error('No AI provider is connected, so structured output is unavailable.');
   }
 
+  const wrap = (data, r) => ({
+    data, provider: r.provider, grounding: r.grounding || null,
+    ...(r.degraded ? { degraded: true, reason: r.reason } : {}),
+  });
   const first = await askAI(system + JSON_RULE, userPrompt, opts);
   try {
-    return { data: extractJson(first.text), provider: first.provider, ...(first.degraded ? { degraded: true, reason: first.reason } : {}) };
+    return wrap(extractJson(first.text), first);
   } catch {
     const retry = await askAI(
       system + JSON_RULE,
       `${userPrompt}\n\nYour previous reply was not valid JSON. Return ONLY the JSON object.`,
-      opts
+      // Grounding already ran on the first attempt; repeating it would be a
+      // second Google round-trip for the same facts.
+      { ...opts, ground: null },
     );
-    return { data: extractJson(retry.text), provider: retry.provider, ...(retry.degraded ? { degraded: true, reason: retry.reason } : {}) };
+    return wrap(extractJson(retry.text), retry);
   }
 }
 

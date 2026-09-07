@@ -32,6 +32,7 @@ import TaskAiPanel from './TaskAiPanel';
 import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
+import AddToNotebookButton from './AddToNotebookButton';
 
 // ── Small formatters ────────────────────────────────────────────────────────
 function daysBetween(fromYmd, toYmd) {
@@ -762,15 +763,18 @@ export default function TaskEditor({ task, projects, onClose }) {
               ) : (
                 <div className="te-atts">
                   {attachments.map((f, i) => (
-                    <a key={i} className="te-att" href={f.url} target="_blank" rel="noreferrer" title={f.name || f.url}>
-                      <span className="te-att-ico">{fileKind(f)}</span>
-                      <span className="te-att-body">
-                        <span className="te-att-name">{f.name || f.url}</span>
-                        <span className="te-att-meta">
-                          {f.size ? `${Math.round(f.size / 1024)} KB · ` : ''}{fmtDay(f._date)}
+                    <div key={i} className="te-att-row">
+                      <a className="te-att" href={f.url} target="_blank" rel="noreferrer" title={f.name || f.url}>
+                        <span className="te-att-ico">{fileKind(f)}</span>
+                        <span className="te-att-body">
+                          <span className="te-att-name">{f.name || f.url}</span>
+                          <span className="te-att-meta">
+                            {f.size ? `${Math.round(f.size / 1024)} KB · ` : ''}{fmtDay(f._date)}
+                          </span>
                         </span>
-                      </span>
-                    </a>
+                      </a>
+                      <AddToNotebookButton url={f.url} project={selectedProject} workspace={workspace} />
+                    </div>
                   ))}
                 </div>
               )}

@@ -28,6 +28,7 @@ import ActivityEditor from './ActivityEditor';
 import AssigneePicker from './AssigneePicker';
 import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
+import NotebookPicker from './NotebookPicker';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -889,6 +890,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   const [customFields, setCustomFields] = useState(project?.customFields || []);
   const [assignedTo, setAssignedTo] = useState(project?.assignedTo || []);
   const [assignedToExternal, setAssignedToExternal] = useState(project?.assignedToExternal || []);
+  const [knowledge, setKnowledge] = useState(project?.knowledge || null);
   const [saving, setSaving] = useState(false);
   const [newSegmentInput, setNewSegmentInput] = useState(null); // null = picker, string = creating
   const [actFilter, setActFilter] = useState('all');
@@ -1053,9 +1055,9 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal });
+        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
       } else {
-        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal });
+        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
       }
       onClose();
     } catch (err) {
@@ -1459,6 +1461,22 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
             <section className="pe-card">
               <h4 className="pe-sect"><span className="pe-sect-mark">▤</span>Custom fields</h4>
               <CustomFieldsEditor fields={customFields} onChange={setCustomFields} bare />
+            </section>
+
+            <section className="pe-card">
+              <h4 className="pe-sect"><span className="pe-sect-mark">◇</span>Knowledge base</h4>
+              <NotebookPicker
+                label="NotebookLM notebook"
+                value={knowledge?.notebookId || null}
+                title={knowledge?.notebookTitle}
+                onChange={(notebookId, notebookTitle) => setKnowledge(
+                  notebookId ? { notebookId, notebookTitle, setAt: new Date().toISOString() } : null,
+                )}
+                inheritLabel={workspace?.knowledge?.notebookId
+                  ? `Inherit from workspace (${workspace.knowledge.notebookTitle || workspace.knowledge.notebookId})`
+                  : 'Inherit from workspace (none set)'}
+                hint="AI answers and task prompts for this project are grounded in this notebook's sources."
+              />
             </section>
           </div>
 
