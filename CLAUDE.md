@@ -4,7 +4,7 @@ A personal **project-management suite** for Ace. Originally a task monitor; now
 extended with projects + phases, drag-and-drop kanban, table view, Gantt chart,
 and a professional Linear-inspired theme.
 
-Deployed via GitHub Pages with a Firebase Firestore backend.
+Deployed via Firebase Hosting with a Firebase Firestore backend.
 
 ---
 
@@ -12,7 +12,7 @@ Deployed via GitHub Pages with a Firebase Firestore backend.
 
 - **Frontend:** React 19 + Vite + plain CSS (no Tailwind, no UI library)
 - **Backend:** Firebase Firestore + Firebase Auth (Anonymous + Google)
-- **Hosting:** GitHub Pages at `tasks.blueinnovation.ph` (custom domain, CNAME at dot.ph)
+- **Hosting:** Firebase Hosting (site `task-monitor-cbaf2`, https://task-monitor-cbaf2.web.app) at `tasks.blueinnovation.ph`. Config in `firebase.json` → `hosting` (SPA rewrite, `sw.js`/`index.html` no-cache, hashed assets immutable). Deploy with the `aejorango888@gmail.com` Firebase CLI account — the other logged-in accounts have no access to the project. GitHub Pages (`npm run deploy:pages`) is legacy; it only serves while the repo is public.
 - **Top-level container:** `workspaces` — every project/task/activity/template/comment/webhook belongs to exactly one workspace. Members of a workspace share its contents.
 - **AI brain:** all generative features go through `src/services/ai.js`. Default provider is the **Claude Code CLI** on the operator's machine, reached via the local bridge in `bridge/` (`npm run bridge`, `127.0.0.1:4319`); falls back to the Anthropic API key, then to a visibly-degraded mock.
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable`
@@ -217,7 +217,9 @@ npm run dev          # local at http://localhost:5173/task-monitor/
                      # dev/due-alert.html — harness that renders the due-task
                      # AlertDialog with sample tasks (no sign-in needed); ?ai=0 forces the offline template
 npm run build        # produces dist/
-npm run deploy       # builds + pushes to gh-pages branch
+npm run deploy       # builds + deploys dist/ to Firebase Hosting
+npm run deploy:rules # Firestore + Storage rules
+npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 ```
 
 ## Common Pitfalls

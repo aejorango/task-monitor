@@ -11,8 +11,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
-    "deploy:rules": "npx firebase-tools deploy --only firestore:rules",
+    "deploy": "firebase deploy --only hosting --account aejorango888@gmail.com",
+    "deploy:pages": "gh-pages -d dist",
+    "deploy:rules": "firebase deploy --only firestore:rules --account aejorango888@gmail.com",
     "deploy:all": "npm run deploy && npm run deploy:rules"
   },
   "dependencies": {
