@@ -305,7 +305,7 @@ function tsToDateStr(ts) {
 }
 
 const STOP = new Set(['the','and','for','with','that','this','from','have','been','they','their','there','were','what','when','which','while','still','into','over','about','waiting','blocked','because','needs','need','will','not','but','are','was','has','had','our','out','due','yet','get','got','can','cannot']);
-function topThemes(acts, limit = 3) {
+export function topThemes(acts, limit = 3) {
   const freq = {};
   acts.forEach((a) => {
     (a.bottleneckRemarks || a.comment || '')

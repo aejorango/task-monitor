@@ -10,7 +10,7 @@
 // The whole layer is OPTIONAL. Nothing here throws just because the operator
 // has never installed the CLI — that is a state with a hint attached.
 
-import { bridgeFetch, bridgeEnabled, aiSettings } from './ai';
+import { bridgeFetch, bridgeEnabled, aiSettings, setAiSettings } from './ai';
 
 export const STATUS_TTL_MS = 60_000;
 export const ASK_TIMEOUT_MS = 310_000;   // the bridge budgets 300 s for an ask
@@ -21,6 +21,29 @@ export const BRIDGE_DOWN_HINT =
 
 const BRIDGE_OFF_HINT =
   'The AI bridge is switched off in Settings → AI brain, so the knowledge base is unreachable.';
+
+// True when the page will not even try the bridge (Settings → AI brain →
+// Bridge = "Auto" on a deployed https origin, or "Never probe").
+export function bridgeOff() { return !bridgeEnabled(); }
+
+// One-click fix for the deployed site: probe the bridge from this device.
+// Per-device (localStorage), same as the rest of the AI settings.
+export async function enableBridgeHere() {
+  setAiSettings({ bridge: 'on' });
+  return refreshKnowledge();
+}
+
+// Chrome 130+ asks the user before a public https page may reach 127.0.0.1
+// ("wants to look for and connect to devices on your local network"). The
+// fetch simply waits until they answer, which looks like "nothing happens".
+export function localNetworkNote() {
+  if (typeof window === 'undefined') return null;
+  const onHttps = window.location.protocol === 'https:';
+  const local = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+  if (!onHttps || local) return null;
+  return 'If Chrome asks whether this site may access devices on your local network, choose Allow — ' +
+    'otherwise the request to the bridge waits forever.';
+}
 
 /* ── one shared probe ──────────────────────────────────────────────────── */
 

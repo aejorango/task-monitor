@@ -19,6 +19,7 @@ import { useWorkspaces } from '../hooks/useWorkspace';
 import { useAllWorkspaceProjects } from '../hooks/useTasks';
 import {
   fetchSources, addSource, fetchNotebookUsage, BRIDGE_DOWN_HINT, bridgeUrl,
+  bridgeOff, enableBridgeHere, localNetworkNote,
 } from '../services/knowledge';
 
 const INSTALL_CMDS = [
@@ -119,7 +120,23 @@ export default function KnowledgeSection() {
         <div className="kb-panel">
           <strong>Start the AI bridge</strong>
           <p className="muted small">{hint || BRIDGE_DOWN_HINT}</p>
+          {bridgeOff() && (
+            <p style={{ margin: '6px 0 10px' }}>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={busy}
+                onClick={async () => { setBusy(true); try { await enableBridgeHere(); } finally { setBusy(false); } }}
+              >
+                Enable the bridge on this device
+              </button>
+              <span className="muted small" style={{ marginLeft: 8 }}>
+                Sets Settings → AI brain → Bridge to “Always probe” for this browser and re-checks.
+              </span>
+            </p>
+          )}
           <CopyCmd cmd="npm run bridge" />
+          {localNetworkNote() && <p className="muted small" style={{ marginTop: 8 }}>{localNetworkNote()}</p>}
         </div>
       )}
 
