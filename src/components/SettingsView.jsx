@@ -1,6 +1,6 @@
 // src/components/SettingsView.jsx — per-device preferences + data export.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
@@ -11,6 +11,7 @@ import {
   backfillWorkspaceMemberProfiles,
   addCompany,
   updateCompany,
+  migrateCompanyKeys,
   softDeleteCompany,
   setUserCompany,
   subscribeToCompany,
@@ -1310,7 +1311,8 @@ function UserManagementSection({ currentUid }) {
                 </div>
                 {u.status === 'approved' && (() => {
                   const assignedCompany = companies.find((c) => c.id === u.companyId);
-                  const aiBlocked = !u.companyId || !(assignedCompany?.anthropicApiKey || '').trim();
+                  const companyHasKey = assignedCompany?.hasApiKey ?? !!String(assignedCompany?.anthropicApiKey || '').trim();
+                  const aiBlocked = !u.companyId || !companyHasKey;
                   const aiBlockedReason = !u.companyId
                     ? 'Unassigned — AI disabled for this user.'
                     : `Company "${assignedCompany?.name}" has no AI key — AI disabled for this user.`;
@@ -1327,7 +1329,7 @@ function UserManagementSection({ currentUid }) {
                         <option value="">— Unassigned —</option>
                         {companies.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.name}{c.anthropicApiKey ? '' : ' (no key)'}
+                            {c.name}{(c.hasApiKey ?? !!c.anthropicApiKey) ? '' : ' (no key)'}
                           </option>
                         ))}
                       </select>
@@ -1414,6 +1416,21 @@ function CompaniesManagementSection() {
   const { userId } = useAuth();
   const [creatingName, setCreatingName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [migrated, setMigrated] = useState(null);
+
+  // One-off: a key still sitting on a company document is readable by every
+  // member of that company. Move it into the secret and delete it from the
+  // document the moment a superadmin opens this page. Idempotent.
+  const migrationRun = useRef(false);
+  useEffect(() => {
+    if (loading || migrationRun.current) return;
+    const legacy = companies.filter((c) => String(c.anthropicApiKey || '').trim());
+    if (legacy.length === 0) { migrationRun.current = true; return; }
+    migrationRun.current = true;
+    migrateCompanyKeys(legacy)
+      .then((res) => { if (res.moved) setMigrated(res.moved); })
+      .catch((err) => console.error('[company-key-migration] failed:', err));
+  }, [companies, loading]);
 
   const handleCreate = async () => {
     const name = creatingName.trim();
@@ -1432,13 +1449,22 @@ function CompaniesManagementSection() {
   return (
     <CollapsibleSection id="settings-companies" title="Companies">
       <p className="muted small" style={{ marginTop: 0 }}>
-        Each company has its own AI API key. Users you assign to a
-        company use that company's key for all AI features — so you can
-        budget AI token spend per company. <strong>Enable AI</strong> on a row
-        grants that company access to the AI brain; members never see the AI
-        brain settings themselves. Need a key? Contact{' '}
+        Each company has its own AI API key. Users you assign to a company use
+        that company's key for all AI features, so you can budget AI spend per
+        company. The key is held on the server — members' AI requests go through
+        it and never receive the key itself. <strong>Enable AI</strong> on a row
+        grants that company access; members never see these settings. Need a key?
+        Contact{' '}
         <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
       </p>
+
+      {migrated > 0 && (
+        <p className="muted small">
+          <span className="badge badge-soft-success">Secured</span>{' '}
+          Moved {migrated} API key{migrated === 1 ? '' : 's'} out of the company
+          record and into server-only storage. Members can no longer read them.
+        </p>
+      )}
 
       <div className="company-create-row">
         <input
@@ -1474,9 +1500,20 @@ function CompaniesManagementSection() {
   );
 }
 
+// Models a company can be billed for, in plain words. A free-text box here
+// meant a typo silently broke every AI feature for that company.
+const COMPANY_MODEL_CHOICES = [
+  { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet — balanced speed and quality (default)' },
+  { value: 'claude-opus-4-5-20251101',   label: 'Opus — deepest thinking, most expensive' },
+  { value: 'claude-haiku-4-5-20251001',  label: 'Haiku — fastest and cheapest' },
+];
+
 function CompanyRow({ company }) {
   const [name, setName]     = useState(company.name || '');
-  const [apiKey, setApiKey] = useState(company.anthropicApiKey || '');
+  // The key is NOT on the company document any more — it lives in a secret
+  // only a superadmin can read. This box starts blank and means "replace the
+  // key with this"; leaving it blank changes nothing.
+  const [apiKey, setApiKey] = useState('');
   const [model, setModel]   = useState(company.anthropicModel  || 'claude-sonnet-4-5-20250929');
   // Legacy companies predate the switch, so a missing field means "allowed".
   const [aiEnabled, setAiEnabled] = useState(company.aiEnabled !== false);
@@ -1492,15 +1529,15 @@ function CompanyRow({ company }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setName(company.name || ''); }, [company.name]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setApiKey(company.anthropicApiKey || ''); }, [company.anthropicApiKey]);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setModel(company.anthropicModel || 'claude-sonnet-4-5-20250929'); }, [company.anthropicModel]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setAiEnabled(company.aiEnabled !== false); }, [company.aiEnabled]);
 
+  const hasKey = company.hasApiKey ?? !!String(company.anthropicApiKey || '').trim();
+
   const dirty =
     name.trim() !== (company.name || '') ||
-    apiKey.trim() !== (company.anthropicApiKey || '') ||
+    apiKey.trim() !== '' ||
     model.trim() !== (company.anthropicModel || 'claude-sonnet-4-5-20250929') ||
     aiEnabled !== (company.aiEnabled !== false);
 
@@ -1510,10 +1547,12 @@ function CompanyRow({ company }) {
     try {
       await updateCompany(company.id, {
         name: name.trim(),
-        anthropicApiKey: apiKey,
+        // Only send a key when one was typed — an empty box means "leave it".
+        ...(apiKey.trim() ? { anthropicApiKey: apiKey.trim() } : {}),
         anthropicModel:  model || 'claude-sonnet-4-5-20250929',
         aiEnabled,
       });
+      setApiKey('');
       setSavedAt(Date.now());
       setTimeout(() => setSavedAt(null), 2500);
     } catch (err) {
@@ -1551,7 +1590,7 @@ function CompanyRow({ company }) {
     }
   };
 
-  const keyStatus = (company.anthropicApiKey || '').trim()
+  const keyStatus = hasKey
     ? <span className="badge badge-soft-success">key set</span>
     : <span className="badge badge-soft-warn">no key</span>;
 
@@ -1599,7 +1638,7 @@ function CompanyRow({ company }) {
               className="input"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste API key…"
+              placeholder={hasKey ? 'A key is set — paste a new one to replace it' : 'Paste API key…'}
               autoComplete="off"
               spellCheck={false}
             />
@@ -1608,21 +1647,25 @@ function CompanyRow({ company }) {
             </button>
           </div>
           <p className="muted small" style={{ marginTop: 4 }}>
-            Stored in Firestore; readable only by superadmins and members of this company.
+            {hasKey
+              ? 'The key is stored where only superadmins and the server can read it, so it is never shown again — even here. Paste a new one to replace it; leave this blank to keep it.'
+              : 'The key is stored where only superadmins and the server can read it. Members never receive it: their AI requests go through the server, which adds the key.'}
           </p>
         </div>
 
         <div className="field">
           <label className="label">Model <span className="muted small">(optional)</span></label>
-          <input
-            type="text"
-            className="input"
+          <select
+            className="select"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="Leave blank for default"
-          />
+          >
+            {COMPANY_MODEL_CHOICES.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
           <p className="muted small" style={{ marginTop: 4 }}>
-            Leave blank to use the default model. Override only if instructed.
+            Which model this company's AI answers with. The default suits almost everyone.
           </p>
         </div>
       </div>
@@ -1658,7 +1701,7 @@ function MyCompanyAiStatus({ profile }) {
   // Who is paying, when there is a company behind it.
   const companyName = company?.name || null;
   const companyPays = !!companyId
-    && !!(company?.anthropicApiKey || '').trim()
+    && (company?.hasApiKey ?? !!String(company?.anthropicApiKey || '').trim())
     // A superadmin can revoke AI for a whole company without removing its key,
     // so a key on its own is not proof of access.
     && company?.aiEnabled !== false;
