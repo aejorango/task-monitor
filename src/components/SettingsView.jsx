@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSettings } from '../hooks/useSettings';
-import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '../hooks/useTasks';
+import {
+  useProjects, useTasks, useAllActivities, useAuth, useWebhooks,
+  useGoals, useMinutes, useTemplates,
+} from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
   addWorkspaceMember,
@@ -64,6 +67,10 @@ export default function SettingsView() {
   const { projects } = useProjects();
   const { tasks } = useTasks();
   const { activities } = useAllActivities();
+  const { goals } = useGoals();
+  const { minutes } = useMinutes();
+  const { templates } = useTemplates();
+  const { workspaces } = useWorkspaces();
   const { userId } = useAuth();
   const { profile } = useUserProfile(userId);
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
@@ -397,7 +404,10 @@ export default function SettingsView() {
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button
               className="btn"
-              onClick={() => exportData({ projects, tasks, activities }, userId)}
+              onClick={() => exportData({
+                workspaces, projects, tasks, activities, goals, minutes, templates,
+              }, userId)}
+              title="Everything in this workspace, as one file you can keep"
             >Backup everything (.json)</button>
             <button
               className="btn"
@@ -847,9 +857,15 @@ function CopyButton({ value, label = '⎘ Copy' }) {
 }
 
 function exportData(data, userId) {
+  // Everything, not just the three collections the first version covered —
+  // a backup that silently omits your goals and minutes is not a backup.
   const payload = {
     exportedAt: new Date().toISOString(),
-    userId,
+    exportedBy: userId,
+    version: 2,
+    counts: Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+    ),
     ...data,
   };
   // Strip Firestore Timestamp internals to readable ISO strings

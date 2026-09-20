@@ -6,11 +6,14 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTasks, useProjects } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
+import ExportButton from './ExportButton';
+import { buildTaskListDocument } from '../services/taskExport';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -73,6 +76,12 @@ function presetThisYear() {
 export default function GanttView({ projectFilter }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const memberProfiles = useMemo(
+    () => workspaces.find((w) => w.id === activeWorkspaceId)?.memberProfiles || {},
+    [workspaces, activeWorkspaceId],
+  );
   const [zoom, setZoom] = useState('day');
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState(null);
@@ -123,6 +132,22 @@ export default function GanttView({ projectFilter }) {
         return earliestOf(a).localeCompare(earliestOf(b));
       });
   }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo]);
+
+  // What the header's Export button hands over: the scheduled tasks currently
+  // on the chart, with the same project filter and period window applied.
+  const exportProps = {
+    build: () => buildTaskListDocument(rows, {
+      title: 'Timeline',
+      projectById,
+      memberProfiles,
+      projectName: projectById[projectFilter]?.name || null,
+    }),
+    baseName: projectById[projectFilter]?.name
+      ? `${projectById[projectFilter].name}-timeline`
+      : 'timeline',
+    kind: 'table',
+    title: 'Save these scheduled tasks as a spreadsheet, CSV or PDF',
+  };
 
   const range = useMemo(() => {
     // When a period is set, the timeline window is pinned to it (each bound
@@ -176,7 +201,7 @@ export default function GanttView({ projectFilter }) {
   if (rows.length === 0) {
     return (
       <>
-        <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} />
+        <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} exportProps={exportProps} />
         <GanttDateFilter
           from={periodFrom} to={periodTo}
           setFrom={setPeriodFrom} setTo={setPeriodTo}
@@ -297,7 +322,7 @@ export default function GanttView({ projectFilter }) {
 
   return (
     <>
-      <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} />
+      <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} exportProps={exportProps} />
       <GanttDateFilter
         from={periodFrom} to={periodTo}
         setFrom={setPeriodFrom} setTo={setPeriodTo}
@@ -647,7 +672,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
   );
 }
 
-function PageHeader({ zoom, setZoom, onNewTask }) {
+function PageHeader({ zoom, setZoom, onNewTask, exportProps }) {
   return (
     <div className="page-header">
       <div>
@@ -655,6 +680,7 @@ function PageHeader({ zoom, setZoom, onNewTask }) {
         <p className="page-subtitle">Plan vs actual across all tasks with dates. Drag plan bars to adjust dates.</p>
       </div>
       <div className="page-actions">
+        {exportProps && <ExportButton {...exportProps} />}
         {ZOOMS.map((z) => (
           <button
             key={z.id}
