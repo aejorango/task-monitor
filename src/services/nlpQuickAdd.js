@@ -39,7 +39,12 @@ function nextWeekday(target, fromDate = new Date(), forceNext = false) {
   return addDays(fromDate, delta);
 }
 
-export function parseQuickAdd(input) {
+/**
+ * @param {string} input
+ * @param {{ now?: Date }} opts  `now` pins "today"/"Friday"/"in 3 days" so the
+ *   parser can be tested without the result depending on the day it runs.
+ */
+export function parseQuickAdd(input, { now } = {}) {
   let s = String(input || '');
   const tokens = [];
   const result = {
@@ -83,7 +88,7 @@ export function parseQuickAdd(input) {
   });
 
   // 4. Dates — try most specific patterns first.
-  const today = new Date();
+  const today = now ? new Date(now) : new Date();
 
   // "on YYYY-MM-DD" / "by YYYY-MM-DD"
   s = s.replace(/\b(on|by|due)\s+(\d{4}-\d{2}-\d{2})\b/gi, (m, _, ymd) => {
