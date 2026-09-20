@@ -12,6 +12,7 @@ import ActivityEditor from './ActivityEditor';
 import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
 import TaskQuickAdd from './TaskQuickAdd';
+import { downloadFile } from '../services/download';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -839,14 +840,7 @@ function ScopedActivityLogModal({ scope, onClose }) {
         r._outputs.map((a) => a.url).join(' | '), r.bottleneckRemarks, r.requestedBy, r.hoursSpent || 0,
       ].map(escape).join(','));
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const safeName = scopeTitle.replace(/[^\w.\-]+/g, '_');
-    a.download = `${safeName}-activities-${todayLocal()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(`${scopeTitle}-activities`, 'csv', lines.join('\n'));
   };
 
   return (

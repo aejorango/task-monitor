@@ -18,3 +18,4 @@ One line per task from the Ideon task sheet.
 - T-0012 — Default project setting is never applied to quick-add — src/components/TaskForm.jsx, src/services/preferences.js, src/services/preferences.test.mjs, tests/ui/TaskForm.test.mjs
 - T-0013 — 'Shared' badge can never render — src/hooks/useTasks.js, src/services/projects.js, src/services/projects.test.mjs
 - T-0014 — Export file dates use UTC, not the user's day (API/data layer) — src/services/download.js, src/services/download.test.mjs
+- T-0015 — Export file dates use UTC, not the user's day (UI) — src/components/TableView.jsx, src/components/SettingsView.jsx, src/components/ProjectsView.jsx, src/components/WbsModal.jsx, src/components/WBSView.jsx, tests/ui/download.test.mjs

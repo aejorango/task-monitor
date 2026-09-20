@@ -30,6 +30,7 @@ import AssigneePicker from './AssigneePicker';
 import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import NotebookPicker from './NotebookPicker';
+import { downloadFile } from '../services/download';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -364,14 +365,7 @@ function ProjectActivityLogModal({ project, onClose }) {
         r.hoursSpent || 0,
       ].map(escape).join(','));
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const safeName = project.name.replace(/[^\w.\-]+/g, '_');
-    a.download = `${safeName}-activities-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(`${project.name}-activities`, 'csv', lines.join('\n'));
   };
 
   return (

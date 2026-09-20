@@ -9,6 +9,7 @@ import {
 } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import CsvImporter from './CsvImporter';
+import { downloadFile } from '../services/download';
 
 const COLUMNS = [
   { key: 'project',     label: 'Project' },
@@ -300,11 +301,5 @@ function exportCsv(rows) {
       r.hoursSpent || 0,
     ].map(escape).join(','));
   });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `task-monitor-activities-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  return downloadFile('task-monitor-activities', 'csv', lines.join('\n'));
 }

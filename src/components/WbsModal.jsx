@@ -11,6 +11,7 @@ import TaskQuickAdd from './TaskQuickAdd';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
+import { downloadFile } from '../services/download';
 
 export default function WbsModal({ project, tasks: tasksProp, projects: projectsProp, onClose }) {
   const { tasks: wsTasks } = useTasks();
@@ -78,13 +79,7 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
         });
       });
     });
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    a.download = `${project.name.replace(/[^\w.\-]+/g, '_')}-WBS-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(`${project.name}-WBS`, 'csv', rows.join('\n'));
   };
 
   return (

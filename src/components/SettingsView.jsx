@@ -49,6 +49,7 @@ import {
 import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 import KnowledgeSection from './KnowledgeSection';
+import { downloadFile } from '../services/download';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -845,13 +846,7 @@ function exportData(data, userId) {
     if (v && typeof v.toDate === 'function') return v.toDate().toISOString();
     return v;
   };
-  const blob = new Blob([JSON.stringify(payload, replacer, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `task-monitor-export-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  return downloadFile('task-monitor-export', 'json', JSON.stringify(payload, replacer, 2));
 }
 
 const EVENT_OPTIONS = [
