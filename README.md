@@ -138,13 +138,40 @@ workspace / project). Press **Re-check** — no restart needed.
 - `TM_NOTEBOOKLM_BIN=none npm run bridge` forces the not-installed path, which
   is how to check the degraded states look right.
 
+## Security model — who can share a project
+
+Access is enforced in `firestore.rules`, not in the UI. The UI only hides
+controls a person would be refused anyway (`src/services/access.js` mirrors the
+rules so the two stay in step).
+
+| Action | Who |
+| --- | --- |
+| Create an invite link for a project | Project admins, the project's creator, and workspace owners/admins |
+| List a project's invite links | The same people (invite ids are the secret in the link) |
+| Open an invite by its exact link | Anyone signed in — the link *is* the credential |
+| Accept an invite | Anyone with the link; the claim can only set the claimer's own role, to exactly the role the invite names |
+| Read presence (who else is on a task) | Members of that task's workspace |
+| Set your own `companyId` | Nobody — superadmins assign companies |
+
+### Running the rules tests
+
+The rules have their own test suite against the Firestore emulator. It needs
+Java (the emulator is a JAR) and never touches the real project.
+
+```bash
+npm test          # fast unit tests — bridge, due alerts, access rules
+npm run test:rules # Firestore emulator: security rules (tests/rules/*.test.mjs)
+npm run test:all   # both
+```
+
 ## Documentation
 
 - **[docs/BUILD-GUIDE.md](docs/BUILD-GUIDE.md)** — Complete 12-phase setup walkthrough from empty GitHub repo to live deployment
 - **[docs/firestore-schema.md](docs/firestore-schema.md)** — Database schema with scalability rationale, index list, and security rules
 - **[CLAUDE.md](CLAUDE.md)** — Project context for Claude Code sessions
 - **[bridge/](bridge/)** — The local AI bridge: `ai.mjs` (provider layer), `notebooklm.mjs` (NotebookLM knowledge base), `server.mjs` (HTTP), `*.test.mjs`
-- **[firestore.rules](firestore.rules)** — Security rules to paste into Firebase Console
+- **[firestore.rules](firestore.rules)** — Security rules; deploy with `npm run deploy:rules`
+- **[tests/rules/](tests/rules/)** — Firestore emulator tests for those rules (`npm run test:rules`)
 
 ## Project Structure
 
