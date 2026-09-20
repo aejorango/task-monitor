@@ -189,6 +189,23 @@ The bridge runs a program on your machine, so two things are locked down:
 The model name is also argv, so it is picked from a fixed list rather than
 typed (`ALLOWED_CLI_MODELS` in `bridge/ai.mjs`).
 
+## Webhooks
+
+**Settings → Webhooks** posts a small JSON body to a URL you choose when
+something happens — a task is created, completed, deleted, or work is logged.
+
+- **Signed.** If you set a secret, every request carries
+  `x-taskmonitor-signature: sha256=<hex>` — an HMAC-SHA256 over the exact body.
+  Compute the same thing on your side and compare; if it matches, the request
+  came from your workspace and was not altered.
+- **Retried.** A timeout, a 429 or a 5xx is retried twice (after 30 s and
+  5 min). A 4xx is not — that means the request was wrong, not the moment.
+- **Logged.** Every attempt lands in **Delivery history** with what came back.
+- **https only**, and never to loopback or a private network address.
+
+Delivery runs in `functions/webhooks.js`; deploy it with
+`npm run deploy:functions` (Blaze plan).
+
 ## Knowledge base — NotebookLM (optional)
 
 By default the AI answers from the model's general knowledge. Point it at your
@@ -276,6 +293,8 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/aiProvider.test.mjs` | Which provider is answering, what it can do, and who pays |
 | `src/services/aiProxy.test.mjs` | The browser never holds a company key |
 | `functions/src/authorize.test.mjs` | Who the AI proxy lets spend the company budget |
+| `functions/src/webhookEvents.test.mjs` | Which webhooks fire, for what, and with what body |
+| `functions/src/signature.test.mjs` | The HMAC a receiver checks |
 | `bridge/notebooklm.test.mjs` | NotebookLM CLI payload parsing, timeouts, concurrency |
 | `src/services/dueAlerts.test.mjs` | Which task is due for an alert, and in what order |
 | `src/services/recurrence.test.mjs` | Recurring-task date maths and the next instance's payload |

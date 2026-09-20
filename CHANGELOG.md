@@ -48,3 +48,4 @@ One line per task from the Ideon task sheet.
 - T-0042 — Members are added by raw Firebase UID, not email (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0043 — Webhooks are stored but never delivered (API/data layer) — functions/webhooks.js, functions/index.js, functions/src/webhookEvents.js, functions/src/webhookEvents.test.mjs, functions/src/signature.test.mjs, firestore.rules, firestore.indexes.json, src/services/firebase.js
 - T-0044 — Webhooks are stored but never delivered (UI) — src/components/SettingsView.jsx, src/App.css, tests/ui/webhookDelivery.test.mjs
+- T-0045 — Webhooks are stored but never delivered (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md

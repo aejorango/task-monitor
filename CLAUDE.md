@@ -105,6 +105,9 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 ## AI provider layer
 
 ```
+functions/webhooks.js ← onTaskWritten / onActivityWritten: signs and POSTs
+                        webhooks, logs every attempt to `webhookDeliveries`
+functions/src/webhookEvents.js ← which events fire and what the body is (pure)
 functions/index.js    ← aiProxy: holds the COMPANY key server-side. The browser
                         sends a prompt; the function checks the caller
                         (approved + company + aiEnabled) and calls Anthropic.
@@ -284,6 +287,14 @@ src/
 - Server-sent push (FCM or similar). The service worker in `public/sw.js` only fires **local**
   notifications from a client-side overdue scan; nothing is pushed from a server.
 - Email digests / SMTP — notifications are the service worker plus in-app surfaces.
+  (This is why the app never promises an approval email.)
+
+**Also shipped since the list was written:**
+
+- **Webhook delivery** — `functions/webhooks.js` signs each body with the webhook's own
+  secret (HMAC-SHA256, `x-taskmonitor-signature`), retries transient failures on a
+  0/30/300 s backoff, and logs every attempt to `webhookDeliveries` for Settings to show.
+  https only; loopback and private-network addresses are refused.
 
 ## Development Workflow
 
@@ -333,6 +344,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Treating `bridge-api` as `claude-code` — it cannot browse or ground, and it is billed per token
 - ❌ Returning a mock or API fallback without setting `degraded` + `reason`
 - ❌ Omitting `--tools ""` when spawning the CLI (that leaves every built-in tool live)
+- ❌ Firing `task.updated` for a counter the app bumped. `taskEventsFor` ignores `updatedAt`, `lastActivityAt`, `activityCount`, `totalHoursLogged` and `attachmentCount` — otherwise every activity write doubles an integration's traffic.
 - ❌ Asking anyone for a Firebase UID. Invite by email (`inviteToWorkspaceByEmail`); show `memberLabel(uid, memberProfiles)`, never the uid. The Account ID box is superadmin-only and behind an Advanced toggle.
 - ❌ Adding an invite field without its flat twin. `pendingInvites` is an array of maps: rules cannot search it, so `pendingInviteEmails` (array-contains) and `pendingInviteRoles` (role lookup) must be written in the same update. `inviteFields()` / `revokeInviteFields()` do all three.
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
