@@ -10381,3 +10381,75 @@ a:hover { text-decoration: underline; }
 @media (max-width: 720px) {
   .tg-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Toasts (Toast.jsx) ───────────────────────────────────────────────────
+   What the app says when something happened. Replaces window.alert, which
+   blocks the page, cannot be themed, and has nowhere to put an Undo. */
+.toast-stack {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 11px 12px 11px 16px;
+  border-radius: var(--r-lg, 10px);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  font-size: 13.5px;
+  animation: toast-in 160ms ease-out;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+.toast-text { flex: 1; line-height: 1.45; }
+.toast-success { border-left: 3px solid var(--c-success, #16a34a); }
+.toast-error   { border-left: 3px solid var(--c-danger, #dc2626); }
+.toast-info    { border-left: 3px solid var(--c-accent); }
+.toast-undo {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md, 7px);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-undo:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.toast-close {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  color: var(--c-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.toast-close:hover { color: var(--c-text); }
+
+@media (max-width: 720px) {
+  .toast-stack { bottom: 12px; left: 12px; right: 12px; transform: none; }
+  .toast { min-width: 0; width: 100%; }
+}

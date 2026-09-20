@@ -5,7 +5,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useMinutes, useProjects, useAuth, useTasks } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
-import { addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid, todayLocal } from '../services/firebase';
+import {
+  addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid, todayLocal,
+  restoreDeleted,
+} from '../services/firebase';
 import Icon from './Icon';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
@@ -13,6 +16,7 @@ import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildMinutesDocument, minutesFileBase } from '../services/minutesExport';
 import { toMarkdown } from '../services/exporters';
+import { useToast } from './Toast';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 
 function PriorityIcon() {
@@ -477,6 +481,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
 }
 
 function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose }) {
+  const toast = useToast();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [form, setForm] = useState(() =>
@@ -536,10 +541,19 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
 
   const remove = async () => {
     if (!minute) return;
-    if (!confirm(`Delete minutes "${minute.title}"?`)) return;
     setSaving(true);
-    try { await softDeleteMinute(minute.id); onClose(); }
-    catch (err) { console.error(err); alert(friendlyError(err, 'Could not delete. Please try again.')); setSaving(false); }
+    try {
+      await softDeleteMinute(minute.id);
+      onClose();
+      toast.success(`“${minute.title || 'Meeting'}” deleted.`, {
+        undo: () => restoreDeleted('minute', minute.id),
+      });
+    }
+    catch (err) {
+      console.error(err);
+      toast.error(friendlyError(err, 'Could not delete those minutes.'));
+      setSaving(false);
+    }
   };
 
   return (

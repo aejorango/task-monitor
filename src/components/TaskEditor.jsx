@@ -10,6 +10,7 @@ import {
   addTask,
   updateTask,
   softDeleteTask,
+  restoreDeleted,
   uid,
   addTemplate,
   taskAsTemplatePayload,
@@ -32,6 +33,7 @@ import TaskAiPanel from './TaskAiPanel';
 import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
+import { useToast } from './Toast';
 import AddToNotebookButton from './AddToNotebookButton';
 import { friendlyError } from '../services/access';
 
@@ -73,6 +75,7 @@ const ACT_FILTERS = [
 ];
 
 export default function TaskEditor({ task, projects, onClose }) {
+  const toast = useToast();
   const { tasks: allTasks } = useTasks();
   const { userId } = useAuth();
   const { activities } = useActivities(task.id);
@@ -318,10 +321,21 @@ export default function TaskEditor({ task, projects, onClose }) {
     }
   };
 
+  // Delete first, apologise later: a toast with Undo is faster than a
+  // confirmation dialog and cannot be dismissed by muscle memory. Nothing is
+  // actually destroyed — the task is in Trash either way.
   const remove = async () => {
-    if (!confirm('Delete this task? This is a soft delete and can be restored.')) return;
-    await softDeleteTask(task.id);
-    onClose();
+    const title = task.title || 'Task';
+    try {
+      await softDeleteTask(task.id);
+      onClose();
+      toast.success(`“${title}” deleted.`, {
+        undo: () => restoreDeleted('task', task.id),
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error(friendlyError(err, 'Could not delete that task.'));
+    }
   };
 
   const saveAsTemplate = async () => {

@@ -8,6 +8,7 @@ import {
   updateProject,
   archiveProject,
   softDeleteProject,
+  restoreDeleted,
   uid,
   addTemplate,
   softDeleteTemplate,
@@ -31,6 +32,7 @@ import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import NotebookPicker from './NotebookPicker';
 import TemplateGallery from './TemplateGallery';
+import { useToast } from './Toast';
 import { downloadFile } from '../services/download';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
@@ -919,6 +921,7 @@ const ACT_FILTERS = [
 ];
 
 function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
+  const toast = useToast();
   const { projects } = useProjects();
   const { tasks } = useTasks();
   const { activities: allActivities } = useAllActivities();
@@ -1132,9 +1135,18 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   };
 
   const remove = async () => {
-    if (!confirm(`Delete project "${project.name}"? Tasks will remain but lose their project link.`)) return;
-    await softDeleteProject(project.id);
-    onClose();
+    const name = project.name || 'Project';
+    try {
+      await softDeleteProject(project.id);
+      onClose();
+      toast.success(
+        `“${name}” deleted. Its tasks are still there, without a project.`,
+        { undo: () => restoreDeleted('project', project.id) },
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(friendlyError(err, 'Could not delete that project.'));
+    }
   };
 
   const archive = async () => {
