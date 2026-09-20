@@ -26,3 +26,4 @@ One line per task from the Ideon task sheet.
 - T-0020 — Sidebar user block polls auth every 500 ms — src/components/AppShell.jsx, tests/ui/SidebarUserBlock.test.mjs
 - T-0021 — Docs are stale and there is no root README (API/data layer) — README.md, docs/archive/BUILD-GUIDE-2025.md, docs/archive/package-scripts-2025.md, docs/archive/README.md, docs/firestore-schema.md
 - T-0022 — Docs are stale and there is no root README (UI) — src/components/SettingsView.jsx, src/components/CsvImporter.jsx, 12 other components, src/services/firebase.js, tests/ui/copy.test.mjs
+- T-0023 — Docs are stale and there is no root README (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
