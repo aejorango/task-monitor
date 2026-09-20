@@ -275,6 +275,7 @@ src/
 │   ├── DueTaskAlertModal.jsx ← two-column due alert: task + actions left, GenAI prompt right
 │   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
+│   ├── WorkloadView.jsx     ← Board → Workload: people × weeks, drag to rebalance
 │   ├── InboxBell.jsx         ← topbar 📥: unread count, opens InboxPanel
 │   ├── InboxPanel.jsx        ← the list of notices (presentational, harness-friendly)
 │   ├── NotebookPicker.jsx    ← cache-only notebook select (never spawns the CLI)
@@ -448,6 +449,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Reusing `is-over` for two things. On a workload cell it means *over capacity*; the drag-over state is `is-drop-target`. One class for both meant a full week and a hovered week looked identical.
+- ❌ Giving a workload chip an inner button. The chip is barely bigger than its own text: an inner button that stops the pointer makes the task undraggable. The chip IS the button and the drag handle, and a `dragged` ref stops the click at the end of a drag from also opening the task.
 - ❌ Inserting a short @handle from a picker. `preferredHandle()` picks the shortest handle **nobody else answers to** — offering "@mia" when there are two Mias would notify the first one whatever you clicked. `mentionedUids` resolves by first claim, so the picker has to hand back something unambiguous.
 - ❌ Navigating to a task by hand. `goToTask(task, navigate)` in `services/openTask.js` does the two steps (filter the Board to its project, then fire `OPEN_TASK_EVENT`); search results and the inbox both use it, so they behave identically.
 - ❌ Writing a notice by hand. `mentions.js` builds the whole sentence (`buildNotice`) so an old notice still reads correctly after the wording changes, and the rules only accept `kind` in mention/comment/assignment from a browser — `automation` is the function's, written with admin credentials. Raise them with `raiseNotices`, **after** the message itself is written: a notice that fails must never cost somebody their comment.

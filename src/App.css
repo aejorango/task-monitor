@@ -10638,3 +10638,94 @@ a:hover { text-decoration: underline; }
 .mention-choice.active,
 .mention-choice:hover { background: var(--c-bg); }
 .mention-choice-name { font-weight: 500; }
+
+/* ── Workload planner (WorkloadView.jsx) ──────────────────────────────────── */
+.workload-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.workload-key { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 14px; }
+.workload-key-item { display: inline-flex; align-items: center; gap: 6px; }
+.workload-swatch {
+  width: 12px; height: 12px; border-radius: 3px;
+  border: 1px solid var(--c-border); display: inline-block;
+}
+.workload-swatch.is-free { background: var(--c-surface); }
+.workload-swatch.is-ok   { background: color-mix(in srgb, var(--c-success, #2e9e6b) 30%, transparent); }
+.workload-swatch.is-full { background: color-mix(in srgb, var(--c-warn, #d89b2a) 36%, transparent); }
+.workload-swatch.is-over { background: color-mix(in srgb, var(--c-danger, #d2544a) 36%, transparent); }
+
+.workload-scroll { overflow-x: auto; }
+.workload-grid { border-collapse: separate; border-spacing: 0; min-width: 780px; width: 100%; }
+.workload-grid th,
+.workload-grid td {
+  border: 1px solid var(--c-border);
+  border-width: 0 1px 1px 0;
+  padding: 8px;
+  vertical-align: top;
+  text-align: left;
+}
+.workload-grid thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+}
+.workload-grid th:first-child { border-left: 1px solid var(--c-border); }
+.workload-week { display: block; font-size: 12.5px; font-weight: 600; }
+.workload-week-total { display: block; }
+.workload-person,
+.workload-person-head {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--c-surface);
+  min-width: 152px;
+  font-weight: 600;
+}
+.workload-person span { display: block; }
+.workload-person-head { z-index: 3; }
+
+.workload-cell { min-width: 164px; }
+.workload-cell.is-ok   { background: color-mix(in srgb, var(--c-success, #2e9e6b) 12%, transparent); }
+.workload-cell.is-full { background: color-mix(in srgb, var(--c-warn, #d89b2a) 16%, transparent); }
+.workload-cell.is-over {
+  background: color-mix(in srgb, var(--c-danger, #d2544a) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--c-danger, #d2544a);
+}
+.workload-cell.is-drop-target { outline: 2px dashed var(--c-accent); outline-offset: -3px; }
+.workload-empty { color: var(--c-text-muted); }
+.workload-hours { display: block; font-size: 11px; color: var(--c-text-muted); margin-bottom: 4px; }
+.workload-cell-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+.workload-chip {
+  display: block;
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-accent);
+  border-radius: var(--r-sm, 5px);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  /* A drag must not select the words it is dragging. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.workload-chip:hover { border-color: var(--c-accent); }
+.workload-chip.is-dragging { opacity: 0.6; cursor: grabbing; }
+.workload-unscheduled { margin-top: 22px; }
+.workload-unscheduled-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.workload-unscheduled-list .workload-chip { width: auto; cursor: pointer; }
+
+@media (max-width: 720px) {
+  .workload-grid { min-width: 640px; }
+  .workload-person, .workload-person-head { min-width: 118px; }
+  .workload-cell { min-width: 132px; }
+}

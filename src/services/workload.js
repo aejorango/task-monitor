@@ -228,6 +228,30 @@ function daysBetween(a, b) {
   return Math.max(0, Math.round(ms / 86400000));
 }
 
+/**
+ * A droppable cell's id carries both halves of where it is: who, and which
+ * week. Kept here so the component that writes one and the handler that reads
+ * one cannot drift apart.
+ */
+export const cellId = (userId, weekKey) => `wl:${userId}::${weekKey}`;
+
+export function parseCellId(id) {
+  const m = /^wl:(.*)::(.+)$/.exec(String(id || ''));
+  return m ? { userId: m[1], weekKey: m[2] } : null;
+}
+
+/** What a move just did, as a sentence for the toast that confirms it. */
+export function describeMove(patch, memberProfiles = {}) {
+  const parts = [];
+  if (patch?.['plan.endDate']) parts.push(`due ${patch['plan.endDate']}`);
+  if (patch?.assignedTo) {
+    parts.push(patch.assignedTo.length
+      ? `assigned to ${memberLabel(patch.assignedTo[0], memberProfiles)}`
+      : 'unassigned');
+  }
+  return parts.length ? `Moved: ${parts.join(', ')}.` : 'Moved.';
+}
+
 /** One sentence describing a cell, for a tooltip and for a screen reader. */
 export function describeCell(row, week, cell) {
   const n = cell?.tasks?.length || 0;

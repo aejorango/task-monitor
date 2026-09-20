@@ -28,6 +28,7 @@ const VIEWS = [
   { id: 'calendar',       label: 'Calendar',         icon: 'calendar' },
   { id: 'gantt',          label: 'Gantt chart',      icon: 'gantt' },
   { id: 'wbs',            label: 'WBS',              icon: 'wbs' },
+  { id: 'workload',       label: 'Workload',         icon: 'goals' },
   { id: 'goals',          label: 'Goals',            icon: 'goals' },
   { id: 'messages',       label: 'Messages',         icon: 'messages' },
   { id: 'minutes',        label: 'Minutes',          icon: 'minutes' },
@@ -49,7 +50,7 @@ const VIEWS = [
 // Each group is inserted at the position of its first child in VIEWS, and
 // its other children are skipped from the flat list.
 const NAV_GROUPS = [
-  { id: 'board-group',   label: 'Board',   icon: 'board',     childIds: ['board', 'calendar', 'gantt', 'wbs'] },
+  { id: 'board-group',   label: 'Board',   icon: 'board',     childIds: ['board', 'calendar', 'gantt', 'wbs', 'workload'] },
   { id: 'reports-group', label: 'Reports', icon: 'analytics', childIds: ['tasks-table', 'table', 'work-performed', 'timesheet', 'review', 'artifacts', 'analytics'] },
 ];
 const SIDEBAR_ITEMS = (() => {

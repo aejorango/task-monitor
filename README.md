@@ -214,6 +214,22 @@ chips on the board card, can be added as columns in **Reports → Task table**
 as columns to every task export. Two projects with a field of the same name are
 labelled with the project so they can be told apart.
 
+## Workload
+
+**Board → Workload** is the next six weeks: people down the side, weeks across
+the top, every cell holding what that person is carrying and how full it makes
+them — *nothing planned · room to spare · a full week · more than a full week*,
+with the key printed so the colours stand alone.
+
+Drag a task to **another week** to move its deadline (the weekday is kept, and a
+task that runs over several days keeps its length), or to **another person** to
+hand it over — they get a notice. A drop where the task already was writes
+nothing. Tasks with no due date cannot be placed, so they are listed underneath
+rather than quietly left out.
+
+A task counts as four hours unless it carries an estimate, less whatever has
+already been logged against it; a week is assumed to be forty.
+
 ## Inbox and @mentions
 
 Type **@** in a comment and a picker offers the people in the workspace by name;
@@ -421,6 +437,7 @@ run together.
 | `tests/ui/inbox.test.mjs` | The topbar inbox, the @ picker, and getting to the task |
 | `tests/ui/inboxFlow.test.mjs` | A mentions B → B's inbox shows it → it opens the task |
 | `tests/ui/workloadApi.test.mjs` | A move is one write plus the notice the new owner deserves |
+| `tests/ui/workload.test.mjs` | The planner grid, the drag, and what a drop writes |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
@@ -493,6 +510,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/knowledge.html` | Settings → Knowledge base against the live bridge |
 | `/dev/automations.html` | The automation rule editor, with sample projects, people and connections |
 | `/dev/inbox.html` | The inbox panel with sample notices, and the @mention picker |
+| `/dev/workload.html` | The workload grid and its drag-and-drop, against sample people |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 
 ## Working with Claude Code

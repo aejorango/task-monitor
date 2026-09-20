@@ -23,6 +23,7 @@ const TableView         = lazy(() => import('./components/TableView'));
 const TasksTableView    = lazy(() => import('./components/TasksTableView'));
 const TrashView         = lazy(() => import('./components/TrashView'));
 const TimesheetView     = lazy(() => import('./components/TimesheetView'));
+const WorkloadView      = lazy(() => import('./components/WorkloadView'));
 const GanttView         = lazy(() => import('./components/GanttView'));
 const CalendarView      = lazy(() => import('./components/CalendarView'));
 const DashboardView     = lazy(() => import('./components/DashboardView'));
@@ -47,7 +48,8 @@ const VIEW_NAMES = {
   wbs: 'WBS', goals: 'Goals', messages: 'Messages', minutes: 'Minutes',
   calendar: 'Calendar', review: 'Review', artifacts: 'Artifacts',
   analytics: 'Analytics', projects: 'Projects', settings: 'Settings',
-  'work-performed': 'Work Performed', timesheet: 'Timesheet', 'how-to-use': 'How to use',
+  'work-performed': 'Work Performed', timesheet: 'Timesheet', workload: 'Workload',
+  'how-to-use': 'How to use',
   'ask-ai': 'Ask AI', trash: 'Trash', invite: 'invite',
 };
 
@@ -185,6 +187,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'tasks-table' && <TasksTableView projectFilter={route.projectFilter} savedViewId={route.savedViewId} />}
         {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} />}
+        {route.view === 'workload'  && <WorkloadView projectFilter={route.projectFilter} />}
         {route.view === 'goals'     && <GoalsView />}
         {route.view === 'messages'  && <MessagesView />}
         {route.view === 'minutes'   && <MinutesView projectFilter={route.projectFilter} />}
