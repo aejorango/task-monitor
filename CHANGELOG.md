@@ -34,3 +34,4 @@ One line per task from the Ideon task sheet.
 - T-0028 — CLI install instructions shown to every user (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0029 — Stale copy: anonymous session, email notification promise (API/data layer) — src/services/approvalCopy.js, src/services/approvalCopy.test.mjs
 - T-0030 — Stale copy: anonymous session, email notification promise (UI) — src/components/PendingApprovalView.jsx, src/components/LandingView.jsx, src/components/SettingsView.jsx, tests/ui/approvalScreens.test.mjs
+- T-0031 — Stale copy: anonymous session, email notification promise (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md

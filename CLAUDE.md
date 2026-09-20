@@ -297,6 +297,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Renaming `userId` — it's referenced by security rules
 - ❌ Adding new collections without adding security rules
 - ❌ Hardcoding colors instead of using CSS variables — breaks dark mode
+- ❌ Promising something the app cannot do — an approval email above all. There is no backend and no SMTP (see Out of Scope), so `services/approvalCopy.js` says "no email is sent, the page lets you in the moment someone approves" instead. `tests/ui/approvalScreens.test.mjs` fails the build if any screen promises one.
+- ❌ Calling the session "anonymous". Anonymous auth was removed; use `sessionLine(profile, auth.currentUser)`.
 - ❌ Showing a repo filename, a config key or "check the console" to a user. Error copy goes through `friendlyError(err, '<plain sentence>')` in `services/access.js`; `tests/ui/copy.test.mjs` fails the build otherwise.
 - ❌ Drag-and-drop: if a card click triggers a drag, wrap inner buttons with `onPointerDown={(e) => e.stopPropagation()}` and `onClick={(e) => e.stopPropagation()}` so dnd-kit doesn't capture the gesture
 - ❌ Editing an activity's hoursSpent or attachments with `updateActivity` directly — that won't sync the parent task's denormalized counters. Use `editActivity(oldActivity, updates)` instead.

@@ -255,6 +255,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
 | `src/services/knowledgeCopy.test.mjs` | Operator runbook vs. what everyone else is told |
+| `src/services/approvalCopy.test.mjs` | What a not-yet-approved account is told |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |
