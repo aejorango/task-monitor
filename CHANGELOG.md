@@ -56,3 +56,4 @@ One line per task from the Ideon task sheet.
 - T-0050 — Configurable table views with columns, group and sort (UI) — src/components/TasksTableView.jsx, src/App.jsx, src/components/AppShell.jsx, src/App.css, tests/ui/tasksTable.test.mjs
 - T-0051 — Configurable table views with columns, group and sort (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0052 — Long notebook text sources fail on argv size — bridge/notebooklm.mjs, bridge/notebooklm.test.mjs, CLAUDE.md
+- T-0053 — Minutes cannot be exported or shared — src/components/MinutesView.jsx, src/App.css, tests/ui/minutesShare.test.mjs

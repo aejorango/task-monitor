@@ -10186,3 +10186,35 @@ a:hover { text-decoration: underline; }
 @media (max-width: 720px) {
   .tt-column-menu { width: min(300px, calc(100vw - 40px)); }
 }
+
+/* ── Printing one set of minutes ──────────────────────────────────────────
+   "Print" on a minutes card marks that card and sets a flag on <body>; this
+   hides everything else so the page prints as a clean document rather than a
+   screenshot of the app. Also what "Save as PDF" in the print dialog uses. */
+@media print {
+  body.printing-minute .app-sidebar,
+  body.printing-minute .app-topbar,
+  body.printing-minute .page-header,
+  body.printing-minute .minutes-nav,
+  body.printing-minute .no-print,
+  body.printing-minute .modal-backdrop {
+    display: none !important;
+  }
+  body.printing-minute .minute-card:not(.print-target) { display: none !important; }
+  body.printing-minute .minute-card.print-target {
+    border: 0;
+    box-shadow: none;
+    break-inside: auto;
+  }
+  body.printing-minute .minute-card-body { display: block !important; }
+  body.printing-minute,
+  body.printing-minute .app-main,
+  body.printing-minute .minutes-layout {
+    display: block !important;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+  .minute-card-actions { display: none; }
+}

@@ -12,6 +12,7 @@ import TaskEditor from './TaskEditor';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildMinutesDocument, minutesFileBase } from '../services/minutesExport';
+import { toMarkdown } from '../services/exporters';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -212,6 +213,41 @@ export default function MinutesView({ projectFilter = 'all' }) {
 }
 
 function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, onEdit }) {
+  const [copied, setCopied] = useState(false);
+
+  // Paste-ready text for Slack, email or a doc — the same document the export
+  // produces, rendered as Markdown.
+  const copyMarkdown = async (e) => {
+    e.stopPropagation();
+    try {
+      const md = toMarkdown(buildMinutesDocument(minute, { projectName: project?.name }));
+      await navigator.clipboard.writeText(md);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (err) {
+      console.error(err);
+      alert(friendlyError(err, 'Could not copy. Use Export instead.'));
+    }
+  };
+
+  // Print just this card: the print stylesheet hides everything else on the
+  // page, so the paper (or the PDF the print dialog makes) is only the minutes.
+  const printMinute = (e) => {
+    e.stopPropagation();
+    document.body.classList.add('printing-minute');
+    const card = e.currentTarget.closest('.minute-card');
+    card?.classList.add('print-target');
+    const cleanup = () => {
+      document.body.classList.remove('printing-minute');
+      card?.classList.remove('print-target');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    // Safari does not always fire afterprint.
+    setTimeout(cleanup, 2000);
+  };
+
   const workspaceId = useActiveWorkspaceId();
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState(null); // action-item id currently syncing to a task
@@ -289,7 +325,23 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
 
       {open && (
         <div className={`minute-card-body ${hasPriority ? 'has-priority' : ''}`}>
-          <div className="minute-card-actions">
+          <div className="minute-card-actions no-print">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={copyMarkdown}
+              title="Copy these minutes as Markdown, ready to paste into Slack, email or a doc"
+            >
+              {copied ? '✓ Copied' : '⎘ Copy as text'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={printMinute}
+              title="Print or save as PDF from the print dialog"
+            >
+              ⎙ Print
+            </button>
             <ExportButton
               build={() => buildMinutesDocument(minute, { projectName: project?.name })}
               baseName={minutesFileBase(minute)}
