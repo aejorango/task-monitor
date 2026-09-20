@@ -419,6 +419,7 @@ run together.
 | `src/services/customFields.test.mjs` | A project's own fields: labels, values, chips and columns |
 | `src/services/mentions.test.mjs` | Who a comment is for, and what their notice says |
 | `src/services/workload.test.mjs` | The workload grid, and what dropping a task on a cell means |
+| `src/services/shareLinks.test.mjs` | What a share link holds, and exactly what never leaves the workspace |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
 | `src/services/minutesExport.test.mjs` | Minutes as a document |
@@ -439,6 +440,7 @@ run together.
 | `tests/ui/workloadApi.test.mjs` | A move is one write plus the notice the new owner deserves |
 | `tests/ui/workload.test.mjs` | The planner grid, the drag, and what a drop writes |
 | `tests/ui/workloadFlow.test.mjs` | Overloaded → dragged → assignedTo and plan.endDate updated |
+| `tests/ui/shareLinksApi.test.mjs` | One world-readable document, by exact token, and nothing else |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |

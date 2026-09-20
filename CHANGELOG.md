@@ -84,3 +84,4 @@ One line per task from the Ideon task sheet.
 - T-0078 — Workload planner by week (API/data layer) — src/services/workload.js, src/services/firebase.js, tests/ui/workloadApi.test.mjs, README.md, CLAUDE.md
 - T-0079 — Workload planner by week (UI) — src/components/WorkloadView.jsx, src/services/workload.js, src/App.jsx, src/components/AppShell.jsx, src/App.css, dev/workload.html, dev/workload.jsx, tests/ui/workload.test.mjs, README.md, CLAUDE.md
 - T-0080 — Workload planner by week (tests & docs) — tests/ui/workloadFlow.test.mjs, README.md, CHANGELOG.md
+- T-0081 — Read-only share links for a board or Gantt (API/data layer) — src/services/shareLinks.js, firestore.rules, src/services/firebase.js, tests/rules/sharedViews.rules.test.mjs, tests/ui/shareLinksApi.test.mjs, README.md, CLAUDE.md

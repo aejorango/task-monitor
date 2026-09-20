@@ -70,6 +70,15 @@ automationRuns/{runId}:            ← written by the function, read-only in a b
   description                      ← the same sentence the editor previews
   outcome: 'done' | 'skipped', message, at, expiresAt
 
+sharedViews/{token}:               ← v14: the ONE world-readable document
+  workspaceId, projectId, projectName
+  kind: 'board' | 'gantt'
+  createdByUserId, createdByName, createdAt, updatedAt
+  revoked, expiresAt                 ← rules refuse a dead link, not just the UI
+  snapshot: { generatedAt, projectName, phases, tasks: [...], counts }
+                                     ← a SNAPSHOT, never a pointer: nothing in
+                                       tasks/projects/workspaces opens up
+
 notifications/{noticeId}:          ← the inbox: mentions, comments, assignments,
   userId, workspaceId                  and whatever an automation raised
   kind: 'mention'|'comment'|'assignment'|'automation'
@@ -305,6 +314,7 @@ src/
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
+│   ├── shareLinks.js         ← the read-only snapshot a client outside can open
 │   ├── customFields.js       ← a project's own fields as chips, columns and labels
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
@@ -449,6 +459,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Making a share link a window instead of a snapshot. `sharedViews/{token}` holds the rows it shows, so a leaked token leaks one project's headline state and never grows into more; opening `tasks` to an unauthenticated reader would have been a hole the size of the workspace. What may leave is the written-down list in `SHARED_TASK_FIELDS` — no people, no hours, no comments, no attachments.
+- ❌ Enforcing a link's expiry in the page. `allow list: if false` plus `shareIsLive()` in `firestore.rules` is what makes a revoked or expired link stop working; a UI check would be bypassed by the SDK in a console.
 - ❌ Reusing `is-over` for two things. On a workload cell it means *over capacity*; the drag-over state is `is-drop-target`. One class for both meant a full week and a hovered week looked identical.
 - ❌ Giving a workload chip an inner button. The chip is barely bigger than its own text: an inner button that stops the pointer makes the task undraggable. The chip IS the button and the drag handle, and a `dragged` ref stops the click at the end of a drag from also opening the task.
 - ❌ Inserting a short @handle from a picker. `preferredHandle()` picks the shortest handle **nobody else answers to** — offering "@mia" when there are two Mias would notify the first one whatever you clicked. `mentionedUids` resolves by first claim, so the picker has to hand back something unambiguous.

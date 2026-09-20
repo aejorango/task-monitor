@@ -58,6 +58,9 @@ import {
 import { normalizeIcon } from './icons';
 import { attachmentPaths, orphanedPaths, safeFilename, uploadPath } from './uploadPaths';
 import { noticesForAssignment, noticesForComment, watchersOf } from './mentions';
+import {
+  buildShareLink, buildSnapshot, cryptoBytes, isShareLive, newShareToken,
+} from './shareLinks';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -2320,6 +2323,89 @@ export async function raiseNotices(notices = []) {
     ...n,
     at: serverTimestamp(),
   }).catch((err) => console.warn('could not raise a notice', err))));
+}
+
+// ─── READ-ONLY SHARE LINKS ──────────────────────────────────────────────────
+//
+// A link anybody can open, holding a SNAPSHOT of one project. Nothing else in
+// the database becomes readable — see services/shareLinks.js for why it is a
+// snapshot rather than a window, and firestore.rules for what the world is
+// actually allowed to do with it.
+
+const sharedViewsRef = collection(db, 'sharedViews');
+
+/**
+ * Publish a link. The token is the document id, so a reader fetches exactly one
+ * document by exact id — the rules forbid listing, so nothing is enumerable.
+ */
+export async function createShareLink({
+  userId, userName, workspaceId, project, tasks, kind, expiryDays,
+}) {
+  const token = newShareToken(cryptoBytes);
+  const payload = buildShareLink({
+    token, workspaceId, project, tasks, kind, expiryDays,
+    createdByUserId: userId, createdByName: userName,
+  });
+  await setDoc(doc(db, 'sharedViews', token), {
+    ...payload,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return token;
+}
+
+/** Take a fresh snapshot: the link keeps working, and starts telling the truth. */
+export async function refreshShareLink(token, project, tasks) {
+  return updateDoc(doc(db, 'sharedViews', token), {
+    snapshot: buildSnapshot(project, tasks),
+    projectName: String(project?.name || 'Project'),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Turn a link off. Instant, and enforced in the rules rather than the page. */
+export async function revokeShareLink(token) {
+  return updateDoc(doc(db, 'sharedViews', token), {
+    revoked: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Change how long a link lasts without changing what it shows. */
+export async function setShareLinkExpiry(token, expiresAt) {
+  return updateDoc(doc(db, 'sharedViews', token), {
+    expiresAt: expiresAt || null,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Remove one for good. */
+export async function deleteShareLink(token) {
+  return deleteDoc(doc(db, 'sharedViews', token));
+}
+
+/** The links published for one project, for the panel that manages them. */
+export function subscribeToShareLinks(projectId, callback) {
+  if (!projectId) { callback([]); return () => {}; }
+  const q = query(sharedViewsRef, where('projectId', '==', projectId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+  }, listenerError('sharedViews', () => callback([])));
+}
+
+/**
+ * Open a link. Works with nobody signed in — that is the whole point — and
+ * returns null for a link that is missing, revoked or past its date, so the
+ * page says the same thing in all three cases rather than leaking which.
+ */
+export async function getSharedView(token) {
+  if (!token) return null;
+  const snap = await getDoc(doc(db, 'sharedViews', token));
+  if (!snap.exists()) return null;
+  const share = { id: snap.id, ...snap.data() };
+  return isShareLive(share) ? share : null;
 }
 
 // ─── WEBHOOKS ───────────────────────────────────────────────────────────────

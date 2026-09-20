@@ -92,6 +92,12 @@ export async function as(uid, token = {}) {
   return env.authenticatedContext(uid, token).firestore();
 }
 
+/** Firestore handle for somebody who is not signed in at all. */
+export async function anon() {
+  const env = await testEnv();
+  return env.unauthenticatedContext().firestore();
+}
+
 /** Storage handle for a signed-in user (rules enforced). */
 export async function storageAs(uid, token = {}) {
   const env = await testEnv();

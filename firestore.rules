@@ -411,6 +411,37 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── Read-only share links ──────────────────────────────────────────────
+    //
+    // The ONE world-readable document in this app. A link holds a SNAPSHOT of
+    // what it shows — never a pointer into tasks or projects — so nothing else
+    // opens up: a stranger with a token can read that one document and is
+    // refused everywhere else.
+    //
+    // Three things keep it honest:
+    //   · `get` only, never `list` — a token cannot be found by browsing.
+    //   · live only — a revoked or expired link stops working here, in the
+    //     rules, not merely in the UI that would have hidden it.
+    //   · writing one is an admin decision: publishing somebody's work to
+    //     anyone with a URL is not an editor's call.
+    function shareIsLive(share) {
+      return share.revoked == false
+          && (share.expiresAt == null || share.expiresAt > request.time);
+    }
+
+    match /sharedViews/{token} {
+      allow get:  if shareIsLive(resource.data);
+      allow list: if false;
+
+      allow create: if isWorkspaceAdmin(request.resource.data.workspaceId)
+                    && request.resource.data.createdByUserId == request.auth.uid
+                    && shareIsLive(request.resource.data);
+      allow update: if isWorkspaceAdmin(resource.data.workspaceId)
+                    && request.resource.data.workspaceId == resource.data.workspaceId
+                    && request.resource.data.createdByUserId == resource.data.createdByUserId;
+      allow delete: if isWorkspaceAdmin(resource.data.workspaceId);
+    }
+
     // ─── Webhook delivery log (written by the webhook functions) ───────────
     // Admins of the workspace can see what was sent and what came back. Nobody
     // writes it from a browser — the function does, with admin credentials.
