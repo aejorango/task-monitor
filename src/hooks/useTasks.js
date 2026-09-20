@@ -24,6 +24,7 @@ import {
   todayLocal,
 } from '../services/firebase';
 import { useActiveWorkspaceId, useWorkspaces } from './useWorkspace';
+import { mergeProjectLists } from '../services/projects';
 
 // ─── useAuth ────────────────────────────────────────────────────────────────
 
@@ -82,30 +83,12 @@ export function useProjects() {
   }, [userId, ready]);
 
   // Merge by id. Workspace-scoped doc wins on collision (same content; either
-  // would work). Shared-only projects get a derived `_shared: true` flag so
-  // the UI can label them appropriately. We gate on (ready && userId) so a
-  // sign-out / user-switch never leaks stale shared data through the memo —
-  // avoiding a synchronous setState reset inside the effect above.
+  // would work). Shared-only projects get `_shared: true` so the UI can label
+  // them. Gated on (ready && userId) so a sign-out / user-switch never leaks
+  // stale shared data through the memo. See services/projects.js.
   const projects = useMemo(() => {
     if (!ready || !userId) return [];
-    const map = new Map();
-    workspaceProjects.forEach((p) => map.set(p.id, p));
-    // A project belongs to exactly ONE workspace and must appear ONLY there.
-    // subscribeToSharedProjects spans every workspace the user is a project
-    // member of, so we scope it to the ACTIVE workspace — otherwise projects
-    // from other workspaces (e.g. BSP) bled into the current one (e.g. Blue
-    // Innovation) with a "Shared" badge.
-    sharedProjects.forEach((p) => {
-      if (p.workspaceId === workspaceId && !map.has(p.id)) {
-        map.set(p.id, p);
-      }
-    });
-    // Latest first by createdAt, matching the underlying subscribers' sort.
-    return [...map.values()].sort((a, b) => {
-      const at = a.createdAt?.toMillis?.() ?? 0;
-      const bt = b.createdAt?.toMillis?.() ?? 0;
-      return bt - at;
-    });
+    return mergeProjectLists(workspaceProjects, sharedProjects, workspaceId);
   }, [workspaceProjects, sharedProjects, workspaceId, ready, userId]);
 
   const byId = useMemo(() => {

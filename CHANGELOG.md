@@ -16,3 +16,4 @@ One line per task from the Ideon task sheet.
 - T-0010 — Tests cover only bridge parsing and due-alert rules (UI) — src/components/CsvImporter.jsx, src/services/csv.js, src/services/csv.test.mjs, tests/ui/CsvImporter.test.mjs, tests/ui/dom.mjs, tests/ui/jsx-hooks.mjs
 - T-0011 — Tests cover only bridge parsing and due-alert rules (tests & docs) — README.md, CLAUDE.md, CHANGELOG.md
 - T-0012 — Default project setting is never applied to quick-add — src/components/TaskForm.jsx, src/services/preferences.js, src/services/preferences.test.mjs, tests/ui/TaskForm.test.mjs
+- T-0013 — 'Shared' badge can never render — src/hooks/useTasks.js, src/services/projects.js, src/services/projects.test.mjs
