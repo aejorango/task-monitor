@@ -405,7 +405,7 @@ export default function SettingsView() {
       {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
       {isSuperadmin && <UserManagementSection currentUid={userId} />}
 
-      <KnowledgeSection />
+      <KnowledgeSection isOperator={isSuperadmin} />
 
       {isSuperadmin && <AiBrainSection />}
 

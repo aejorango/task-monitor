@@ -30,3 +30,4 @@ One line per task from the Ideon task sheet.
 - T-0024 — Local run needs two commands and hidden Firebase config — package.json, scripts/start.mjs, src/main.jsx, src/components/SetupRequiredView.jsx, src/services/firebaseConfig.js, src/services/firebaseConfig.test.mjs, src/App.css, README.md, CLAUDE.md, tests/ui/SetupRequiredView.test.mjs
 - T-0025 — Overdue notification memory grows forever — src/services/dueAlerts.js, src/services/dueAlerts.test.mjs, src/hooks/useNotifications.js
 - T-0026 — CLI install instructions shown to every user (API/data layer) — src/services/knowledgeCopy.js, src/services/knowledgeCopy.test.mjs
+- T-0027 — CLI install instructions shown to every user (UI) — src/components/KnowledgeSection.jsx, src/components/SettingsView.jsx, tests/ui/KnowledgeSection.test.mjs

@@ -21,12 +21,7 @@ import {
   fetchSources, addSource, fetchNotebookUsage, BRIDGE_DOWN_HINT, bridgeUrl,
   bridgeOff, enableBridgeHere, localNetworkNote,
 } from '../services/knowledge';
-
-const INSTALL_CMDS = [
-  'brew install pipx && pipx ensurepath',
-  'pipx install "notebooklm-py[browser]"',
-  'notebooklm login',
-];
+import { knowledgeCopy } from '../services/knowledgeCopy';
 
 function CopyCmd({ cmd }) {
   const [ok, setOk] = useState(false);
@@ -45,7 +40,10 @@ function CopyCmd({ cmd }) {
   );
 }
 
-export default function KnowledgeSection() {
+// `isOperator` — the person who runs the bridge on their own machine. They get
+// the shell commands; everyone else gets a plain sentence and no way to be
+// confused by a CLI they cannot install. See services/knowledgeCopy.js.
+export default function KnowledgeSection({ isOperator = false }) {
   const { available, cliFound, authenticated, bridgeOk, hint, notebooks, loading, probed, recheck } =
     useKnowledgeStatus();
   const [busy, setBusy] = useState(false);
@@ -87,11 +85,32 @@ export default function KnowledgeSection() {
       .map(([id, deps]) => ({ id, deps, title: deps.find((d) => d.title)?.title || id }));
   }, [notebooks, dependentsByNotebook]);
 
-  const state = !bridgeOk ? 'bridge-down'
-    : !cliFound ? 'no-cli'
-    : !authenticated ? 'signed-out'
-    : (Array.isArray(notebooks) && notebooks.length === 0) ? 'empty'
-    : 'ready';
+  const copy = knowledgeCopy(
+    { probed, bridgeOk, cliFound, authenticated, notebooks, bridgeOff: bridgeOff() },
+    { isOperator },
+  );
+  const state = copy.state;
+
+  // Everyone who is not the operator gets one short card: does it work, and
+  // who do I ask. No commands, no bridge URL, no notebook management.
+  if (!isOperator) {
+    return (
+      <section id="settings-knowledge" className="review-section htu-section">
+        <h2 className="review-h2-accent">Knowledge base</h2>
+        <div className="kb-statusbar">
+          <span className={`badge badge-soft-${state === 'ready' ? 'success' : 'muted'}`}>
+            {copy.title}
+          </span>
+        </div>
+        <p className="muted small">{copy.message}</p>
+        {state === 'ready' && notebooks?.length > 0 && (
+          <p className="muted small">
+            {notebooks.length} notebook{notebooks.length === 1 ? '' : 's'} available to this workspace.
+          </p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section id="settings-knowledge" className="review-section htu-section">
@@ -105,10 +124,7 @@ export default function KnowledgeSection() {
         <span className={`badge badge-soft-${available ? 'success' : state === 'empty' ? 'warn' : 'muted'}`}>
           {!probed ? 'Checking…'
             : available ? `Connected · ${notebooks?.length ?? 0} notebook${notebooks?.length === 1 ? '' : 's'}`
-            : state === 'bridge-down' ? 'Bridge not running'
-            : state === 'no-cli' ? 'Not installed'
-            : state === 'signed-out' ? 'Not signed in'
-            : 'No notebooks yet'}
+            : copy.title}
         </span>
         <button type="button" className="btn btn-sm" onClick={doRecheck} disabled={busy || loading}>
           {busy || loading ? 'Checking…' : '↻ Re-check'}
@@ -116,10 +132,10 @@ export default function KnowledgeSection() {
         <span className="muted small">Bridge <span className="mono">{bridgeUrl()}</span></span>
       </div>
 
-      {state === 'bridge-down' && (
+      {(state === 'bridge-down' || state === 'bridge-off') && (
         <div className="kb-panel">
-          <strong>Start the AI bridge</strong>
-          <p className="muted small">{hint || BRIDGE_DOWN_HINT}</p>
+          <strong>{copy.title}</strong>
+          <p className="muted small">{hint || copy.message || BRIDGE_DOWN_HINT}</p>
           {bridgeOff() && (
             <p style={{ margin: '6px 0 10px' }}>
               <button
@@ -135,19 +151,19 @@ export default function KnowledgeSection() {
               </span>
             </p>
           )}
-          <CopyCmd cmd="npm run bridge" />
+          {copy.commands.map((c) => <CopyCmd key={c} cmd={c} />)}
           {localNetworkNote() && <p className="muted small" style={{ marginTop: 8 }}>{localNetworkNote()}</p>}
         </div>
       )}
 
-      {state === 'no-cli' && (
+      {state === 'cli-missing' && (
         <div className="kb-panel">
           <strong>One-time setup</strong>
           <p className="muted small">
             Run these on the machine that runs the bridge, and sign in with a{' '}
             <strong>dedicated Google account</strong> — the CLI drives a real browser session.
           </p>
-          {INSTALL_CMDS.map((c) => <CopyCmd key={c} cmd={c} />)}
+          {copy.commands.map((c) => <CopyCmd key={c} cmd={c} />)}
           <p className="muted small">Then press Re-check. No restart needed.</p>
         </div>
       )}
@@ -155,8 +171,8 @@ export default function KnowledgeSection() {
       {state === 'signed-out' && (
         <div className="kb-panel">
           <strong>Almost there</strong>
-          <p className="muted small">{hint}</p>
-          <CopyCmd cmd="notebooklm login" />
+          <p className="muted small">{hint || copy.message}</p>
+          {copy.commands.map((c) => <CopyCmd key={c} cmd={c} />)}
         </div>
       )}
 
