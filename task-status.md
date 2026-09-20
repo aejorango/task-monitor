@@ -8,3 +8,4 @@ Example: T-0001 | YES | 0.42 | Added renewal reminders; server/src/routes/remind
 
 Upload this file in Ideon → Tasks → "Sync from Claude Code" to mark the same rows there.
 T-0001 | YES | 2.80 | users self-update is now an allowlist (displayName/photoURL/email only) so companyId cannot be self-assigned; firestore.rules, src/services/firebase.js, tests/rules/{harness,users.rules.test}.mjs, package.json (test:rules), firebase.json (emulator); 11 emulator rules tests added. Deploy with npm run deploy:rules.
+T-0002 | YES | 2.60 | Invites hardened server-side: create requires project/workspace admin, get-by-id only (no list enumeration), updates limited to appending claims, claim can only set the claimers own ACL slot; presence scoped to workspaceId; getInvite switched to getDoc. firestore.rules, src/services/firebase.js, src/hooks/usePresence.js, src/components/TaskEditor.jsx, tests/rules/{invites,presence}.rules.test.mjs; 15 new emulator tests.

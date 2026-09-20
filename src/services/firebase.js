@@ -1910,10 +1910,12 @@ export function subscribeToSavedViews(workspaceId, userId, callback) {
 // Doc shape:
 //   presence/{compositeId} = { taskId, userId, displayName, photoURL, lastSeen }
 
-export async function pingPresence({ taskId, userId, displayName, photoURL }) {
+export async function pingPresence({ taskId, workspaceId, userId, displayName, photoURL }) {
+  if (!workspaceId) return;   // rules scope presence reads to the workspace
   const docId = `${taskId}__${userId}`;
   return setDoc(doc(db, 'presence', docId), {
     taskId,
+    workspaceId,
     userId,
     displayName: displayName || '',
     photoURL:    photoURL    || '',
@@ -1926,8 +1928,13 @@ export async function clearPresence({ taskId, userId }) {
   return deleteDoc(doc(db, 'presence', docId));
 }
 
-export function subscribeToPresence(taskId, callback) {
-  const q = query(presenceRef, where('taskId', '==', taskId));
+export function subscribeToPresence(taskId, workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(
+    presenceRef,
+    where('workspaceId', '==', workspaceId),
+    where('taskId', '==', taskId),
+  );
   return onSnapshot(q, (snap) => {
     const now = Date.now();
     const fresh = snap.docs
@@ -2005,10 +2012,13 @@ export async function revokeInvite(inviteId) {
 }
 
 export async function getInvite(inviteId) {
-  const snap = await getDocs(query(invitesRef, where('__name__', '==', inviteId)));
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { id: d.id, ...d.data() };
+  // Fetch by exact document id. A `where('__name__','==',id)` query is a LIST
+  // operation, which would need permission to enumerate the whole invites
+  // collection — and enumerable invites means every share link is public.
+  // A `get` needs only the id, which is the secret the recipient already has.
+  const snap = await getDoc(doc(db, 'invites', inviteId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 export function subscribeToInvitesForProject(projectId, callback) {

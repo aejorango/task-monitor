@@ -9,17 +9,18 @@ import {
   auth,
 } from '../services/firebase';
 
-export function usePresence(taskId) {
+export function usePresence(taskId, workspaceId) {
   const [others, setOthers] = useState([]);
 
   // Ping every 20s while mounted; on unmount, clear.
   useEffect(() => {
-    if (!taskId) return;
+    if (!taskId || !workspaceId) return;
     const user = auth.currentUser;
     if (!user || user.isAnonymous) return;  // anonymous users skip presence
 
     const ping = () => pingPresence({
       taskId,
+      workspaceId,
       userId: user.uid,
       displayName: user.displayName || user.email || '',
       photoURL: user.photoURL || '',
@@ -31,14 +32,14 @@ export function usePresence(taskId) {
       clearInterval(id);
       clearPresence({ taskId, userId: user.uid }).catch(() => {});
     };
-  }, [taskId]);
+  }, [taskId, workspaceId]);
 
   // Subscribe to the presence collection for this task.
   useEffect(() => {
-    if (!taskId) return;
-    const unsub = subscribeToPresence(taskId, setOthers);
+    if (!taskId || !workspaceId) { setOthers([]); return; }
+    const unsub = subscribeToPresence(taskId, workspaceId, setOthers);
     return () => unsub();
-  }, [taskId]);
+  }, [taskId, workspaceId]);
 
   // Strip ourselves from the list.
   const me = auth.currentUser?.uid;

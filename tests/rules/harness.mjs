@@ -18,11 +18,20 @@ const PORT = Number(
 
 let envPromise = null;
 
+// Each test FILE gets its own Firestore project inside the emulator. node
+// --test runs files in parallel, and clearFirestore() is project-wide — shared
+// projects would let one file wipe another's fixtures mid-test.
+const projectId = 'rules-' + path
+  .basename(process.argv[1] || 'default')
+  .replace(/\.[^.]+$/, '')
+  .replace(/[^a-z0-9-]/gi, '-')
+  .toLowerCase();
+
 /** One shared RulesTestEnvironment per test process. */
 export function testEnv() {
   if (!envPromise) {
     envPromise = initializeTestEnvironment({
-      projectId: 'task-monitor-rules-test',
+      projectId,
       firestore: {
         host: HOST,
         port: PORT,

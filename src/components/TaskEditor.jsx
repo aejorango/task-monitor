@@ -407,7 +407,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                   </span>
                 </div>
               </div>
-              <PresenceStack taskId={task.id} />
+              <PresenceStack taskId={task.id} workspaceId={task.workspaceId} />
               <button type="button" className="pe-close" onClick={onClose} aria-label="Close">✕</button>
             </div>
           </div>
@@ -1024,8 +1024,8 @@ function CustomFieldsForm({ fields, values, onChange }) {
   );
 }
 
-function PresenceStack({ taskId }) {
-  const others = usePresence(taskId);
+function PresenceStack({ taskId, workspaceId }) {
+  const others = usePresence(taskId, workspaceId);
   if (!others.length) return null;
   return (
     <div className="presence-stack te-presence" title={`Also viewing: ${others.map((p) => p.displayName || p.userId).join(', ')}`}>
