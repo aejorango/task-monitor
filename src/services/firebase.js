@@ -61,6 +61,7 @@ import { noticesForAssignment, noticesForComment, watchersOf } from './mentions'
 import {
   buildShareLink, buildSnapshot, cryptoBytes, isShareLive, newShareToken,
 } from './shareLinks';
+import { catchUpPlan } from './recurrenceSchedule';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -1203,6 +1204,39 @@ async function spawnNextRecurrence(task) {
   // loses every field added since it was written — which is exactly how these
   // instances ended up with no workspaceId, invisible to the Board.
   return await addTask(task.userId, payload);
+}
+
+/**
+ * Materialise the recurring tasks that should exist by now.
+ *
+ * The on-completion path above still runs — ticking one off still makes the
+ * next. This is what keeps a series alive when nobody ticks anything off: it
+ * works out what is missing from the tasks already on screen and creates them.
+ *
+ * Idempotent by construction: `catchUpPlan` skips any occurrence whose due date
+ * a sibling in the series already has, so two devices running it at the same
+ * moment produce the same (usually empty) list, and a second run right after
+ * the first produces nothing.
+ *
+ * @param {object[]} tasks   the workspace's live tasks
+ * @returns {{ seriesId, payload }[]} what was created
+ */
+export async function materialiseRecurrences(tasks = [], { userId, today } = {}) {
+  const plan = catchUpPlan(tasks, today ? { today } : {});
+  if (!plan.length) return [];
+
+  const created = [];
+  for (const item of plan) {
+    try {
+      await addTask(item.userId || userId, item.payload);
+      created.push(item);
+    } catch (err) {
+      // One series failing (a permission, a missing workspace) must not stop
+      // the others from coming round.
+      console.warn('[recurrence] could not create an instance', err);
+    }
+  }
+  return created;
 }
 
 // Cycle-only API — kept for back-compat with TaskList's Move button.

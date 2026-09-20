@@ -214,6 +214,27 @@ chips on the board card, can be added as columns in **Reports → Task table**
 as columns to every task export. Two projects with a field of the same name are
 labelled with the project so they can be told apart.
 
+## Recurring tasks
+
+A recurring task used to appear only when the previous one was ticked off, so a
+weekly ritual nobody completed died at the first missed week. Now both happen:
+
+- **Ticking one off** still creates the next, immediately.
+- **The schedule runs anyway.** The app checks on load and hourly, and creates
+  any occurrence that has become due. A weekly task last scheduled for the 14th
+  gets its 21st instance on the 21st, whether or not the 14th was ever finished.
+
+It is bounded on purpose: an occurrence appears **on the day it is due**, never
+early; nothing older than 30 days is created, so returning to a dormant series
+does not produce a year of overdue copies; and at most 8 per series per run, so
+catching up is gradual. Creating one is idempotent — keyed on the series and the
+due date — so two devices running it at the same moment, or the same device
+twice, produce the same result.
+
+The check runs in the app rather than on a cloud schedule, which keeps this a
+static front end. The honest limit: a workspace nobody opens for a month catches
+up the next time somebody opens it, not before.
+
 ## Sharing a project with a client
 
 **Project editor → Share with a client** publishes a read-only page anyone can
@@ -445,6 +466,7 @@ run together.
 | `src/services/mentions.test.mjs` | Who a comment is for, and what their notice says |
 | `src/services/workload.test.mjs` | The workload grid, and what dropping a task on a cell means |
 | `src/services/shareLinks.test.mjs` | What a share link holds, and exactly what never leaves the workspace |
+| `src/services/recurrenceSchedule.test.mjs` | Which occurrences are due, and never creating one twice |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
 | `src/services/minutesExport.test.mjs` | Minutes as a document |
@@ -468,6 +490,7 @@ run together.
 | `tests/ui/shareLinksApi.test.mjs` | One world-readable document, by exact token, and nothing else |
 | `tests/ui/shareLinks.test.mjs` | Publishing a link, and the page a client opens |
 | `tests/ui/shareFlow.test.mjs` | A link opened signed-out renders read-only — and what it never contains |
+| `tests/ui/recurrenceCatchUp.test.mjs` | A weekly task nobody completed still comes round |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
@@ -542,6 +565,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/inbox.html` | The inbox panel with sample notices, and the @mention picker |
 | `/dev/workload.html` | The workload grid and its drag-and-drop, against sample people |
 | `/dev/shared.html` | The page a client opens (`?kind=board`, `?kind=dead`) |
+| `/dev/recurrence.html` | Move the clock forward and watch a recurring task come round |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 
 ## Working with Claude Code

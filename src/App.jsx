@@ -4,12 +4,13 @@ import { lazy, Suspense, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { DialogProvider } from './components/Dialog';
-import { useAuth, useProjects } from './hooks/useTasks';
+import { useAuth, useProjects, useTasks } from './hooks/useTasks';
 import { useWorkspaces, useSyncMyMemberProfile } from './hooks/useWorkspace';
 import { useMyCompany } from './hooks/useCompany';
 import { setCurrentUserRole } from './services/anthropic';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
+import { useRecurrenceCatchUp } from './hooks/useRecurrenceCatchUp';
 import { useSettings } from './hooks/useSettings';
 import AppShell, { useRoute } from './components/AppShell';
 import Board from './components/Board';   // eager: most common entry point
@@ -151,6 +152,9 @@ export default function App() {
 
 function ApprovedApp({ userId, ready, route, navigate, profile }) {
   const { projects } = useProjects();
+  // The workspace's tasks are already subscribed to once, app-wide (see
+  // services/sharedSubscription.js), so reading them here costs no extra query.
+  const { tasks: tasksForRecurrence } = useTasks();
   const { workspaces } = useWorkspaces();
   useSyncMyMemberProfile(workspaces);
   // Pipe the user's company's Anthropic key into the AI client so every AI
@@ -164,6 +168,10 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
     setCurrentUserRole(profile?.role);
   }, [profile?.role]);
   useOverdueScan();
+  // A recurring task comes round on its own schedule, not only when the last
+  // one was ticked off. See hooks/useRecurrenceCatchUp.js for why this runs in
+  // the app rather than on a cloud schedule.
+  useRecurrenceCatchUp(tasksForRecurrence, { userId });
 
   // Deep link from a browser notification: #/board/<project>?task=<id>.
   // Board opens the editor on this event; retry briefly because the task

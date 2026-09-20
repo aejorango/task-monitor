@@ -134,7 +134,7 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 
 - **Code-splitting** — Board is eager; every other view is `React.lazy()` + Suspense.
 - **Time tracker** — Single-track timer in localStorage. Topbar widget shows live elapsed time. ▶ button on each Board card starts tracking. Stop → modal pre-filled with elapsed hours → log activity in one click.
-- **Recurring tasks** — On marking done, `spawnNextRecurrence` creates the next instance with shifted plan dates (daily/weekly/monthly + interval). Idempotent: skips if the dates already exist for this `recurrenceParentId`. Subtasks reset.
+- **Recurring tasks** — Two paths, both idempotent on `recurrenceParentId` + the due date. (1) On marking done, `spawnNextRecurrence` creates the next instance with shifted plan dates (daily/weekly/monthly + interval); subtasks reset. (2) On schedule: `useRecurrenceCatchUp` runs on load and hourly, and `catchUpPlan` (pure, `services/recurrenceSchedule.js`) works out every occurrence that has become due and is missing — so a series nobody ever ticks off still comes round. Bounded: due today or earlier (`HORIZON_DAYS = 0`), nothing older than `STALE_DAYS`, at most `MAX_PER_RUN` per series per run.
 - **Templates** — Two kinds: `task` and `project`. Save-as-template button in editors. Picker in TaskForm (task) and as click-to-use cards in Projects view (project).
 - **Notifications** — Service worker at `public/sw.js`. Browser notifications fired for newly-overdue tasks (deduped by `localStorage`-tracked "shown" set). Permission requested from Settings. Scan runs on load + every 5 min.
 - **Google sign-in** — `signInWithGoogle()` does `linkWithPopup` if anonymous (keeps existing data), `signInWithPopup` otherwise. `signOutUser()` signs out then re-anonymous-signs-in so the app stays usable. Sidebar footer shows avatar + name when signed in.
@@ -305,6 +305,7 @@ src/
 │   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
 │   ├── useDueAlertQueue.js   ← one current due task + snooze / skip / markDone
 │   ├── useInbox.js           ← one notices listener, however many components ask
+│   ├── useRecurrenceCatchUp.js ← makes a due occurrence appear without a tick-off
 │   ├── useKnowledgeStatus.js ← is the knowledge base usable + which notebooks
 │   ├── useNotifications.js   ← service worker, permission, browser-notification scan
 │   └── useSettings.js        ← localStorage-backed settings + theme application
@@ -318,6 +319,7 @@ src/
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
 │   ├── shareLinks.js         ← the read-only snapshot a client outside can open
+│   ├── recurrenceSchedule.js ← which occurrences are due, and which are missing
 │   ├── customFields.js       ← a project's own fields as chips, columns and labels
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
@@ -462,6 +464,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Relying on the on-completion path alone for a recurring task. It dies at the first missed occurrence, which is the opposite of what a schedule is for. `useRecurrenceCatchUp` is the second path; both key on `recurrenceParentId` + the due date, which is what makes them safe to run at the same time.
+- ❌ Creating a recurring occurrence early. `HORIZON_DAYS = 0`: it appears on the day it is due. A horizon of a week puts next week's copy on the board beside this week's.
 - ❌ Putting the shared page behind the auth gate. `#/shared/<token>` renders in App.jsx **before** the `!ready` check — asking a client to sign in is the one thing it must never do. It imports `SharedSnapshot` and `getSharedView` and nothing else from the app.
 - ❌ Making a share link a window instead of a snapshot. `sharedViews/{token}` holds the rows it shows, so a leaked token leaks one project's headline state and never grows into more; opening `tasks` to an unauthenticated reader would have been a hole the size of the workspace. What may leave is the written-down list in `SHARED_TASK_FIELDS` — no people, no hours, no comments, no attachments.
 - ❌ Enforcing a link's expiry in the page. `allow list: if false` plus `shareIsLive()` in `firestore.rules` is what makes a revoked or expired link stop working; a UI check would be bypassed by the SDK in a console.
