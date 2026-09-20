@@ -10264,3 +10264,19 @@ a:hover { text-decoration: underline; }
   border-color: currentColor;
   background: rgba(255, 255, 255, 0.16);
 }
+
+/* ── Timesheet (TimesheetView.jsx) ────────────────────────────────────────
+   People down, days across. Zeroes are muted so the worked days stand out. */
+.ts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.ts-week { font-size: 14px; letter-spacing: -0.01em; }
+.ts-table td.num,
+.ts-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ts-table .ts-zero { color: var(--c-text-muted); opacity: 0.55; }
+.ts-table th.ts-today { color: var(--c-accent); }
+.ts-totals td { border-top: 2px solid var(--c-border); background: var(--c-bg); }
