@@ -368,6 +368,14 @@ service cloud.firestore {
       allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
+    // ─── Webhook delivery log (written by the webhook functions) ───────────
+    // Admins of the workspace can see what was sent and what came back. Nobody
+    // writes it from a browser — the function does, with admin credentials.
+    match /webhookDeliveries/{deliveryId} {
+      allow read:  if isWorkspaceAdmin(resource.data.workspaceId);
+      allow write: if false;
+    }
+
     // ─── Legacy categories (unused) ─────────────────────────────────────────
     match /categories/{categoryId} {
       allow read:   if isOwner(resource);

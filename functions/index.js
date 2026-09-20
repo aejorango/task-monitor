@@ -21,6 +21,10 @@ import { authorizeAiCall, normalizeAiRequest } from './src/authorize.js';
 initializeApp();
 const db = getFirestore();
 
+// Webhook delivery. Separate file, same codebase — Settings → Webhooks stored
+// configuration that nothing ever sent.
+export { onTaskWritten, onActivityWritten } from './webhooks.js';
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 

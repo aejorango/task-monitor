@@ -46,3 +46,4 @@ One line per task from the Ideon task sheet.
 - T-0040 — Members are added by raw Firebase UID, not email (API/data layer) — src/services/invites.js, src/services/invites.test.mjs, src/services/firebase.js, src/hooks/useWorkspace.js, firestore.rules, tests/rules/workspaceInvite.rules.test.mjs
 - T-0041 — Members are added by raw Firebase UID, not email (UI) — src/components/SettingsView.jsx, tests/ui/workspaceMembers.test.mjs
 - T-0042 — Members are added by raw Firebase UID, not email (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
+- T-0043 — Webhooks are stored but never delivered (API/data layer) — functions/webhooks.js, functions/index.js, functions/src/webhookEvents.js, functions/src/webhookEvents.test.mjs, functions/src/signature.test.mjs, firestore.rules, firestore.indexes.json, src/services/firebase.js

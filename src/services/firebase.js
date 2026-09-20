@@ -2074,10 +2074,25 @@ export function subscribeToPresence(taskId, workspaceId, callback) {
 }
 
 // ─── WEBHOOKS ───────────────────────────────────────────────────────────────
-// Stored config only — nothing here fires an HTTP request. Delivery needs a
-// process that can watch Firestore and POST, which this app (a static
-// frontend) does not have. The Settings panel says so in plain words rather
-// than promising an integration that never happens.
+//
+// Delivery happens in `functions/webhooks.js`: a Firestore trigger signs the
+// body with the webhook's secret and POSTs it, then writes the outcome to
+// `webhookDeliveries` so Settings can show what actually happened.
+
+
+/** The recent delivery attempts for a workspace, newest first. Read-only. */
+export function subscribeToWebhookDeliveries(workspaceId, callback, { max = 50 } = {}) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'webhookDeliveries'),
+    where('workspaceId', '==', workspaceId),
+    orderBy('at', 'desc'),
+    limit(max),
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }, listenerError('webhookDeliveries', () => callback([])));
+}
 
 export async function addWebhook(userId, hook) {
   if (!hook.workspaceId) throw new Error('addWebhook requires hook.workspaceId');
