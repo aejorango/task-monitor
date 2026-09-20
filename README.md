@@ -13,12 +13,13 @@ Static React frontend, Firebase Firestore behind it, no server of our own.
 You need **Node 20+** and a Firebase project.
 
 ```bash
-npm install     # installs everything
-npm run dev     # the app on http://localhost:5173
+npm install     # one install
+npm start       # one run — the app AND the local AI bridge
 ```
 
-The AI features additionally need the local bridge — `npm run bridge` in a
-second terminal. See [AI brain](#ai-brain--the-claude-code-cli) below.
+`npm start` runs both and prefixes their output (`[web]` / `[ai]`); Ctrl-C stops
+both. The bridge is optional — if it fails to start, the app keeps working
+without AI. `npm start -- --no-ai` skips it; `npm run dev` runs only the app.
 
 ### Firebase config
 
@@ -44,6 +45,9 @@ Then, once per project:
 2. **Firestore Database** — create one (production mode).
 3. **Storage** — create a bucket (only needed for file attachments).
 4. `npm run deploy:rules` — push `firestore.rules` and `storage.rules`.
+
+If `.env` is missing — or still holds the example values — the app shows a setup
+page naming exactly which variables it could not find, instead of a blank page.
 
 Start the app and sign in with Google. The first account whose email is in
 `SUPERADMIN_EMAILS` (`src/services/firebase.js`, mirrored in `firestore.rules`)

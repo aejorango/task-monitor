@@ -218,7 +218,7 @@ src/
 3. **No hard deletes.** Set `deleted: true`.
 4. **Composite indexes.** New filtered+ordered queries will require an index. Firestore shows a one-click link in the console.
 5. **Mobile-first.** Sidebar collapses under 720px; board collapses under 960px. Any new view must respect this.
-6. **No build-time secrets** beyond `.env.example`.
+6. **No build-time secrets** beyond `.env.example`. The config is checked before Firebase is imported: `main.jsx` calls `readFirebaseConfig(import.meta.env)` and renders `SetupRequiredView` when anything is missing, so `services/firebase.js` and `App.jsx` must stay dynamic imports there — `initializeApp()` runs at module scope.
 7. **No backend.** Static frontend + Firestore.
 8. **Theme tokens.** Use CSS variables (`var(--c-text)`) not hardcoded colors. Dark mode is automatic via `prefers-color-scheme`.
 
@@ -266,7 +266,10 @@ src/
 ## Development Workflow
 
 ```bash
-npm run bridge       # AI bridge on 127.0.0.1:4319 (Claude Code CLI brain)
+npm install          # one install
+npm start            # one run: vite + the AI bridge together (scripts/start.mjs,
+                     # zero-dep launcher; Ctrl-C stops both; --no-ai skips the bridge)
+npm run bridge       # AI bridge alone on 127.0.0.1:4319 (Claude Code CLI brain)
 npm test             # bridge/*.test.mjs + src/**/*.test.mjs + tests/ui/*.test.mjs
                      # (node --test; jsdom + a rolldown JSX loader for components)
                      # never spawns `claude` or `notebooklm` — fixtures only

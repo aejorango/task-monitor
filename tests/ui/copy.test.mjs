@@ -26,9 +26,15 @@ function userFacingLines({ src }) {
     });
 }
 
+// The one screen whose audience IS the person setting the repository up. It is
+// only reachable when the app has no Firebase configuration at all, so naming
+// README.md there is the most useful thing it can do.
+const DEVELOPER_FACING = new Set(['SetupRequiredView.jsx']);
+
 test('no screen names a repository file at the user', () => {
   const offenders = [];
   for (const file of componentFiles()) {
+    if (DEVELOPER_FACING.has(file.name)) continue;
     for (const { n, l } of userFacingLines(file)) {
       if (/\b(FEATURE_ROADMAP|CLAUDE|README|BUILD-GUIDE)\.md\b/.test(l)) {
         offenders.push(`${file.name}:${n}: ${l.trim()}`);

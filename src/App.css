@@ -9962,3 +9962,72 @@ a:hover { text-decoration: underline; }
 @media (max-width: 720px) {
   .crash-card { margin: 24px 12px; padding: 24px 20px; }
 }
+
+/* ── Setup-required screen (SetupRequiredView.jsx) ────────────────────────
+   Shown instead of the app when the Firebase config is missing. It renders
+   before anything else loads, so it depends only on the tokens above. */
+.setup-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 40px 20px;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+.setup-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  padding: 40px;
+  max-width: 640px;
+  width: 100%;
+}
+.setup-icon { font-size: 32px; line-height: 1; margin-bottom: 12px; }
+.setup-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+.setup-lede {
+  color: var(--c-text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+.setup-steps {
+  margin: 0 0 24px;
+  padding-left: 20px;
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.setup-steps code,
+.setup-list code {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12.5px;
+}
+.setup-missing {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg, 10px);
+  padding: 16px 20px;
+}
+.setup-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-text-muted);
+  margin: 0 0 10px;
+}
+.setup-list { margin: 0; padding-left: 18px; line-height: 1.9; font-size: 13.5px; }
+.setup-foot { margin: 20px 0 0; }
+
+@media (max-width: 720px) {
+  .setup-card { padding: 28px 22px; }
+  .setup-title { font-size: 20px; }
+}
