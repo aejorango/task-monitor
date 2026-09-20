@@ -144,6 +144,15 @@ and `generateClaudePromptFull`.
   `permission_denials` — the model's apology must never be stored as an answer.
 - **Web access** is a provider capability: pass `{ web: true }` to `askAI`. Only
   `claude-code` can browse; other providers return the answer marked `degraded`.
+- **Provider ≠ transport.** `claude-code` means the bridge is running the CLI
+  (subscription, can browse, can ground). `bridge-api` means the same bridge is
+  running on an `ANTHROPIC_API_KEY` — billed per token, and it can do neither.
+  Both route through the bridge (`isBridgeProvider`); capability checks use
+  `canBrowse(provider)` / `canGround(provider)`. `bridge-api` is never offered
+  as a choice in Settings; it is what the bridge turns out to be.
+- **The AI brain panel's wording comes from `providerLabel` / `providerHeadline`**
+  in `services/ai.js`. Components must not write their own — that is how a
+  bridge billing API tokens ended up advertising "no API billing".
 - **Degraded ≠ success.** Every fallback sets `degraded` + `reason`. Propagate
   it; don't render a fallback as a clean result.
 - **Gate UI with `useAiStatus()`**, not with `getEffectiveApiKey()` — the CLI
@@ -290,6 +299,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Swim-lanes when projectFilter is "all" — phase IDs differ across projects so the toggle is hidden in that case. The page header chip only shows when a single project is selected.
 - ❌ Calling the Anthropic API directly from a component — go through `askAI`
 - ❌ Gating an AI surface on `getEffectiveApiKey()` — CLI users have no key
+- ❌ Gating an AI surface on `profile.companyId` — a user with no company still has AI when the bridge is up. Use `useAiStatus().available`.
+- ❌ Treating `bridge-api` as `claude-code` — it cannot browse or ground, and it is billed per token
 - ❌ Returning a mock or API fallback without setting `degraded` + `reason`
 - ❌ Omitting `--tools ""` when spawning the CLI (that leaves every built-in tool live)
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.

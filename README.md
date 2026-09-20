@@ -185,6 +185,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | --- | --- |
 | `bridge/ai.test.mjs` | Hermetic CLI invocation, denied-tool handling, JSON extraction |
 | `bridge/settings.test.mjs` | What a web page may change on the bridge, and the admin code |
+| `src/services/aiProvider.test.mjs` | Which provider is answering, what it can do, and who pays |
 | `bridge/notebooklm.test.mjs` | NotebookLM CLI payload parsing, timeouts, concurrency |
 | `src/services/dueAlerts.test.mjs` | Which task is due for an alert, and in what order |
 | `src/services/recurrence.test.mjs` | Recurring-task date maths and the next instance's payload |
