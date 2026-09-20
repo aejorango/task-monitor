@@ -1996,6 +1996,10 @@ export async function addSavedView(userId, view) {
     statusFilter:  view.statusFilter || null,
     sortBy:        view.sortBy || null,
     sortDir:       view.sortDir || 'desc',
+    // v12: a saved view remembers the TABLE it was, not just the filters —
+    // which columns, in what order, grouped by what. See services/tableViews.js.
+    columns:       Array.isArray(view.columns) ? view.columns : null,
+    groupBy:       view.groupBy || null,
     deleted:       false,
     createdAt:     serverTimestamp(),
     updatedAt:     serverTimestamp(),
