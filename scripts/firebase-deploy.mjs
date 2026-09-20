@@ -16,9 +16,12 @@ import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
 const TARGETS = {
-  hosting: ['hosting'],
-  rules:   ['firestore:rules', 'storage:rules'],
-  all:     ['hosting', 'firestore:rules', 'storage:rules'],
+  hosting:   ['hosting'],
+  rules:     ['firestore:rules', 'storage:rules'],
+  // The AI proxy. Needs the Blaze plan: a function that calls Anthropic makes
+  // an outbound request, which Spark does not allow.
+  functions: ['functions'],
+  all:       ['hosting', 'firestore:rules', 'storage:rules', 'functions'],
 };
 
 const target = process.argv[2] || 'hosting';

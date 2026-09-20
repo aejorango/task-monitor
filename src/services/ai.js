@@ -16,8 +16,9 @@
 
 import {
   getEffectiveApiKey, getEffectiveModel, DEFAULT_MODEL, noKeyMessage,
-  isAiAllowedForUser,
+  isAiAllowedForUser, canUseAiProxy,
 } from './aiCredentials';
+import { callAiProxy } from './aiProxyClient';
 
 // What a user may PICK in Settings. 'bridge-api' is not here: nobody chooses
 // it — it is what "the bridge" turns out to be when the bridge is running on an
@@ -27,6 +28,11 @@ export const PROVIDERS = ['claude-code', 'api', 'mock'];
 // Providers that reach a model through the local bridge. Both route the same
 // way; they differ in who pays and in what the bridge can do.
 export const BRIDGE_PROVIDERS = ['claude-code', 'bridge-api'];
+
+// 'proxy' — the aiProxy Cloud Function. It holds the company's Anthropic key
+// server-side and checks the caller before forwarding, so a member's browser
+// never sees a spendable secret. This is the normal path for everyone who is
+// not the operator running the local bridge.
 export const isBridgeProvider = (p) => BRIDGE_PROVIDERS.includes(p);
 
 // Only the Claude Code CLI can browse the web or read a NotebookLM notebook —
@@ -88,7 +94,7 @@ export function setAiSettings(patch = {}) {
 
 /* ── detection ────────────────────────────────────────────────────────── */
 
-// 'claude-code' | 'bridge-api' | 'api' | 'mock' | 'none' | null (not probed yet)
+// 'claude-code' | 'bridge-api' | 'proxy' | 'api' | 'mock' | 'none' | null
 let _mode = null;
 let _modeAt = 0;
 let _inflight = null;
@@ -191,7 +197,8 @@ export async function detectProvider({ force = false } = {}) {
       // The bridge itself may be in mock mode (CLI not logged in). Only claim
       // 'claude-code' when the CLI is genuinely the bridge's live brain.
       if (ok && aiMode === 'claude-code') next = 'claude-code';
-      else if (getEffectiveApiKey())      next = 'api';
+      else if (canUseAiProxy())           next = 'proxy';         // company budget, key stays server-side
+      else if (getEffectiveApiKey())      next = 'api';           // a superadmin's own key
       else if (ok && aiMode === 'api')    next = 'bridge-api';    // bridge has its own key
       else if (allowMock)                 next = 'mock';
       else                                next = 'none';
@@ -249,6 +256,7 @@ export function providerLabel(provider) {
   switch (provider) {
     case 'claude-code': return 'Claude Code CLI — your subscription, no API billing';
     case 'bridge-api':  return 'Anthropic API via your local bridge — billed per token';
+    case 'proxy':       return 'Your organisation’s AI — billed to your company';
     case 'api':         return 'Anthropic API — billed per token';
     case 'mock':        return 'Mock — placeholder text, not a real AI response';
     case 'none':        return 'Not connected';
@@ -264,6 +272,9 @@ export function providerHeadline(provider, known = true) {
     case 'bridge-api':
       return 'Answering through the Anthropic API on your local bridge — billed per token. '
            + 'Log in to the Claude Code CLI (`claude`) to use your subscription instead.';
+    case 'proxy':
+      return 'Answering on your organisation’s account. The key stays on the server — '
+           + 'it is never sent to your browser.';
     case 'api':
       return 'Answering through the Anthropic API — billed per token.';
     case 'mock':
@@ -297,6 +308,23 @@ export async function recheckBridge() {
 }
 
 /* ── the API provider (direct from the browser) ───────────────────────── */
+
+// The server-side proxy. The browser sends only the prompt; the function
+// supplies the key, the model and the budget, and refuses callers it does not
+// recognise. See functions/index.js.
+async function callProxy(system, userPrompt, { maxTokens } = {}) {
+  const out = await callAiProxy({ system, user: userPrompt, maxTokens: maxTokens || aiSettings().maxTokens });
+  return {
+    text: out.text,
+    usage: {
+      inputTokens:  out.usage?.inputTokens  ?? null,
+      outputTokens: out.usage?.outputTokens ?? null,
+      // The company is billed, not this user; the admin sees the total in the
+      // usage log the function writes.
+      costUsd: null,
+    },
+  };
+}
 
 async function callApi(system, userPrompt, { maxTokens } = {}) {
   const apiKey = getEffectiveApiKey();
@@ -439,6 +467,12 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
       e.code = 'bridge-unreachable';
       throw e;
     }
+  }
+
+  if (provider === 'proxy') {
+    const { text, usage } = await callProxy(system, userPrompt, { maxTokens });
+    return finish(text, provider, usage,
+      [web ? WEB_UNAVAILABLE('proxy') : null, ground ? GROUND_UNAVAILABLE : null].filter(Boolean).join(' ') || undefined);
   }
 
   if (provider === 'api') {

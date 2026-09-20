@@ -40,7 +40,11 @@ export function useMyCompany(profile) {
         setCurrentCompanyContext({
           id: c.id,
           name: c.name,
-          apiKey: c.anthropicApiKey || '',
+          // A FLAG, not the key. The key lives in companies/{id}/secrets/anthropic,
+          // which a member cannot read — their AI calls go through the aiProxy
+          // function instead. `anthropicApiKey` only survives on documents that
+          // have not been migrated yet.
+          hasApiKey: c.hasApiKey ?? !!String(c.anthropicApiKey || '').trim(),
           model:  c.anthropicModel  || '',
           // Missing field = legacy company created before the switch existed;
           // treat it as allowed so nobody loses AI on upgrade.

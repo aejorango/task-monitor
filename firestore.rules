@@ -359,8 +359,27 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId;
     }
     match /companies/{companyId} {
+      // Members read the company for its NAME and its AI switch. The Anthropic
+      // key is not here any more — see the secrets subcollection below.
       allow read:   if isApprovedSuperadmin() || isMyCompany(companyId);
       allow create, update, delete: if isApprovedSuperadmin();
+
+      // The shared API key. Only a superadmin (who sets it) and the server-side
+      // aiProxy function (which runs with admin credentials and bypasses these
+      // rules) may read it. Previously it sat on the company document itself,
+      // which meant every member's browser was handed a spendable secret.
+      match /secrets/{secretId} {
+        allow read, write: if isApprovedSuperadmin();
+      }
+    }
+
+    // ─── AI usage log (written by the aiProxy function) ─────────────────────
+    // A member can see what they spent; a superadmin can see everything. Nobody
+    // writes it from a browser — the function does, with admin credentials.
+    match /aiUsage/{entryId} {
+      allow read:   if isApprovedSuperadmin()
+                    || (isApproved() && resource.data.userId == request.auth.uid);
+      allow write:  if false;
     }
 
     // ─── Users (approval-gated access control) ──────────────────────────────

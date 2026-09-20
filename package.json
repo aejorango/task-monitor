@@ -7,7 +7,7 @@
     "start": "node scripts/start.mjs",
     "dev": "vite",
     "bridge": "node bridge/server.mjs",
-    "test": "node --import ./tests/ui/jsx-loader.mjs --test bridge/*.test.mjs src/**/*.test.mjs tests/ui/*.test.mjs",
+    "test": "node --import ./tests/ui/jsx-loader.mjs --test bridge/*.test.mjs src/**/*.test.mjs tests/ui/*.test.mjs functions/src/*.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project task-monitor-rules-test 'node --test tests/rules/*.test.mjs'",
     "test:all": "npm test && npm run test:rules",
     "build": "vite build",
@@ -17,7 +17,8 @@
     "deploy": "node scripts/firebase-deploy.mjs hosting",
     "deploy:pages": "gh-pages -d dist",
     "deploy:rules": "node scripts/firebase-deploy.mjs rules",
-    "deploy:all": "node scripts/firebase-deploy.mjs all"
+    "deploy:all": "node scripts/firebase-deploy.mjs all",
+    "deploy:functions": "node scripts/firebase-deploy.mjs functions"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

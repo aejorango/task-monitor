@@ -4,8 +4,12 @@
 // and the feature functions can read it without an import cycle. The rules
 // themselves are unchanged:
 //
-//   1. The signed-in user's company key (set by an admin) — normal path.
-//   2. A personal localStorage key — superadmins only, as a fallback.
+//   1. The company's key — held SERVER-SIDE by the aiProxy Cloud Function.
+//      The browser never sees it; it asks the function, which checks the
+//      caller and forwards to Anthropic. (Before this, the key was on the
+//      company document, so every member could read and spend it.)
+//   2. A personal localStorage key — superadmins only, on their own device,
+//      spending their own money. Never distributed to anyone.
 //
 // None of this applies to the Claude Code CLI provider: that runs on the
 // operator's own subscription and needs no key at all.
@@ -32,9 +36,12 @@ export function setModel(model) {
   try { localStorage.setItem(MODEL_KEY, model); } catch { /* private mode */ }
 }
 
-/* ── company key (in-memory; pushed by the useMyCompany hook) ──────────── */
+/* ── company context (in-memory; pushed by the useMyCompany hook) ─────────
+   Deliberately no key: the company's key is not readable from a browser any
+   more. What the client needs to know is only whether AI is available and
+   whose budget it is, so the UI can say so. */
 
-let _companyKey   = '';
+let _companyHasKey = false;
 let _companyModel = '';
 let _companyMeta  = null;   // { id, name } for diagnostics
 let _companyAi    = true;   // company-level AI switch (aiEnabled on the doc)
@@ -42,8 +49,8 @@ let _userRole     = '';     // '', 'user', or 'superadmin'
 
 export function setCurrentUserRole(role) { _userRole = role || ''; }
 
-export function setCurrentCompanyContext({ apiKey, model, id, name, aiEnabled } = {}) {
-  _companyKey   = apiKey || '';
+export function setCurrentCompanyContext({ hasApiKey, model, id, name, aiEnabled } = {}) {
+  _companyHasKey = !!hasApiKey;
   _companyModel = model  || '';
   _companyMeta  = (id || name) ? { id: id || null, name: name || '' } : null;
   // Absent field on legacy docs means "allowed" — only an explicit false
@@ -51,13 +58,19 @@ export function setCurrentCompanyContext({ apiKey, model, id, name, aiEnabled } 
   _companyAi    = aiEnabled !== false;
 }
 export function clearCurrentCompanyContext() {
-  _companyKey = '';
+  _companyHasKey = false;
   _companyModel = '';
   _companyMeta = null;
   _companyAi = true;
 }
 export function getCurrentCompanyMeta() { return _companyMeta; }
-export function isUsingCompanyKey() { return !!_companyKey; }
+/** Is a company budget behind this user's AI? (The key itself stays server-side.) */
+export function isUsingCompanyKey() { return _companyHasKey; }
+
+/** Can this user reach the server-side proxy — i.e. does their company pay? */
+export function canUseAiProxy() {
+  return isAiAllowedForUser() && _companyHasKey;
+}
 
 // Is this user's company allowed to reach the AI brain at all? The AI brain
 // panel is superadmin-only UI, but *access* is granted per company from
@@ -68,9 +81,10 @@ export function isAiAllowedForUser() {
   return _companyAi;
 }
 
+// The ONLY key a browser may hold: a superadmin's own, typed into their own
+// device. A company key is never returned here — it is not readable any more.
 export function getEffectiveApiKey() {
   if (!isAiAllowedForUser()) return '';
-  if (_companyKey) return _companyKey;
   if (_userRole === 'superadmin') return getApiKey();
   return '';
 }
@@ -90,7 +104,7 @@ export function noKeyMessage() {
     return `The AI feature is not available on your end — "${_companyMeta.name}" hasn't enabled it yet. Contact your company admin or reach out to hello@blueinnovation.ph to enable.`;
   }
   if (_userRole === 'superadmin') {
-    return 'No AI brain available. Start the Claude Code bridge (npm run bridge), assign yourself to a company with a key, or set a personal fallback in Settings → AI.';
+    return 'No AI brain available. Start the Claude Code bridge (npm run bridge), give your company an API key in Settings → Companies, or set a personal fallback in Settings → AI.';
   }
   return 'The AI feature is not available on your end. To enable, contact your company admin or reach out to hello@blueinnovation.ph.';
 }

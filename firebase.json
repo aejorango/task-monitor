@@ -61,6 +61,21 @@
     "hub": {
       "host": "127.0.0.1",
       "port": 4401
+    },
+    "functions": {
+      "host": "127.0.0.1",
+      "port": 5011
     }
-  }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local"
+      ]
+    }
+  ]
 }

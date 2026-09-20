@@ -20,6 +20,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteField,
   deleteDoc,
   getDoc,
   getDocs,
@@ -295,11 +296,40 @@ const companiesRef = collection(db, 'companies');
 
 const DEFAULT_AI_MODEL = 'claude-sonnet-4-5-20250929';
 
+// The Anthropic key lives in a subdocument that only superadmins (and the
+// server-side aiProxy function) can read. It used to sit on the company
+// document, which every member could read — and therefore spend.
+export const companySecretRef = (companyId) =>
+  doc(db, 'companies', companyId, 'secrets', 'anthropic');
+
+/** Read the company's key. Superadmin-only; anyone else gets permission-denied. */
+export async function getCompanyApiKey(companyId) {
+  if (!companyId) return '';
+  const snap = await getDoc(companySecretRef(companyId));
+  return snap.exists() ? (snap.data().anthropicApiKey || '') : '';
+}
+
+/** Set (or clear) the company's key. Superadmin-only. */
+export async function setCompanyApiKey(companyId, apiKey) {
+  if (!companyId) throw new Error('setCompanyApiKey requires a companyId');
+  await setDoc(companySecretRef(companyId), {
+    anthropicApiKey: String(apiKey || '').trim(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Does this company have a key, without reading the key itself? */
+export async function companyHasApiKey(companyId) {
+  return !!(await getCompanyApiKey(companyId));
+}
+
 export async function addCompany(creatorUid, company) {
   const ref = doc(companiesRef);
   const data = {
     name: company.name?.trim() || 'New company',
-    anthropicApiKey: (company.anthropicApiKey || '').trim(),
+    // `hasApiKey` is a flag, not the key: Settings needs to show "key set" to
+    // people who must never be able to read it.
+    hasApiKey: !!String(company.anthropicApiKey || '').trim(),
     anthropicModel:  (company.anthropicModel  || DEFAULT_AI_MODEL).trim(),
     // Per-company AI switch. New companies start allowed; a superadmin can
     // revoke access from Settings → Companies without touching the key.
@@ -310,15 +340,43 @@ export async function addCompany(creatorUid, company) {
     updatedAt: serverTimestamp(),
   };
   await setDoc(ref, data);
+  if (data.hasApiKey) await setCompanyApiKey(ref.id, company.anthropicApiKey);
   return { id: ref.id, ...data };
 }
 
 export async function updateCompany(companyId, updates) {
-  const patch = { ...updates, updatedAt: serverTimestamp() };
-  if (typeof patch.anthropicApiKey === 'string') patch.anthropicApiKey = patch.anthropicApiKey.trim();
-  if (typeof patch.anthropicModel  === 'string') patch.anthropicModel  = patch.anthropicModel.trim();
-  if (typeof patch.name            === 'string') patch.name            = patch.name.trim();
+  const { anthropicApiKey, ...rest } = updates;
+  const patch = { ...rest, updatedAt: serverTimestamp() };
+  if (typeof patch.anthropicModel === 'string') patch.anthropicModel = patch.anthropicModel.trim();
+  if (typeof patch.name           === 'string') patch.name           = patch.name.trim();
+
+  // The key never goes on the company document — it goes in the secret, and
+  // the document only records WHETHER there is one.
+  if (typeof anthropicApiKey === 'string') {
+    const trimmed = anthropicApiKey.trim();
+    await setCompanyApiKey(companyId, trimmed);
+    patch.hasApiKey = !!trimmed;
+  }
   await updateDoc(doc(companiesRef, companyId), patch);
+}
+
+// One-off: move a key that is still on the company document into the secret,
+// and blank it where every member can read it. Superadmin-only, idempotent —
+// the Companies panel runs it when it loads.
+export async function migrateCompanyKeys(companies = []) {
+  let moved = 0;
+  for (const c of companies) {
+    const legacyKey = String(c?.anthropicApiKey || '').trim();
+    if (!legacyKey) continue;
+    await setCompanyApiKey(c.id, legacyKey);
+    await updateDoc(doc(companiesRef, c.id), {
+      anthropicApiKey: deleteField(),
+      hasApiKey: true,
+      updatedAt: serverTimestamp(),
+    });
+    moved += 1;
+  }
+  return { moved };
 }
 
 export async function softDeleteCompany(companyId) {
