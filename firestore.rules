@@ -335,16 +335,37 @@ service cloud.firestore {
                         && isSuperadminEmail(request.auth.token.email))
                     );
 
-      // Users can update their own profile (display name, photo) but cannot
-      // change their own status or role. Superadmins can update any profile.
+      // Self-update is an allowlist, not a denylist. Enumerating immutable
+      // fields leaves every field nobody thought of writable — that is how a
+      // member could set their own `companyId` and then read that company's
+      // shared Anthropic key through the isMyCompany() branch above. Only the
+      // three display fields may be written by the user themselves; anything
+      // else (status, role, companyId, and any field added later) is a
+      // superadmin's to set.
+      function isSelfDisplayEdit(userId) {
+        return request.auth.uid == userId
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['displayName', 'photoURL', 'email'])
+            && request.resource.data.email == request.auth.token.email;
+      }
+
+      // Mirrors the create rule: an email on the hardcoded superadmin list may
+      // promote itself. Needed when the list gains an email after that person
+      // has already signed in once — without it they can never reach
+      // isApprovedSuperadmin() and the whole admin surface locks up.
+      function isSelfPromotingSuperadmin(userId) {
+        return request.auth.uid == userId
+            && isSuperadminEmail(request.auth.token.email)
+            && request.resource.data.email  == request.auth.token.email
+            && request.resource.data.role   == 'superadmin'
+            && request.resource.data.status == 'approved';
+      }
+
       allow update: if request.auth != null
                     && (
                       isApprovedSuperadmin()
-                      ||
-                      (request.auth.uid == userId
-                        && request.resource.data.status == resource.data.status
-                        && request.resource.data.role   == resource.data.role
-                        && request.resource.data.email  == resource.data.email)
+                      || isSelfPromotingSuperadmin(userId)
+                      || isSelfDisplayEdit(userId)
                     );
 
       // No deletes — historical records are kept.

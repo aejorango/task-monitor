@@ -268,6 +268,8 @@ export async function setUserRole(targetUid, role) {
 }
 
 // Assign a user to a company. companyId may be null/'' to unassign.
+// Superadmin-only: firestore.rules refuses `companyId` on a self-update, so a
+// member cannot put themselves in a company and read its shared API key.
 export async function setUserCompany(targetUid, companyId) {
   await updateDoc(doc(usersRef, targetUid), {
     companyId: companyId || null,

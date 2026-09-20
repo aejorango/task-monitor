@@ -672,7 +672,7 @@ export default function DashboardView({ projectFilter, navigate }) {
                 </div>
                 <div className="db-ws-body">
                   <div className="db-ws-name">{activeWorkspace.name}</div>
-                  <div className="db-ws-meta">{wsRole} · private · {plural(tasks.length, 'task', 'tasks')}</div>
+                  <div className="db-ws-meta"><span className="db-ws-role">{wsRole}</span> · private · {plural(tasks.length, 'task', 'tasks')}</div>
                 </div>
                 <button className="db-link" onClick={() => navigate?.({ view: 'settings' })}>Settings →</button>
               </section>

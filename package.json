@@ -14,7 +14,9 @@
     "deploy": "firebase deploy --only hosting --account aejorango888@gmail.com",
     "deploy:pages": "gh-pages -d dist",
     "deploy:rules": "firebase deploy --only firestore:rules --account aejorango888@gmail.com",
-    "deploy:all": "npm run deploy && npm run deploy:rules"
+    "deploy:all": "npm run deploy && npm run deploy:rules",
+    "test:rules": "firebase emulators:exec --only firestore --project task-monitor-rules-test 'node --test tests/rules/*.test.mjs'",
+    "test:all": "npm test && npm run test:rules"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

@@ -233,13 +233,24 @@ src/
 
 ## Out of Scope (Don't Build Unless Asked)
 
-- Multi-user teams / sharing
-- Email/Google sign-in (anonymous auth is intentional)
-- Server-side rendering
-- Real-time collaborative editing
-- File upload bytes (only URLs to external storage)
-- Push notifications
-- Running the AI bridge on a server (it is deliberately localhost-only)
+**Shipped since this list was first written — these are NOT scope violations:**
+
+- **Multi-user workspaces and sharing** — `workspaces/{id}` with `members[]` + `acl{}`,
+  `pendingInvites`, and roles owner / admin / editor / viewer enforced in `firestore.rules`.
+- **Google sign-in** — `signInWithGoogle()` in firebase.js (`linkWithPopup` when anonymous, so
+  existing data survives). Anonymous auth is still the default way in, not the only one.
+- **File upload bytes** — `FileUpload.jsx` → `uploadFile()` pushes to Firebase Storage under
+  `storage.rules`. Plain attachment URLs (Drive, any external store) still work alongside it.
+
+**Still out of scope:**
+
+- A server-side backend of any kind — Firestore is the backend, the app is a static SPA.
+- Server-side rendering.
+- Running the AI bridge anywhere but `127.0.0.1` behind its origin allowlist.
+- Real-time collaborative text editing.
+- Server-sent push (FCM or similar). The service worker in `public/sw.js` only fires **local**
+  notifications from a client-side overdue scan; nothing is pushed from a server.
+- Email digests / SMTP — notifications are the service worker plus in-app surfaces.
 
 ## Development Workflow
 
