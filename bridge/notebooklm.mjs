@@ -352,19 +352,71 @@ export async function addSourceUrl(notebookId, url) {
   return res.data;
 }
 
-// `source add --type text` takes the text inline, so there is no temp file to
-// create and no temp file to leak.
+/**
+ * How to hand a text source to the CLI.
+ *
+ * `source add --type text` takes the text as a POSITIONAL argument, which is
+ * fine for a note and fatal for an AI answer: past ARG_MAX (about 256 KB on
+ * macOS, and every byte of the environment counts against it too) the spawn
+ * fails with E2BIG, which reaches the user as an unreadable error. Anything
+ * long is written to a temp file and added as a file source instead.
+ *
+ * Pure, so the decision is tested without spawning anything.
+ *
+ * @returns {{ mode: 'inline', args } | { mode: 'file', args, tempName }}
+ */
+export function sourceAddPlan(notebookId, title, body) {
+  const name = String(title || '').trim().slice(0, 120) || 'Task Monitor note';
+
+  if (body.length <= STDIN_THRESHOLD) {
+    return {
+      mode: 'inline',
+      args: ['source', 'add', body, '-n', notebookId, '--type', 'text', '--title', name, '--json'],
+      title: name,
+    };
+  }
+
+  // A readable filename: the CLI may show it, and it is what lands in the
+  // notebook's source list.
+  const safe = name
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 60) || 'note';
+  return {
+    mode: 'file',
+    tempName: `${safe}.txt`,
+    title: name,
+    // `path` is filled in by addSourceText once the file exists.
+    args: (filePath) => ['source', 'add', filePath, '-n', notebookId, '--type', 'file', '--title', name, '--json'],
+  };
+}
+
 export async function addSourceText(notebookId, title, text) {
   const id = requireId(notebookId);
   const body = String(text || '').trim();
   if (!body) throw new Error('Cannot add an empty text source.');
-  const name = String(title || '').trim().slice(0, 120) || 'Task Monitor note';
-  const res = await runCli(
-    ['source', 'add', body, '-n', id, '--type', 'text', '--title', name, '--json'],
-    { timeoutMs: SOURCE_TIMEOUT_MS },
-  );
-  if (!res.ok) throw new Error(res.error);
-  return res.data;
+
+  const plan = sourceAddPlan(id, title, body);
+
+  if (plan.mode === 'inline') {
+    const res = await runCli(plan.args, { timeoutMs: SOURCE_TIMEOUT_MS });
+    if (!res.ok) throw new Error(res.error);
+    return res.data;
+  }
+
+  // Long body: via a temp file, cleaned up whatever happens.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-source-'));
+  const filePath = path.join(dir, plan.tempName);
+  try {
+    fs.writeFileSync(filePath, body, 'utf8');
+    const res = await runCli(plan.args(filePath), { timeoutMs: SOURCE_TIMEOUT_MS });
+    if (!res.ok) throw new Error(res.error);
+    return res.data;
+  } finally {
+    try { fs.rmSync(dir, { recursive: true, force: true }); }
+    catch (err) { console.warn(`[knowledge] could not remove ${dir}: ${err.message}`); }
+  }
 }
 
 function requireId(notebookId) {

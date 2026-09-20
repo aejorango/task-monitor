@@ -320,3 +320,84 @@ test('rateAsk flips helpful and can clear it again', () => {
   assert.equal(nb.rateAsk(id, null).helpful, null);
   assert.equal(nb.rateAsk('nope', true), null);
 });
+
+/* ── 10. long text sources (T-0052 / BUG-009) ──────────────────────────────
+   `source add --type text` puts the body in argv. An AI answer saved to a
+   notebook can be hundreds of kilobytes, which blows past ARG_MAX and fails
+   with an error nobody can read. Long bodies go via a temp file instead. */
+
+test('a short note is still passed inline — no temp file for a one-liner', () => {
+  const plan = nb.sourceAddPlan('nb-1', 'My note', 'Short body');
+  assert.equal(plan.mode, 'inline');
+  assert.deepEqual(plan.args, [
+    'source', 'add', 'Short body', '-n', 'nb-1', '--type', 'text', '--title', 'My note', '--json',
+  ]);
+});
+
+test('a long body is not put in argv', () => {
+  const long = 'x'.repeat(200_000);
+  const plan = nb.sourceAddPlan('nb-1', 'Big answer', long);
+  assert.equal(plan.mode, 'file');
+  const args = plan.args('/tmp/whatever.txt');
+  assert.ok(!args.some((a) => a.length > 1000), 'the body must not be an argument');
+  assert.ok(args.includes('--type'));
+  assert.equal(args[args.indexOf('--type') + 1], 'file');
+  assert.ok(args.includes('/tmp/whatever.txt'));
+});
+
+test('the temp file gets a readable, safe name', () => {
+  const long = 'x'.repeat(5000);
+  assert.equal(nb.sourceAddPlan('nb-1', 'Q3 Report: Sales/Marketing', long).tempName,
+    'Q3-Report-Sales-Marketing.txt');
+  assert.equal(nb.sourceAddPlan('nb-1', '///', long).tempName, 'note.txt');
+  assert.equal(nb.sourceAddPlan('nb-1', '', long).tempName, 'Task-Monitor-note.txt');
+});
+
+test('the title survives either route', () => {
+  assert.equal(nb.sourceAddPlan('nb-1', 'Kept', 'short').title, 'Kept');
+  assert.equal(nb.sourceAddPlan('nb-1', 'Kept', 'x'.repeat(5000)).title, 'Kept');
+  assert.equal(nb.sourceAddPlan('nb-1', '', 'short').title, 'Task Monitor note');
+});
+
+test('a 300 KB body is delivered, and the temp file is cleaned up', async () => {
+  // The fixture reports back the argument it was given and how big that file
+  // is — proof the content arrived without going through argv.
+  useFixture(fixture(`
+    import fs from 'node:fs';
+    const args = process.argv.slice(2).filter((a) => a !== '--quiet');
+    const p = args[args.indexOf('add') + 1];
+    const size = fs.statSync(p).size;
+    console.log(JSON.stringify({ ok: true, path: p, size }));
+  `));
+
+  const body = 'The quick brown fox. '.repeat(15_000);   // ~300 KB
+  assert.ok(body.length > 250_000, 'this must exceed a comfortable ARG_MAX');
+
+  const data = await nb.addSourceText('nb-1', 'Huge answer', body);
+  // addSourceText trims, so compare against what it actually stores.
+  assert.equal(data.size, body.trim().length, 'the whole body reached the CLI');
+  assert.match(data.path, /Huge-answer\.txt$/);
+  assert.equal(fs.existsSync(data.path), false, 'the temp file must not be left behind');
+});
+
+test('the temp file is removed even when the CLI fails', async () => {
+  useFixture(fixture(`
+    const args = process.argv.slice(2).filter((a) => a !== '--quiet');
+    const p = args[args.indexOf('add') + 1];
+    console.log(JSON.stringify({ error: true, message: 'Notebook is full', path: p }));
+    process.exit(1);
+  `));
+
+  let caught = null;
+  try { await nb.addSourceText('nb-1', 'Doomed', 'y'.repeat(5000)); }
+  catch (err) { caught = err; }
+
+  assert.ok(caught, 'a failure must surface');
+  assert.match(caught.message, /Notebook is full/, 'and read as the CLI wrote it');
+  assert.doesNotMatch(caught.message, /\btrue\b/, 'never the word "true"');
+});
+
+test('an empty body is refused before anything is spawned', async () => {
+  useFixture(fixture('console.log(JSON.stringify({ ok: true }));'));
+  await assert.rejects(() => nb.addSourceText('nb-1', 't', '   '), /empty text source/);
+});
