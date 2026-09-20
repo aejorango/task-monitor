@@ -58,10 +58,13 @@ test('no screen tells the user to open the developer console', () => {
   assert.deepEqual(offenders, [], 'nobody outside this repo has a console open');
 });
 
-test('the webhooks panel is honest that nothing is delivered yet', () => {
+test('the webhooks panel describes what it does without naming the plumbing', () => {
+  // It used to say "Not sending yet", which was true until T-0043 made
+  // delivery real. What must never come back is the implementation detail.
   const settings = fs.readFileSync(path.join(componentsDir, 'SettingsView.jsx'), 'utf8');
   const section = settings.slice(settings.indexOf('function WebhooksSection'));
-  const head = section.slice(0, 2000);
-  assert.match(head, /Not sending yet/, 'a stored-only feature must say so');
-  assert.doesNotMatch(head, /Cloud Function/, 'that is an implementation detail');
+  const head = section.slice(0, 2500);
+  assert.match(head, /Send an automatic message to another tool/);
+  assert.doesNotMatch(head, /Cloud Function|Firestore trigger|HMAC/,
+    'that is an implementation detail');
 });

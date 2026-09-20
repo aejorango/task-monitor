@@ -1,6 +1,6 @@
 // src/components/SettingsView.jsx — per-device preferences + data export.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
@@ -25,6 +25,7 @@ import {
   addWebhook,
   updateWebhook,
   softDeleteWebhook,
+  subscribeToWebhookDeliveries,
 } from '../services/firebase';
 import {
   auth,
@@ -253,7 +254,7 @@ export default function SettingsView() {
 
         <div className="htu-content">
 
-      <WorkspacesSection currentUser={currentUser} />
+      <WorkspacesSection currentUser={currentUser} isSuperadmin={isSuperadmin} />
 
       <section id="settings-appearance" className="settings-hero htu-section">
         <div className="settings-hero-head">
@@ -869,19 +870,30 @@ const EVENT_OPTIONS = [
 
 function WebhooksSection({ userId }) {
   const { hooks } = useWebhooks();
+  const workspaceId = useActiveWorkspaceId();
   const [editing, setEditing] = useState(null);
+  const [deliveries, setDeliveries] = useState([]);
+  const [showLog, setShowLog] = useState(false);
+
+  useEffect(() => {
+    if (!showLog || !workspaceId) return undefined;
+    return subscribeToWebhookDeliveries(workspaceId, setDeliveries);
+  }, [showLog, workspaceId]);
+
+  // The most recent attempt per webhook, so each row can say how it is doing.
+  const lastByHook = useMemo(() => {
+    const map = new Map();
+    for (const d of deliveries) if (!map.has(d.webhookId)) map.set(d.webhookId, d);
+    return map;
+  }, [deliveries]);
 
   return (
     <section id="settings-webhooks" className="review-section htu-section">
       <h2 className="review-h2">Webhooks</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
         Send an automatic message to another tool — Slack, Make, Zapier — when
-        something changes here.
-      </p>
-      <p className="muted small">
-        <span className="badge badge-soft-warn">Not sending yet</span>{' '}
-        You can set webhooks up now, but nothing is delivered until sending is
-        switched on. Anything you save here is kept and will start working then.
+        something changes here. Each message is signed with your secret so the
+        other tool can check it really came from you.
       </p>
 
       {hooks.length === 0 ? (
@@ -897,7 +909,17 @@ function WebhooksSection({ userId }) {
                 <strong>{h.name || '(unnamed)'}</strong>
                 <span className="muted small" style={{ marginLeft: 8 }}>{h.url}</span>
               </span>
-              <span className="muted small">{(h.events || []).length} events</span>
+              <span className="muted small">
+                {(h.events || []).length} event{(h.events || []).length === 1 ? '' : 's'}
+                {lastByHook.get(h.id) && (
+                  <>
+                    {' · '}
+                    <span className={lastByHook.get(h.id).ok ? 'ok-text' : 'link-danger'}>
+                      {lastByHook.get(h.id).ok ? 'last one delivered' : 'last one failed'}
+                    </span>
+                  </>
+                )}
+              </span>
               <button className="btn btn-sm btn-ghost" onClick={() => setEditing(h)}>Edit</button>
               <button className="btn btn-sm btn-ghost link-danger" onClick={() => {
                 if (confirm('Delete this webhook?')) softDeleteWebhook(h.id);
@@ -907,9 +929,49 @@ function WebhooksSection({ userId }) {
         </ul>
       )}
 
-      <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => setEditing('new')}>
-        + New webhook
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-sm" onClick={() => setEditing('new')}>
+          + New webhook
+        </button>
+        {hooks.length > 0 && (
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowLog((v) => !v)}>
+            {showLog ? 'Hide delivery history' : 'Delivery history'}
+          </button>
+        )}
+      </div>
+
+      {showLog && (
+        <div style={{ marginTop: 12 }}>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            The last 50 attempts, newest first. Kept for 30 days.
+          </p>
+          {deliveries.length === 0 ? (
+            <p className="muted small">
+              Nothing sent yet. A message goes out the next time one of the events
+              you picked happens.
+            </p>
+          ) : (
+            <ul className="dep-list">
+              {deliveries.map((d) => (
+                <li key={d.id} className="dep-item" style={{ gridTemplateColumns: 'auto auto 1fr auto' }}>
+                  <span className={`badge badge-soft-${d.ok ? 'success' : 'danger'}`}>
+                    {d.ok ? 'sent' : 'failed'}
+                  </span>
+                  <span className="muted small">{d.event}</span>
+                  <span className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <strong>{d.webhookName || d.url}</strong>
+                    <span className="muted" style={{ marginLeft: 8 }}>{d.message}</span>
+                  </span>
+                  <span className="muted small">
+                    {d.at?.toDate ? d.at.toDate().toLocaleString() : ''}
+                    {d.attempts > 1 && ` · ${d.attempts} tries`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {editing && (
         <WebhookEditor
@@ -999,7 +1061,7 @@ function WebhookEditor({ hook, userId, onClose }) {
 
 // ─── Workspaces section ─────────────────────────────────────────────────────
 
-function WorkspacesSection({ currentUser }) {
+function WorkspacesSection({ currentUser, isSuperadmin = false }) {
   const { workspaces } = useWorkspaces();
   const activeId = useActiveWorkspaceId();
   const active = workspaces.find((w) => w.id === activeId);
