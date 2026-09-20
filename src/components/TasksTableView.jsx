@@ -19,6 +19,7 @@ import { buildTaskListDocument } from '../services/taskExport';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import TaskEditor from './TaskEditor';
+import ImportWizard from './ImportWizard';
 import Icon from './Icon';
 
 export default function TasksTableView({ projectFilter = 'all', savedViewId = null }) {
@@ -63,6 +64,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
   }, [picker]);
 
   const [editing, setEditing] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const visible = useMemo(
     () => (projectFilter === 'all' ? tasks : tasks.filter((t) => t.projectId === projectFilter)),
@@ -147,6 +149,9 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
             kind="table"
             title="Save this table as a spreadsheet, CSV or PDF"
           />
+          <button className="btn" onClick={() => setImportOpen(true)} title="Import tasks from a spreadsheet">
+            Import
+          </button>
           <button className="btn" onClick={saveView} disabled={saving}>
             {saving ? 'Saving…' : savedView ? '★ Update this view' : '★ Save as view'}
           </button>
@@ -292,6 +297,8 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
       {editing && (
         <TaskEditor task={editing} projects={projects} onClose={() => setEditing(null)} />
       )}
+
+      {importOpen && <ImportWizard initialKind="tasks" onClose={() => setImportOpen(false)} />}
     </>
   );
 }

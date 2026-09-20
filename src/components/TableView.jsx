@@ -9,6 +9,7 @@ import {
 } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import CsvImporter from './CsvImporter';
+import ImportWizard from './ImportWizard';
 import { downloadFile } from '../services/download';
 
 const COLUMNS = [
@@ -44,6 +45,7 @@ export default function TableView({ projectFilter }) {
   const [selected, setSelected] = useState(new Set());
   const [editing, setEditing]   = useState(null);
   const [importerOpen, setImporterOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return activities.filter((a) => projectFilter === 'all' || a.projectId === projectFilter);
@@ -122,11 +124,15 @@ export default function TableView({ projectFilter }) {
         </div>
         <div className="page-actions">
           <button className="btn" onClick={() => setImporterOpen(true)}>Import CSV</button>
+          <button className="btn" onClick={() => setWizardOpen(true)} title="Import tasks, projects or activities from any spreadsheet">
+            Import from spreadsheet
+          </button>
           <button className="btn" onClick={() => exportCsv(sorted)}>Export all CSV</button>
         </div>
       </div>
 
       {importerOpen && <CsvImporter onClose={() => setImporterOpen(false)} />}
+      {wizardOpen && <ImportWizard initialKind="activities" onClose={() => setWizardOpen(false)} />}
 
       {selected.size > 0 && (
         <BulkBar

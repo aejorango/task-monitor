@@ -62,3 +62,4 @@ One line per task from the Ideon task sheet.
 - T-0056 — Projects and segments have colors but no icons — src/services/icons.js, src/services/icons.test.mjs, src/components/ProjectsView.jsx, src/services/firebase.js, src/App.css, tests/ui/groupIcons.test.mjs
 - T-0057 — Soft-deleted items cannot be seen or restored — src/components/TrashView.jsx, src/services/firebase.js, src/App.jsx, src/components/AppShell.jsx, tests/ui/trash.test.mjs
 - T-0058 — Weekly timesheet per person exportable to Excel — src/services/timesheet.js, src/services/timesheet.test.mjs, src/components/TimesheetView.jsx, src/App.jsx, src/components/AppShell.jsx, src/services/commandPalette.js, src/App.css, tests/ui/timesheet.test.mjs
+- T-0059 — Import wizard for tasks and projects — src/services/csv.js, src/services/csv.test.mjs, src/components/ImportWizard.jsx, src/components/TableView.jsx, src/components/TasksTableView.jsx, src/App.css, tests/ui/importWizard.test.mjs

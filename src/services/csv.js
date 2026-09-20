@@ -231,3 +231,183 @@ export function summarizeImport(preview) {
     totalHours: valid.reduce((s, r) => s + r.hours, 0),
   };
 }
+
+/* ── Generalised import (T-0059 / NEW-006) ─────────────────────────────────
+   The first importer only understood activities, and only with our own column
+   names. This describes each importable kind as a list of fields, so one screen
+   can import tasks, projects or activities — and so the person can map their
+   own column names onto ours with a dropdown instead of renaming a
+   spreadsheet. */
+
+const STATUS_WORDS = {
+  todo: ['todo', 'to do', 'to-do', 'not started', 'backlog', 'new', 'open', 'pending'],
+  doing: ['doing', 'in progress', 'in-progress', 'started', 'ongoing', 'wip', 'active'],
+  done: ['done', 'complete', 'completed', 'finished', 'closed'],
+};
+const PRIORITY_WORDS = {
+  high: ['high', 'urgent', 'critical', 'p0', 'p1', '1'],
+  medium: ['medium', 'med', 'normal', 'p2', '2'],
+  low: ['low', 'minor', 'p3', '3'],
+};
+
+const matchWord = (raw, table, fallback) => {
+  const s = String(raw || '').toLowerCase().trim();
+  if (!s) return fallback;
+  for (const [value, words] of Object.entries(table)) {
+    if (words.some((w) => s === w || s.startsWith(w))) return value;
+  }
+  return fallback;
+};
+
+export const normalizeStatus = (raw) => matchWord(raw, STATUS_WORDS, 'todo');
+export const normalizePriority = (raw) => matchWord(raw, PRIORITY_WORDS, 'medium');
+
+/** Split a cell holding several values: "a, b; c" or one per line. */
+export const splitList = (raw) => String(raw || '')
+  .split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+
+/**
+ * What each importable kind needs.
+ *  key       — the field on the document
+ *  label     — what the mapping dropdown calls it
+ *  aliases   — header names we recognise without being told
+ *  required  — the import cannot proceed without it
+ *  parse     — cell → value
+ */
+export const IMPORT_KINDS = {
+  tasks: {
+    label: 'Tasks',
+    describe: 'One row per task. Titles are required; everything else is optional.',
+    fields: [
+      { key: 'title', label: 'Task name', required: true, aliases: ['task', 'title', 'task title', 'task name', 'name', 'summary'], parse: (v) => String(v || '').trim() },
+      { key: 'project', label: 'Project', aliases: ['project', 'project name'], parse: (v) => String(v || '').trim() },
+      { key: 'phase', label: 'Phase', aliases: ['phase', 'stage', 'milestone'], parse: (v) => String(v || '').trim() },
+      { key: 'description', label: 'Description', aliases: ['description', 'details', 'notes'], parse: (v) => String(v || '').trim() },
+      { key: 'status', label: 'Status', aliases: ['status', 'state'], parse: normalizeStatus },
+      { key: 'priority', label: 'Priority', aliases: ['priority', 'importance'], parse: normalizePriority },
+      // Blank means "no date", not "today" — see the note on activities.date.
+      { key: 'startDate', label: 'Start date', aliases: ['start', 'start date', 'planned start'], parse: (v) => (String(v || '').trim() ? normalizeDate(v) : '') },
+      { key: 'endDate', label: 'Due date', aliases: ['due', 'due date', 'end', 'end date', 'deadline', 'target'], parse: (v) => (String(v || '').trim() ? normalizeDate(v) : '') },
+      { key: 'tags', label: 'Tags', aliases: ['tags', 'labels'], parse: splitList },
+      { key: 'requestedBy', label: 'Requested by', aliases: ['requested by', 'requester', 'owner', 'assignee', 'assigned to'], parse: (v) => String(v || '').trim() },
+    ],
+  },
+  projects: {
+    label: 'Projects',
+    describe: 'One row per project. Names are required.',
+    fields: [
+      { key: 'name', label: 'Project name', required: true, aliases: ['project', 'name', 'project name', 'title'], parse: (v) => String(v || '').trim() },
+      { key: 'description', label: 'Description', aliases: ['description', 'details', 'notes', 'summary'], parse: (v) => String(v || '').trim() },
+      { key: 'segment', label: 'Segment', aliases: ['segment', 'group', 'portfolio', 'category'], parse: (v) => String(v || '').trim() },
+      { key: 'phases', label: 'Phases', aliases: ['phases', 'stages', 'milestones'], parse: splitList },
+    ],
+  },
+  activities: {
+    label: 'Activity log',
+    describe: 'One row per logged entry. A task name and a date are required.',
+    fields: [
+      { key: 'task', label: 'Task', required: true, aliases: ['task', 'task title', 'task name'], parse: (v) => String(v || '').trim() },
+      // Deliberately NOT normalizeDate: that falls back to today, which for a
+      // single row is helpful and for a 500-row import would silently date
+      // everything today. A blank date here is a row the person must fix.
+      { key: 'date', label: 'Date', required: true, aliases: ['date', 'logged', 'day'], parse: (v) => (String(v || '').trim() ? normalizeDate(v) : '') },
+      { key: 'project', label: 'Project', aliases: ['project'], parse: (v) => String(v || '').trim() },
+      { key: 'phase', label: 'Phase', aliases: ['phase'], parse: (v) => String(v || '').trim() },
+      { key: 'comment', label: 'What was done', aliases: ['activity details', 'comment', 'details', 'description', 'work'], parse: (v) => String(v || '').trim() },
+      { key: 'hours', label: 'Hours', aliases: ['hours', 'hours spent', 'duration', 'time'], parse: normalizeHours },
+      { key: 'completion', label: 'Completion', aliases: ['completion', 'completion status', 'status'], parse: normalizeCompletion },
+      { key: 'output', label: 'Output links', aliases: ['output link', 'output', 'attachments', 'links'], parse: parseAttachments },
+      { key: 'bottleneck', label: 'Blockers', aliases: ['bottlenecks', 'bottleneck', 'remarks', 'blockers'], parse: (v) => String(v || '').trim() },
+      { key: 'requestedBy', label: 'Requested by', aliases: ['requested by', 'requester'], parse: (v) => String(v || '').trim() },
+    ],
+  },
+};
+
+/**
+ * Guess which column is which, from the header row. The user can override every
+ * one of these in the mapping step — this only saves them the common case.
+ * @returns {Record<string, number>} field key → column index (-1 = unmapped)
+ */
+export function guessMapping(headers, kind) {
+  const spec = IMPORT_KINDS[kind];
+  if (!spec) return {};
+  const lower = (headers || []).map((h) => String(h).trim().toLowerCase());
+  const taken = new Set();
+  const mapping = {};
+
+  for (const field of spec.fields) {
+    let idx = -1;
+    // Exact alias first, so "Status" does not get grabbed by a fuzzy match.
+    for (const alias of field.aliases) {
+      const i = lower.indexOf(alias);
+      if (i !== -1 && !taken.has(i)) { idx = i; break; }
+    }
+    if (idx === -1) {
+      for (const alias of field.aliases) {
+        const i = lower.findIndex((h, j) => !taken.has(j) && h.includes(alias));
+        if (i !== -1) { idx = i; break; }
+      }
+    }
+    if (idx !== -1) taken.add(idx);
+    mapping[field.key] = idx;
+  }
+  return mapping;
+}
+
+/** Which required fields are still unmapped, by label. */
+export function missingRequired(mapping, kind) {
+  const spec = IMPORT_KINDS[kind];
+  if (!spec) return [];
+  return spec.fields
+    .filter((f) => f.required && (mapping[f.key] === undefined || mapping[f.key] === -1))
+    .map((f) => f.label);
+}
+
+/**
+ * Body rows → parsed records, with a per-row reason when one cannot be used.
+ * Nothing is written: this is the dry run the wizard previews.
+ */
+export function parseImportRows(body, mapping, kind) {
+  const spec = IMPORT_KINDS[kind];
+  if (!spec) return [];
+
+  return (body || []).map((row, idx) => {
+    const record = {};
+    for (const field of spec.fields) {
+      const col = mapping[field.key];
+      record[field.key] = field.parse(col === undefined || col === -1 ? '' : row[col]);
+    }
+
+    const missing = spec.fields
+      .filter((f) => f.required && !String(record[f.key] ?? '').trim())
+      .map((f) => f.label);
+
+    return {
+      idx,
+      line: idx + 2,                    // +1 header, +1 for 1-based counting
+      record,
+      valid: missing.length === 0,
+      reason: missing.length ? `Missing ${missing.join(' and ')}.` : null,
+    };
+  });
+}
+
+/** What the confirm step says will happen. */
+export function summarizeImportRows(rows) {
+  const valid = rows.filter((r) => r.valid);
+  return {
+    total: rows.length,
+    willImport: valid.length,
+    willSkip: rows.length - valid.length,
+    reasons: [...new Set(rows.filter((r) => !r.valid).map((r) => r.reason))],
+  };
+}
+
+/** Firestore takes 500 writes per batch; 400 leaves room for counter updates. */
+export const IMPORT_BATCH_SIZE = 400;
+
+export function chunkForImport(rows, size = IMPORT_BATCH_SIZE) {
+  const out = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}

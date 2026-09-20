@@ -240,3 +240,146 @@ test('an empty preview summarises to zeroes rather than NaN', () => {
     rows: 0, willImport: 0, willSkip: 0, newTasks: 0, existingTasks: 0, totalHours: 0,
   });
 });
+
+// ─── Generalised import (T-0059 / NEW-006) ──────────────────────────────────
+
+import {
+  IMPORT_BATCH_SIZE, IMPORT_KINDS, chunkForImport, guessMapping, missingRequired,
+  normalizePriority, normalizeStatus, parseImportRows, splitList,
+  summarizeImportRows,
+} from './csv.js';
+
+test('every importable kind describes itself in plain words', () => {
+  for (const [key, spec] of Object.entries(IMPORT_KINDS)) {
+    assert.ok(spec.label, key);
+    assert.match(spec.describe, /^[A-Z].*\.$/, key);
+    assert.ok(spec.fields.length >= 3, key);
+    for (const f of spec.fields) {
+      assert.ok(f.key && f.label && typeof f.parse === 'function', `${key}.${f.key}`);
+      assert.ok(f.aliases.length, `${key}.${f.key} has no aliases to guess from`);
+      assert.doesNotMatch(f.label, /^[a-z]/, `${key}.${f.key} label reads like a field name`);
+    }
+  }
+});
+
+test('status and priority understand how people actually write them', () => {
+  for (const [raw, expected] of [
+    ['To Do', 'todo'], ['Not started', 'todo'], ['Backlog', 'todo'],
+    ['In Progress', 'doing'], ['WIP', 'doing'], ['Active', 'doing'],
+    ['Complete', 'done'], ['Finished', 'done'], ['Closed', 'done'],
+    ['', 'todo'], ['something else', 'todo'],
+  ]) assert.equal(normalizeStatus(raw), expected, raw);
+
+  for (const [raw, expected] of [
+    ['High', 'high'], ['URGENT', 'high'], ['P1', 'high'],
+    ['Normal', 'medium'], ['', 'medium'],
+    ['Low', 'low'], ['Minor', 'low'],
+  ]) assert.equal(normalizePriority(raw), expected, raw);
+});
+
+test('a multi-value cell splits however it was written', () => {
+  assert.deepEqual(splitList('a, b; c\nd'), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(splitList(''), []);
+});
+
+test('our own export headers are recognised without any mapping', () => {
+  const headers = ['Project', 'Phase', 'Task', 'Activity details', 'Date', 'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
+  const mapping = guessMapping(headers, 'activities');
+  assert.equal(mapping.task, 2);
+  assert.equal(mapping.date, 4);
+  assert.equal(mapping.hours, 9);
+  assert.deepEqual(missingRequired(mapping, 'activities'), []);
+});
+
+test('somebody else’s headers are guessed too', () => {
+  const mapping = guessMapping(['Summary', 'Deadline', 'Importance', 'State'], 'tasks');
+  assert.equal(mapping.title, 0);
+  assert.equal(mapping.endDate, 1);
+  assert.equal(mapping.priority, 2);
+  assert.equal(mapping.status, 3);
+});
+
+test('one column is never claimed by two fields', () => {
+  const mapping = guessMapping(['Project', 'Project name'], 'projects');
+  const used = Object.values(mapping).filter((i) => i !== -1);
+  assert.equal(new Set(used).size, used.length);
+});
+
+test('an unrecognised header is left unmapped for the user to set', () => {
+  const mapping = guessMapping(['Widget', 'Sprocket'], 'tasks');
+  assert.equal(mapping.title, -1);
+  assert.deepEqual(missingRequired(mapping, 'tasks'), ['Task name']);
+});
+
+test('rows are parsed into records, with the values normalised', () => {
+  const rows = parseImportRows(
+    [['Ship the thing', 'SBLAF rollout', 'In Progress', 'Urgent', '5/19/2026', 'a, b']],
+    guessMapping(['Task', 'Project', 'Status', 'Priority', 'Due', 'Tags'], 'tasks'),
+    'tasks',
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].valid, true);
+  assert.equal(rows[0].record.title, 'Ship the thing');
+  assert.equal(rows[0].record.status, 'doing');
+  assert.equal(rows[0].record.priority, 'high');
+  assert.equal(rows[0].record.endDate, '2026-05-19');
+  assert.deepEqual(rows[0].record.tags, ['a', 'b']);
+});
+
+test('a row missing something required says which line and which field', () => {
+  const rows = parseImportRows(
+    [['Has a name'], ['']],
+    guessMapping(['Task'], 'tasks'),
+    'tasks',
+  );
+  assert.equal(rows[0].valid, true);
+  assert.equal(rows[1].valid, false);
+  assert.equal(rows[1].line, 3, 'the spreadsheet line, not the array index');
+  assert.match(rows[1].reason, /Missing Task name/);
+});
+
+test('two missing fields read as a sentence, not a list of keys', () => {
+  const rows = parseImportRows([['', '']], guessMapping(['Task', 'Date'], 'activities'), 'activities');
+  assert.match(rows[0].reason, /Missing Task and Date\./);
+});
+
+test('unmapped optional columns produce empty values, never undefined', () => {
+  const rows = parseImportRows([['Just a title']], { title: 0 }, 'tasks');
+  const r = rows[0].record;
+  assert.equal(rows[0].valid, true);
+  for (const [k, v] of Object.entries(r)) {
+    assert.notEqual(v, undefined, k);
+    assert.notEqual(v, null, k);
+  }
+  assert.deepEqual(r.tags, []);
+});
+
+test('the summary says exactly what will happen, and why rows are skipped', () => {
+  const rows = parseImportRows([['A'], [''], ['']], { title: 0 }, 'tasks');
+  const s = summarizeImportRows(rows);
+  assert.equal(s.total, 3);
+  assert.equal(s.willImport, 1);
+  assert.equal(s.willSkip, 2);
+  assert.deepEqual(s.reasons, ['Missing Task name.'], 'one reason, not two copies of it');
+});
+
+test('writes are batched under the Firestore limit', () => {
+  assert.ok(IMPORT_BATCH_SIZE <= 450, 'Firestore allows 500 per batch and counters use some');
+  const chunks = chunkForImport(Array.from({ length: 1000 }, (_, i) => i));
+  assert.equal(chunks.length, 3);
+  assert.ok(chunks.every((c) => c.length <= IMPORT_BATCH_SIZE));
+  assert.equal(chunks.flat().length, 1000, 'nothing is dropped between batches');
+  assert.deepEqual(chunkForImport([]), []);
+});
+
+test('a bulk import never invents a date for a blank cell', () => {
+  // normalizeDate falls back to today, which is right for one row and wrong
+  // for five hundred — it would silently date a whole history as "today".
+  const rows = parseImportRows([['A task', '']], guessMapping(['Task', 'Due'], 'tasks'), 'tasks');
+  assert.equal(rows[0].record.endDate, '');
+  assert.equal(rows[0].valid, true, 'a task without a due date is still a task');
+
+  const acts = parseImportRows([['A task', '']], guessMapping(['Task', 'Date'], 'activities'), 'activities');
+  assert.equal(acts[0].valid, false, 'an activity with no date is not usable');
+  assert.match(acts[0].reason, /Missing Date/);
+});
