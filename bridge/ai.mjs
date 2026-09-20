@@ -15,6 +15,7 @@
 // instead of ~300.
 
 import { spawn, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { askNotebook } from './notebooklm.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,16 +28,43 @@ export const WEB_TOOLS = ['WebSearch', 'WebFetch'];
 export const API_PRICE = { input: 3, output: 15 };  // USD per 1M tokens
 export const PROVIDERS = ['claude-code', 'api', 'mock'];
 
-const CONFIG_DIR  = path.join(os.homedir(), '.task-monitor');
+const CONFIG_DIR  = process.env.TM_BRIDGE_CONFIG_DIR || path.join(os.homedir(), '.task-monitor');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'bridge-config.json');
+const TOKEN_FILE  = path.join(CONFIG_DIR, 'bridge-token');
 
 const DEFAULT_SETTINGS = {
   provider:  'auto',   // 'auto' | 'claude-code' | 'api' | 'mock'
   cliModel:  '',       // '' → whatever the CLI is configured to use
   apiModel:  'claude-sonnet-4-5-20250929',
   maxTokens: 2048,
-  cliPath:   '',       // '' → resolve `claude` on PATH
+  cliPath:   '',       // '' → resolve `claude` on PATH. NOT settable over HTTP.
 };
+
+// Which settings a web page is allowed to change.
+//
+// `cliPath` is deliberately absent. This process spawns that path with argv it
+// also controls, so letting a page write it turns any XSS — or a compromised
+// deploy of the production site — into local code execution on the operator's
+// machine. The path comes from the environment (TM_BRIDGE_CLI_PATH) or from
+// the config file the operator edits by hand, and from nowhere else.
+export const HTTP_SETTABLE_KEYS = ['provider', 'cliModel', 'apiModel', 'maxTokens'];
+
+// `cliModel` is passed to the CLI as `--model <value>`, so it is argv too.
+// Free text there is an injection surface; an explicit list is not.
+export const ALLOWED_CLI_MODELS = [
+  '',                              // use whatever the CLI is configured with
+  'opus', 'sonnet', 'haiku',       // CLI aliases
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-fable-5-1',
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-5-20250929',
+  'claude-opus-4-5-20251101',
+];
+
+export function isAllowedModel(value) {
+  return ALLOWED_CLI_MODELS.includes(String(value ?? ''));
+}
 
 /* ── settings ─────────────────────────────────────────────────────────── */
 
@@ -47,16 +75,47 @@ export function aiSettings() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { /* first run */ }
   _settings = { ...DEFAULT_SETTINGS, ...saved };
+  // The environment wins over the config file for the one privileged setting.
+  if (process.env.TM_BRIDGE_CLI_PATH) _settings.cliPath = process.env.TM_BRIDGE_CLI_PATH;
+  // A config file written before this validation existed could still carry a
+  // model the CLI would choke on — or worse. Sanitise on load, not just on set.
+  if (!isAllowedModel(_settings.cliModel)) _settings.cliModel = DEFAULT_SETTINGS.cliModel;
+  if (!isAllowedModel(_settings.apiModel)) _settings.apiModel = DEFAULT_SETTINGS.apiModel;
   return _settings;
 }
 
-export function setAiSettings(patch = {}) {
+/** Drop the memoised settings so the next read re-reads disk + env. */
+export function resetAiSettings() {
+  _settings = null;
+  return aiSettings();
+}
+
+/**
+ * @param {object} patch
+ * @param {{source?: 'http'|'local'}} opts
+ *   'http'  (default) — only HTTP_SETTABLE_KEYS are honoured.
+ *   'local' — the operator's own env/config, so cliPath is allowed too.
+ */
+export function setAiSettings(patch = {}, { source = 'http' } = {}) {
+  const allowed = source === 'local'
+    ? Object.keys(DEFAULT_SETTINGS)
+    : HTTP_SETTABLE_KEYS;
+
   const next = { ...aiSettings() };
-  for (const k of Object.keys(DEFAULT_SETTINGS)) {
-    if (patch[k] !== undefined && patch[k] !== null) next[k] = patch[k];
+  for (const k of allowed) {
+    // Own properties only — a `__proto__` or `constructor` key in the JSON body
+    // must never reach the object.
+    if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+    if (patch[k] === undefined || patch[k] === null) continue;
+    next[k] = patch[k];
   }
+
   next.maxTokens = Math.max(256, Math.min(8192, Number(next.maxTokens) || DEFAULT_SETTINGS.maxTokens));
   if (!['auto', ...PROVIDERS].includes(next.provider)) next.provider = 'auto';
+  if (!isAllowedModel(next.cliModel)) next.cliModel = aiSettings().cliModel;
+  if (!isAllowedModel(next.apiModel)) next.apiModel = aiSettings().apiModel;
+  next.cliPath = String(next.cliPath || '');
+
   _settings = next;
   try {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -66,6 +125,61 @@ export function setAiSettings(patch = {}) {
   }
   recheckProvider();   // a provider/model change invalidates the detection cache
   return next;
+}
+
+/* ── per-session admin token ──────────────────────────────────────────── */
+// Changing what the bridge runs is an operator action, not a page action. The
+// origin allowlist alone cannot tell the operator's own tab apart from a
+// compromised copy of the same site, so privileged routes need a secret the
+// operator hands over: it is printed when the bridge starts and written to
+// ~/.task-monitor/bridge-token (0600). Asking questions and reading status
+// stay open to allow-listed origins, exactly as before.
+
+// Only the route that changes configuration. Re-checking which provider is
+// live spawns nothing new and changes no setting, so gating it would break the
+// "Re-check AI" button for everyone to guard nothing.
+const TOKEN_ROUTES = new Set(['POST /ai/settings']);
+
+let _token = null;
+
+export function bridgeToken() {
+  if (_token) return _token;
+  _token = crypto.randomBytes(16).toString('hex');
+  try {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(TOKEN_FILE, _token + '\n', { mode: 0o600 });
+  } catch (err) {
+    console.warn(`[bridge] could not write ${TOKEN_FILE}: ${err.message}`);
+  }
+  return _token;
+}
+
+export function bridgeTokenFile() { return TOKEN_FILE; }
+
+/** Token file path with $HOME collapsed — safe to put in an HTTP response. */
+export function bridgeTokenFileShort() {
+  return TOKEN_FILE.startsWith(os.homedir())
+    ? '~' + TOKEN_FILE.slice(os.homedir().length)
+    : path.basename(TOKEN_FILE);
+}
+
+/**
+ * Settings as a web page may see them. cliPath is the operator's own
+ * filesystem layout and is not settable from here, so it is not sent either.
+ */
+export function publicAiSettings() {
+  const { cliPath, ...rest } = aiSettings();   // eslint-disable-line no-unused-vars
+  return rest;
+}
+
+export function requiresToken(route) { return TOKEN_ROUTES.has(route); }
+
+/** Constant-time compare so a wrong guess leaks nothing through timing. */
+export function tokenMatches(candidate) {
+  const expected = bridgeToken();
+  const given = String(candidate ?? '');
+  if (given.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }
 
 /* ── detection (cached, with manual re-check) ─────────────────────────── */

@@ -35,6 +35,10 @@ const DEFAULT_SETTINGS = {
   cliModel:  '',                     // '' → whatever the CLI defaults to
   apiModel:  '',                     // '' → the company/personal model
   maxTokens: 2048,
+  // The bridge prints an admin code on startup. It is only needed to CHANGE
+  // the bridge's own configuration — asking questions never needs it. Stored
+  // per device, like every other setting on this page.
+  bridgeToken: '',
   // Placeholder answers are useful in development, but a real user with no
   // brain connected should get the honest "not available" error instead.
   allowMock: !!import.meta.env?.DEV,
@@ -60,6 +64,7 @@ export function setAiSettings(patch = {}) {
   if (!['auto', ...PROVIDERS].includes(next.provider)) next.provider = 'auto';
   if (!['auto', 'on', 'off'].includes(next.bridge)) next.bridge = 'auto';
   next.bridgeUrl = String(next.bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
+  next.bridgeToken = String(next.bridgeToken || '').trim();
   next.maxTokens = Math.max(256, Math.min(8192, Number(next.maxTokens) || DEFAULT_SETTINGS.maxTokens));
   _settings = next;
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
@@ -103,14 +108,19 @@ export function bridgeEnabled() {
 // Exported for services/knowledge.js — the NotebookLM client talks to the same
 // bridge over the same origin allowlist, and must not re-implement any of it.
 export async function bridgeFetch(path, { method = 'GET', body, timeout = BRIDGE_PROBE_MS } = {}) {
-  const { bridgeUrl } = aiSettings();
+  const { bridgeUrl, bridgeToken } = aiSettings();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
+  const headers = {};
+  if (body) headers['content-type'] = 'application/json';
+  // Sent on every call; the bridge only looks at it for the routes that change
+  // its configuration. Harmless elsewhere and keeps one code path.
+  if (bridgeToken) headers['x-bridge-token'] = bridgeToken;
   try {
     const res = await fetch(`${bridgeUrl}${path}`, {
       method,
       signal: ctrl.signal,
-      headers: body ? { 'content-type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await res.json().catch(() => ({}));

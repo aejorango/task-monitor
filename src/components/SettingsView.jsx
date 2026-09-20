@@ -510,6 +510,17 @@ function ThemeTile({ value, label, active, onClick }) {
   );
 }
 
+// Models the bridge will accept. Kept in step with ALLOWED_CLI_MODELS in
+// bridge/ai.mjs — that list is the guard, this one is the wording. The model
+// name is passed to the CLI as argv, which is why it is a fixed list and not
+// a text box.
+const CLI_MODEL_CHOICES = [
+  { value: '',       label: 'Default — whatever Claude Code is set to' },
+  { value: 'sonnet', label: 'Sonnet — balanced speed and quality' },
+  { value: 'opus',   label: 'Opus — deepest thinking, slowest' },
+  { value: 'haiku',  label: 'Haiku — fastest and cheapest' },
+];
+
 // ─── AI brain ────────────────────────────────────────────────────────────
 // Which provider is answering right now, and how to change it. The default
 // is the Claude Code CLI running on this machine via the local bridge —
@@ -556,11 +567,21 @@ function AiBrainSection() {
     try {
       setAiSettings(form);
       // Keep the bridge's own model/provider config in step when it's reachable.
+      // Changing the bridge's configuration needs the admin code; if it is
+      // missing or wrong, say so in plain language instead of failing silently.
+      let bridgeNote = '';
       if (bridge.ok) {
-        try { await pushBridgeSettings({ cliModel: form.cliModel }); } catch { /* bridge may be read-only */ }
+        try {
+          await pushBridgeSettings({ cliModel: form.cliModel, provider: form.provider });
+        } catch (err) {
+          bridgeNote = /admin code/i.test(err?.message || '')
+            ? ' Your preferences are saved on this device, but the bridge kept its own '
+              + 'settings — paste the bridge admin code above to change those too.'
+            : ' Your preferences are saved on this device; the bridge did not accept the change.';
+        }
       }
       const next = await recheck();
-      setNote(`Saved — now using: ${providerLabel(next.provider)}.`);
+      setNote(`Saved — now using: ${providerLabel(next.provider)}.${bridgeNote}`);
     } catch (err) {
       setNote(err?.message || 'Could not save.');
     } finally { setBusy(false); }
@@ -630,8 +651,32 @@ function AiBrainSection() {
           <input className="input" value={form.bridgeUrl} onChange={set('bridgeUrl')} placeholder="http://127.0.0.1:4319" />
         </div>
         <div className="field">
-          <label className="label">CLI model</label>
-          <input className="input" value={form.cliModel} onChange={set('cliModel')} placeholder="Blank = the CLI's own default" />
+          <label className="label">Which Claude model</label>
+          <select className="select" value={form.cliModel} onChange={set('cliModel')}>
+            {CLI_MODEL_CHOICES.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Bigger models think harder and cost more. Leave on the default unless
+            you have a reason to change it.
+          </p>
+        </div>
+        <div className="field">
+          <label className="label">Bridge admin code</label>
+          <input
+            className="input"
+            type="password"
+            autoComplete="off"
+            value={form.bridgeToken}
+            onChange={set('bridgeToken')}
+            placeholder="Paste the code shown when the bridge starts"
+          />
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Only needed to change the settings on this page. Asking questions never
+            needs it. Start the bridge with <span className="mono">npm run bridge</span>{' '}
+            and copy the code it prints.
+          </p>
         </div>
       </div>
 

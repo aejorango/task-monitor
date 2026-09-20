@@ -89,6 +89,23 @@ open is picked up within 60s or instantly on Re-check.
 - `npm test` runs the bridge's unit tests (`node --test`, no dependencies — the
   CLI is never spawned).
 
+### Bridge security
+
+The bridge runs a program on your machine, so two things are locked down:
+
+- **It chooses its own executable.** `cliPath` can only be set from the
+  environment (`TM_BRIDGE_CLI_PATH`) or by editing
+  `~/.task-monitor/bridge-config.json` by hand. The HTTP endpoint ignores it —
+  otherwise any page on an allow-listed origin could point the bridge at an
+  arbitrary local binary.
+- **Changing its settings needs an admin code.** The bridge prints one on
+  startup and saves it to `~/.task-monitor/bridge-token`. Paste it into
+  Settings → AI brain. Asking questions, reading status and "Re-check AI" never
+  need it — only changes to the bridge's own configuration do.
+
+The model name is also argv, so it is picked from a fixed list rather than
+typed (`ALLOWED_CLI_MODELS` in `bridge/ai.mjs`).
+
 ## Knowledge base — NotebookLM (optional)
 
 By default the AI answers from the model's general knowledge. Point it at your

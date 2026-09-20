@@ -15,6 +15,9 @@ import http from 'node:http';
 import {
   askAI, askAIJson, detectProvider, recheckProvider,
   aiSettings, setAiSettings, getUsage, cliVersion, providerLabel, PROVIDERS,
+  bridgeToken, bridgeTokenFile, bridgeTokenFileShort, publicAiSettings,
+  requiresToken, tokenMatches,
+  HTTP_SETTABLE_KEYS, ALLOWED_CLI_MODELS,
 } from './ai.mjs';
 import {
   knowledgeStatus, listNotebooks, resetKnowledgeCaches, knowledgeHint,
@@ -42,7 +45,7 @@ function corsHeaders(origin) {
   return {
     'access-control-allow-origin': allowed,
     'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-headers': 'content-type, x-bridge-token',
     // Chrome's Private Network Access preflight for public https → localhost.
     'access-control-allow-private-network': 'true',
     'access-control-max-age': '600',
@@ -87,7 +90,7 @@ function healthPayload() {
     aiMode: mode,
     aiLabel: providerLabel(mode),
     cli: { available: mode === 'claude-code', version: cliVersion() },
-    settings: aiSettings(),
+    settings: publicAiSettings(),
     providers: PROVIDERS,
     // Read from the cached status only. /health is polled on every page load,
     // and spawning `notebooklm auth check` from here would put a Google
@@ -241,6 +244,18 @@ const server = http.createServer(async (req, res) => {
       if (out) return send(res, out.status, out.body, cors);
     }
 
+    // Privileged routes carry the operator's session token. Origin alone is
+    // not enough: a compromised copy of an allow-listed site is still that
+    // origin, and these routes change what this process runs.
+    if (requiresToken(route) && !tokenMatches(req.headers['x-bridge-token'])) {
+      return send(res, 401, {
+        error: 'This change needs the bridge admin code. It is printed when you '
+             + `start the bridge, and saved in ${bridgeTokenFileShort()}. `
+             + 'Paste it into Settings → AI brain.',
+        needsToken: true,
+      }, cors);
+    }
+
     switch (route) {
       case 'GET /health':
         return send(res, 200, healthPayload(), cors);
@@ -249,12 +264,25 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { aiMode: recheckProvider(), ...healthPayload() }, cors);
 
       case 'GET /ai/settings':
-        return send(res, 200, { settings: aiSettings(), aiMode: detectProvider() }, cors);
+        return send(res, 200, {
+          settings: publicAiSettings(),
+          aiMode: detectProvider(),
+          editable: HTTP_SETTABLE_KEYS,
+          models: ALLOWED_CLI_MODELS,
+        }, cors);
 
       case 'POST /ai/settings': {
         const patch = await readBody(req);
-        const settings = setAiSettings(patch);
-        return send(res, 200, { settings, aiMode: detectProvider() }, cors);
+        // setAiSettings defaults to source:'http', which drops cliPath and
+        // validates the model names. Spelled out here so the constraint is
+        // visible at the route, not only three files away.
+        setAiSettings(patch, { source: 'http' });
+        return send(res, 200, {
+          settings: publicAiSettings(),
+          aiMode: detectProvider(),
+          editable: HTTP_SETTABLE_KEYS,
+          models: ALLOWED_CLI_MODELS,
+        }, cors);
       }
 
       case 'GET /ai/usage':
@@ -292,6 +320,11 @@ server.listen(PORT, HOST, () => {
     console.log('  → Or export ANTHROPIC_API_KEY, then POST /ai/recheck.');
   }
   console.log(`Allowed origins: ${ALLOW_ANY ? '(any — TM_BRIDGE_ORIGINS=*)' : [...ORIGINS].join(', ')}`);
+  console.log('');
+  console.log(`Bridge admin code: ${bridgeToken()}`);
+  console.log('  Needed only to change AI settings from the app.');
+  console.log(`  Paste it into Settings → AI brain. Also saved in ${bridgeTokenFile()}.`);
+  console.log('');
   // Optional layer: probe it in the background so the first /knowledge/status
   // is warm, and never let its absence delay or fail startup.
   knowledgeStatus().then((k) => {
