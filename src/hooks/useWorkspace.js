@@ -15,6 +15,7 @@ import {
   onAuthChange,
   subscribeToWorkspaces,
   migrateToWorkspaces,
+  repairOrphanedDocuments,
   updateMyMemberProfileInWorkspace,
   auth,
 } from '../services/firebase';
@@ -86,6 +87,15 @@ export function useWorkspaces() {
       migrateToWorkspaces(userId)
         .then((res) => {
           if (res?.migrated) console.info('[workspace-migration]', res);
+          // Adopt any documents written without a workspaceId — recurrence
+          // instances spawned before BUG-004 was fixed are invisible until
+          // they belong to a workspace. Runs at most once per device.
+          const wsId = res?.workspaceId || getActiveWorkspaceId();
+          if (wsId) {
+            return repairOrphanedDocuments(userId, wsId)
+              .then((r) => { if (r?.repaired) console.info('[orphan-repair]', r); });
+          }
+          return undefined;
         })
         .catch((err) => console.error('[workspace-migration] failed:', err));
     }

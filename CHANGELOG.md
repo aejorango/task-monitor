@@ -9,3 +9,4 @@ One line per task from the Ideon task sheet.
 - T-0003 — Invite links let any signed-in user become project admin (UI) — src/services/access.js, src/services/access.test.mjs, src/components/ProjectsView.jsx, src/components/InviteClaimView.jsx, src/hooks/usePresence.js
 - T-0004 — Invite links let any signed-in user become project admin (tests & docs) — README.md, tests/rules/invites.rules.test.mjs, tests/rules/presence.rules.test.mjs, src/services/access.test.mjs
 - T-0005 — Approval gate is client-side only; pending users can write data — firestore.rules, src/App.jsx, tests/rules/approval.rules.test.mjs
+- T-0006 — Next recurring task is created without workspaceId — src/services/recurrence.js, src/services/recurrence.test.mjs, src/services/firebase.js, src/hooks/useWorkspace.js

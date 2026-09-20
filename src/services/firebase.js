@@ -41,6 +41,15 @@ import {
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
+// Recurrence maths + the next-instance payload live in a pure module so they
+// can be unit-tested without the Firebase SDK. Re-exported here because the
+// whole app already imports todayLocal/nextRecurrenceDates from this file.
+import {
+  todayLocal,
+  nextRecurrenceDates,
+  buildNextRecurrenceTask,
+} from './recurrence';
+export { todayLocal, nextRecurrenceDates };
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -344,13 +353,6 @@ export function subscribeToCompany(companyId, callback) {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-export function todayLocal() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 export function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -697,6 +699,49 @@ export async function migrateToWorkspaces(userId) {
   return _wsMigrationByUser[userId];
 }
 
+// Repair pass for documents that were written without a workspaceId.
+//
+// Recurrence instances spawned before BUG-004 was fixed have no workspaceId,
+// which means no view can see them — the Board, Calendar and Gantt all
+// subscribe by workspace. They are not lost, just orphaned, so adopt them into
+// the workspace the user is looking at. Owner-only (the rules let a user
+// update their own documents), idempotent, and cheap: one indexed query per
+// collection, and nothing to write once it has run.
+const ORPHAN_REPAIR_KEY = 'task-monitor.orphanRepair.v1';
+
+export async function repairOrphanedDocuments(userId, workspaceId) {
+  if (!userId || !workspaceId) return { repaired: 0, skipped: 'missing ids' };
+
+  const storageKey = `${ORPHAN_REPAIR_KEY}.${userId}.${workspaceId}`;
+  try {
+    if (localStorage.getItem(storageKey)) return { repaired: 0, skipped: 'already run' };
+  } catch { /* private mode — just do the work */ }
+
+  const counts = {};
+  let total = 0;
+  for (const { ref, name } of [
+    { ref: tasksRef,      name: 'tasks' },
+    { ref: activitiesRef, name: 'activities' },
+  ]) {
+    const snap = await getDocs(query(ref, where('userId', '==', userId)));
+    const orphans = snap.docs.filter((d) => !d.data().workspaceId);
+    counts[name] = orphans.length;
+    total += orphans.length;
+
+    let batch = writeBatch(db);
+    let n = 0;
+    for (const d of orphans) {
+      batch.update(d.ref, { workspaceId });
+      n++;
+      if (n % 400 === 0) { await batch.commit(); batch = writeBatch(db); }
+    }
+    if (n % 400 !== 0) await batch.commit();
+  }
+
+  try { localStorage.setItem(storageKey, String(Date.now())); } catch { /* ignored */ }
+  return { repaired: total, counts };
+}
+
 // ─── PROJECTS ───────────────────────────────────────────────────────────────
 // A project is the top-level grouping. It contains an array of phases:
 //   phases: [{ id, name, order }]
@@ -986,86 +1031,13 @@ export async function setTaskStatus(task, nextStatus) {
 
 // ─── Recurrence ─────────────────────────────────────────────────────────────
 
-const DAY = 24 * 60 * 60 * 1000;
-function parseISO(s) {
-  if (!s) return null;
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-function isoOf(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function addDaysISO(s, n) {
-  const d = parseISO(s); if (!d) return null;
-  d.setDate(d.getDate() + n);
-  return isoOf(d);
-}
-// Add `n` months to an ISO date, clamped to the last day of the target
-// month instead of overflowing into the following month (the classic
-// setMonth() bug: Jan 31 + 1 month must land on Feb 28, not Mar 3).
-function addMonthsClampedISO(s, n, targetDay) {
-  const d = parseISO(s); if (!d) return null;
-  const targetMonth = new Date(d.getFullYear(), d.getMonth() + n, 1);
-  const daysInTargetMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
-  targetMonth.setDate(Math.min(targetDay, daysInTargetMonth));
-  return isoOf(targetMonth);
-}
-
-// Given a recurring task, compute the next (start, end) plan dates.
-// The result always lands on the exact weekday/day-of-month the user
-// defined in the recurrence rule (dayOfWeek / dayOfMonth) — it does not
-// just drift forward by interval from whatever the previous instance's
-// dates happened to be. Returns { start, end } or null if no further
-// occurrences (past `until`).
-export function nextRecurrenceDates(task) {
-  const r = task.recurrence;
-  if (!r) return null;
-  const interval = r.interval || 1;
-  const oldStart = task.plan?.startDate;
-  const oldEnd   = task.plan?.endDate;
-
-  if (!oldStart && !oldEnd) {
-    // No anchoring dates → schedule starting today
-    const t = todayLocal();
-    return { start: t, end: t };
-  }
-
-  // Anchor off the due (end) date when available — that's the date the
-  // task is actually "placed on" in Calendar/Gantt.
-  const anchor = oldEnd || oldStart;
-  let nextAnchor;
-
-  if (r.rule === 'daily') {
-    nextAnchor = addDaysISO(anchor, interval);
-  } else if (r.rule === 'weekly') {
-    const targetDow = r.dayOfWeek ?? parseISO(anchor).getDay();
-    const base = addDaysISO(anchor, 7 * interval);
-    const drift = (targetDow - parseISO(base).getDay() + 7) % 7;
-    nextAnchor = drift === 0 ? base : addDaysISO(base, drift);
-  } else {
-    const targetDom = r.dayOfMonth ?? parseISO(anchor).getDate();
-    nextAnchor = addMonthsClampedISO(anchor, interval, targetDom);
-  }
-  if (!nextAnchor) return null;
-
-  // Respect `until`
-  if (r.until && nextAnchor > r.until) return null;
-
-  // Preserve the original start→end duration, re-anchored on the new due date.
-  if (oldStart && oldEnd) {
-    const durationDays = Math.round((parseISO(oldEnd) - parseISO(oldStart)) / DAY);
-    return { start: addDaysISO(nextAnchor, -durationDays), end: nextAnchor };
-  }
-  return { start: nextAnchor, end: nextAnchor };
-}
-
 async function spawnNextRecurrence(task) {
-  const next = nextRecurrenceDates(task);
-  if (!next) return null;
+  const payload = buildNextRecurrenceTask(task);
+  if (!payload) return null;   // series has ended
 
-  // Idempotency: if a sibling task with the same recurrenceParentId already exists
-  // with these dates, don't create a duplicate.
-  const parentId = task.recurrenceParentId || task.id;
+  // Idempotency: if a sibling task with the same recurrenceParentId already
+  // exists with these dates, don't create a duplicate.
+  const parentId = payload.recurrenceParentId;
   const existing = await getDocs(query(
     tasksRef,
     where('userId', '==', task.userId),
@@ -1074,42 +1046,16 @@ async function spawnNextRecurrence(task) {
   ));
   const dup = existing.docs.find((d) => {
     const t = d.data();
-    return t.plan?.startDate === next.start && t.plan?.endDate === next.end;
+    return t.plan?.startDate === payload.plan.startDate
+        && t.plan?.endDate   === payload.plan.endDate;
   });
   if (dup) return null;
 
-  return await addDoc(tasksRef, {
-    userId: task.userId,
-    title: task.title,
-    description: task.description || '',
-    category: task.category || 'Personal',
-    projectId: task.projectId || null,
-    phaseId: task.phaseId || null,
-    priority: task.priority || 'medium',
-    status: 'todo',
-    progress: 0,
-    requestedBy: task.requestedBy || '',
-
-    plan:   { startDate: next.start, endDate: next.end },
-    actual: { startDate: null, endDate: null },
-
-    dependsOn: [],
-    subtasks: (task.subtasks || []).map((s) => ({ ...s, done: false })),  // reset checks
-    tags: task.tags || [],
-
-    recurrence: task.recurrence,
-    recurrenceParentId: parentId,
-
-    activityCount:    0,
-    totalHoursLogged: 0,
-    attachmentCount:  0,
-    lastActivityAt:   null,
-
-    archived:  false,
-    deleted:   false,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  // Go through addTask rather than writing the document here. addTask is the
+  // one place that knows the full task shape; a hand-rolled copy silently
+  // loses every field added since it was written — which is exactly how these
+  // instances ended up with no workspaceId, invisible to the Board.
+  return await addTask(task.userId, payload);
 }
 
 // Cycle-only API — kept for back-compat with TaskList's Move button.
