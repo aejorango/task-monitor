@@ -84,7 +84,7 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 2. **Table** — Flat activity log with bulk actions (delete / set completion / export). Sortable columns.
 3. **Gantt** — Timeline. Plan bars are draggable (resize + move). SVG dependency arrows. Rows grouped by project, sorted by earliest start.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
-5. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
+9. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
 6. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
 7. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
 
@@ -225,11 +225,12 @@ src/
 1. **Preserve denormalized fields.** When an activity is created, snapshot `taskTitle`, `taskCategory`, `projectId`, `phaseId` onto it.
 2. **Atomic counter updates.** Any new counter on `tasks` must be updated in the same `writeBatch` as the activity write.
 3. **No hard deletes.** Set `deleted: true`.
-4. **Composite indexes.** New filtered+ordered queries will require an index. Firestore shows a one-click link in the console.
-5. **Mobile-first.** Sidebar collapses under 720px; board collapses under 960px. Any new view must respect this.
-6. **No build-time secrets** beyond `.env.example`. The config is checked before Firebase is imported: `main.jsx` calls `readFirebaseConfig(import.meta.env)` and renders `SetupRequiredView` when anything is missing, so `services/firebase.js` and `App.jsx` must stay dynamic imports there — `initializeApp()` runs at module scope.
-7. **No backend.** Static frontend + Firestore.
-8. **Theme tokens.** Use CSS variables (`var(--c-text)`) not hardcoded colors. Dark mode is automatic via `prefers-color-scheme`.
+4. **Composite indexes.** Every filtered+ordered query needs one. They live in `firestore.indexes.json` (deploy with `npm run deploy:indexes`) — add the entry there, not just by clicking the link Firestore prints in the console, or the next environment breaks.
+5. **Bound every query at the server.** `orderBy` + `limit` in the query, never `.sort().slice()` on the result: slicing after the download does not save a single read. Activity history pages with `loadMoreActivities(workspaceId, beforeDate)`; the live listener holds `ACTIVITY_PAGE_SIZE` entries.
+6. **Mobile-first.** Sidebar collapses under 720px; board collapses under 960px. Any new view must respect this.
+7. **No build-time secrets** beyond `.env.example`. The config is checked before Firebase is imported: `main.jsx` calls `readFirebaseConfig(import.meta.env)` and renders `SetupRequiredView` when anything is missing, so `services/firebase.js` and `App.jsx` must stay dynamic imports there — `initializeApp()` runs at module scope.
+8. **No general backend.** Static frontend + Firestore, plus the single-purpose `functions/aiProxy` (see AI provider layer).
+9. **Theme tokens.** Use CSS variables (`var(--c-text)`) not hardcoded colors. Dark mode is automatic via `prefers-color-scheme`.
 
 ## What Each Hook Returns
 
@@ -306,6 +307,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Storing dates as JS `Date` objects in Firestore — use string `YYYY-MM-DD` for date-only fields
 - ❌ Naming a download with `new Date().toISOString().slice(0,10)` — that is the UTC day. Use `downloadFile(base, ext, content)` from `services/download.js`.
 - ❌ Reading the activities collection just for a count — use the denormalized counter
+- ❌ `query(ref, where(...))` then `.sort().slice()` in the callback — the whole collection was already downloaded. Put `orderBy` and `limit` in the query and add the composite index to `firestore.indexes.json`.
 - ❌ Using `arrayUnion` to push activities into a task document — they go in the root `activities` collection
 - ❌ Renaming `userId` — it's referenced by security rules
 - ❌ Adding new collections without adding security rules

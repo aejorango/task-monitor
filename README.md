@@ -92,6 +92,7 @@ viewer, enforced in `firestore.rules`.
 npm run build         # produces dist/
 npm run deploy        # dist/ → Firebase Hosting
 npm run deploy:rules  # firestore.rules + storage.rules
+npm run deploy:indexes # firestore.indexes.json (composite indexes)
 npm run deploy:all    # both
 ```
 
@@ -276,6 +277,8 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/access.test.mjs` | Who may share a project; plain-language error text |
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
+| `src/services/firestoreQueries.test.mjs` | Queries are bounded server-side and have their indexes |
+| `src/services/sharedSubscription.test.mjs` | One Firestore listener per query, however many callers |
 | `src/services/knowledgeCopy.test.mjs` | Operator runbook vs. what everyone else is told |
 | `src/services/approvalCopy.test.mjs` | What a not-yet-approved account is told |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
