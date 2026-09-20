@@ -10453,3 +10453,11 @@ a:hover { text-decoration: underline; }
   .toast-stack { bottom: 12px; left: 12px; right: 12px; transform: none; }
   .toast { min-width: 0; width: 100%; }
 }
+
+/* A destructive primary action, for a confirm dialog that deletes. */
+.btn-danger {
+  background: var(--c-danger, #dc2626);
+  border-color: var(--c-danger, #dc2626);
+  color: #fff;
+}
+.btn-danger:hover { filter: brightness(1.08); }

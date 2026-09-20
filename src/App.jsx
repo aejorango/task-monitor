@@ -3,6 +3,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
+import { DialogProvider } from './components/Dialog';
 import { useAuth, useProjects } from './hooks/useTasks';
 import { useWorkspaces, useSyncMyMemberProfile } from './hooks/useWorkspace';
 import { useMyCompany } from './hooks/useCompany';
@@ -162,6 +163,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
 
   return (
     <ToastProvider>
+    <DialogProvider>
     {/* In-app due-task alert: one task at a time, on every view. */}
     <DueTaskAlertModal navigate={navigate} />
     <AppShell
@@ -199,6 +201,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
       </Suspense>
       </ErrorBoundary>
     </AppShell>
+    </DialogProvider>
     </ToastProvider>
   );
 }

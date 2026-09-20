@@ -92,6 +92,22 @@ export function text(container) {
   return container.textContent.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Type into a controlled React input. Assigning `.value` directly does not
+ * work: React tracks the previous value on the node and skips the change
+ * event, so the component never hears about it.
+ */
+export async function typeInto(input, value) {
+  const { act } = await import('react');
+  const setter = Object.getOwnPropertyDescriptor(
+    input.constructor.prototype, 'value',
+  )?.set;
+  await act(async () => {
+    if (setter) setter.call(input, value); else input.value = value;
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+}
+
 /** Silence expected console.error noise (React logs every caught boundary error). */
 export function muteConsoleError() {
   const original = console.error;
