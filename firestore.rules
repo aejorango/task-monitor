@@ -121,6 +121,34 @@ service cloud.firestore {
           && changedProfileKeys.hasOnly([request.auth.uid]);
     }
 
+    // Somebody was invited by email and is now claiming that invitation. The
+    // workspace names their address in pendingInviteEmails, so the invitation
+    // itself is the proof — no UID ever has to change hands. The claim may add
+    // exactly the claimer, at exactly the role offered, and must clear the
+    // invitation as it goes.
+    function isClaimingWorkspaceInvite() {
+      let email = request.auth.token.email.lower();
+      return isApproved()
+          && email != null
+          && email in resource.data.get('pendingInviteEmails', [])
+          && request.resource.data.get('lastClaimedInviteEmail', '') == email
+          // …at exactly the role the invitation offered. Without this, the
+          // claimer could write themselves 'owner' on the way in.
+          && request.resource.data.acl[request.auth.uid]
+               == resource.data.get('pendingInviteRoles', {})[email]
+          // Only this person joins, and only their own ACL slot appears.
+          && request.auth.uid in request.resource.data.members
+          && request.resource.data.members.size() == resource.data.members.size() + 1
+          && request.resource.data.acl.diff(resource.data.acl).affectedKeys()
+               .hasOnly([request.auth.uid])
+          // The invitation is consumed, not left lying around.
+          && !(email in request.resource.data.get('pendingInviteEmails', []))
+          // Nothing else about the workspace changes.
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.createdByUserId == resource.data.createdByUserId
+          && request.resource.data.get('deleted', false) == resource.data.get('deleted', false);
+    }
+
     match /workspaces/{workspaceId} {
       // Anyone in the members array can read the workspace.
       allow read:   if isApproved() && request.auth.uid in resource.data.members;
@@ -134,7 +162,8 @@ service cloud.firestore {
       allow update: if isApproved()
                     && (resource.data.acl[request.auth.uid] == 'owner'
                         || resource.data.acl[request.auth.uid] == 'admin'
-                        || isMemberSelfProfileUpdate());
+                        || isMemberSelfProfileUpdate()
+                        || isClaimingWorkspaceInvite());
       // Only the original owner can delete the workspace (soft delete in practice).
       allow delete: if isApproved()
                     && resource.data.acl[request.auth.uid] == 'owner';

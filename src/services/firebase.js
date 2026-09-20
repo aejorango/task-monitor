@@ -52,6 +52,9 @@ import {
   buildNextRecurrenceTask,
 } from './recurrence';
 export { todayLocal, nextRecurrenceDates };
+import {
+  inviteFields, inviteFor, normalizeEmail, revokeInviteFields, validateInvite,
+} from './invites';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -115,6 +118,11 @@ export async function signInWithGoogle() {
   try {
     const result = await signInWithPopup(auth, provider);
     await ensureUserProfile(result.user);
+    // Somebody invited this person by email before they had an account — or
+    // while they were signed out. Join those workspaces now, so they land in
+    // the app with their team's work already there.
+    try { await claimPendingWorkspaceInvites(result.user); }
+    catch (err) { console.warn('[invites] claim failed:', err); }
     return { ok: true, user: result.user };
   } catch (err) {
     if (err?.code === 'auth/popup-closed-by-user') {
@@ -462,7 +470,9 @@ export async function addWorkspace(userId, workspace) {
     icon:  workspace.icon  || DEFAULT_WORKSPACE_ICON,
     members: [userId],
     acl:     { [userId]: 'owner' },
-    pendingInvites: [],
+    pendingInvites: [],        // [{ email, role, invitedBy, invitedAt }]
+    pendingInviteEmails: [],   // the same emails, flat, so array-contains works
+    pendingInviteRoles: {},    // email → role, so the rule can check the role
     archived: false,
     deleted:  false,
     createdAt: serverTimestamp(),
@@ -542,6 +552,75 @@ export async function softDeleteWorkspace(workspaceId) {
 
 // Add a member by UID (used in current single-user flows or via UID-share).
 // Role: 'admin'|'editor'|'viewer'. Owner is the original creator.
+// ─── Inviting by email ──────────────────────────────────────────────────────
+// An admin records an invitation; the invited person joins themselves the next
+// time they open the app (claimPendingWorkspaceInvites, called from the sign-in
+// path). No backend, and no Firebase UID has to change hands. See
+// services/invites.js for the rules this enforces.
+
+export async function inviteToWorkspaceByEmail(workspace, email, role, invitedBy) {
+  const check = validateInvite(email, role, workspace);
+  if (!check.ok) throw new Error(check.error);
+  await updateDoc(doc(db, 'workspaces', workspace.id), {
+    ...inviteFields(workspace, check.email, check.role, invitedBy),
+    updatedAt: serverTimestamp(),
+  });
+  return check;
+}
+
+export async function revokeWorkspaceInvite(workspace, email) {
+  await updateDoc(doc(db, 'workspaces', workspace.id), {
+    ...revokeInviteFields(workspace, email),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Join every workspace that has an invitation for this user's email address.
+ * Called once per sign-in. Idempotent: an invitation is removed as it is taken,
+ * and a user already in `members` is skipped.
+ */
+export async function claimPendingWorkspaceInvites(user) {
+  const email = normalizeEmail(user?.email);
+  if (!user?.uid || !email) return { joined: 0 };
+
+  const snap = await getDocs(query(
+    workspacesRef,
+    where('pendingInviteEmails', 'array-contains', email),
+  ));
+
+  let joined = 0;
+  for (const d of snap.docs) {
+    const workspace = { id: d.id, ...d.data() };
+    const invite = inviteFor(workspace, email);
+    if (!invite) continue;
+    if ((workspace.members || []).includes(user.uid)) {
+      // Already in — just tidy the invitation away.
+      await updateDoc(d.ref, {
+        ...revokeInviteFields(workspace, email),
+        updatedAt: serverTimestamp(),
+      });
+      continue;
+    }
+
+    await updateDoc(d.ref, {
+      members: arrayUnion(user.uid),
+      [`acl.${user.uid}`]: invite.role,
+      [`memberProfiles.${user.uid}`]: {
+        displayName: user.displayName || '',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+      },
+      ...revokeInviteFields(workspace, email),
+      // The rule reads this to confirm the claim is the one being offered.
+      lastClaimedInviteEmail: email,
+      updatedAt: serverTimestamp(),
+    });
+    joined += 1;
+  }
+  return { joined };
+}
+
 export async function addWorkspaceMember(workspace, memberUserId, role = 'editor') {
   if (!['admin', 'editor', 'viewer'].includes(role)) {
     throw new Error(`Invalid role: ${role}`);

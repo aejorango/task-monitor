@@ -17,6 +17,8 @@ import {
   subscribeToWorkspaces,
   migrateToWorkspaces,
   repairOrphanedDocuments,
+  claimPendingWorkspaceInvites,
+  auth as firebaseAuth,
   updateMyMemberProfileInWorkspace,
   auth,
 } from '../services/firebase';
@@ -104,6 +106,11 @@ export function useWorkspaces() {
     // doesn't trigger it twice.
     if (!_wsMigrationKickedOff.has(userId)) {
       _wsMigrationKickedOff.add(userId);
+      // An invitation may have been sent while this person was already signed
+      // in on another device, so check on load as well as at sign-in.
+      claimPendingWorkspaceInvites(firebaseAuth.currentUser)
+        .then((r) => { if (r?.joined) console.info('[invites] joined', r.joined, 'workspace(s)'); })
+        .catch((err) => console.warn('[invites] claim failed:', err));
       migrateToWorkspaces(userId)
         .then((res) => {
           if (res?.migrated) console.info('[workspace-migration]', res);

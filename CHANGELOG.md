@@ -43,3 +43,4 @@ One line per task from the Ideon task sheet.
 - T-0037 — Whole-collection subscriptions will not scale (API/data layer) — src/services/firebase.js, firestore.indexes.json, firebase.json, package.json, scripts/firebase-deploy.mjs, src/services/firestoreQueries.test.mjs
 - T-0038 — Whole-collection subscriptions will not scale (UI) — src/hooks/useTasks.js, src/components/TableView.jsx, src/components/WorkPerformedView.jsx, src/App.css, tests/ui/activityPaging.test.mjs
 - T-0039 — Whole-collection subscriptions will not scale (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
+- T-0040 — Members are added by raw Firebase UID, not email (API/data layer) — src/services/invites.js, src/services/invites.test.mjs, src/services/firebase.js, src/hooks/useWorkspace.js, firestore.rules, tests/rules/workspaceInvite.rules.test.mjs
