@@ -50,3 +50,4 @@ One line per task from the Ideon task sheet.
 - T-0044 — Webhooks are stored but never delivered (UI) — src/components/SettingsView.jsx, src/App.css, tests/ui/webhookDelivery.test.mjs
 - T-0045 — Webhooks are stored but never delivered (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0046 — No Word, Excel, PDF or Markdown exports (API/data layer) — src/services/exporters.js, src/services/exporters.test.mjs, tests/ui/exporters.test.mjs, package.json
+- T-0047 — No Word, Excel, PDF or Markdown exports (UI) — src/components/ExportButton.jsx, src/services/taskExport.js, src/services/taskExport.test.mjs, src/services/minutesExport.js, src/services/minutesExport.test.mjs, src/services/exporters.js, src/components/ReviewView.jsx, src/components/Board.jsx, src/components/MinutesView.jsx, src/components/GoalsView.jsx, src/components/SettingsView.jsx, src/App.css, tests/ui/exportButtons.test.mjs

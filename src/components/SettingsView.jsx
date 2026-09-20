@@ -398,7 +398,7 @@ export default function SettingsView() {
             <button
               className="btn"
               onClick={() => exportData({ projects, tasks, activities }, userId)}
-            >Export JSON</button>
+            >Backup everything (.json)</button>
             <button
               className="btn"
               onClick={() => {

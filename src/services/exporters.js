@@ -16,6 +16,17 @@
 
 import { downloadFile, safeFileName, stampedName } from './download';
 
+/**
+ * An error we raised on purpose, whose message is written for the user.
+ * Anything else that escapes an export is a library's internal complaint and
+ * must not be shown — hence the marker.
+ */
+export function exportError(message) {
+  const err = new Error(message);
+  err.code = 'export';
+  return err;
+}
+
 /** Every format the app can hand a user, with a label for a menu. */
 export const EXPORT_FORMATS = [
   { value: 'xlsx', label: 'Excel spreadsheet (.xlsx)', kinds: ['table'] },
@@ -361,18 +372,18 @@ export async function exportDocument(format, baseName, doc) {
     case 'csv': {
       const { toCsv } = await import('./csv');
       const sheet = (doc.sheets || [])[0] || firstTableAsSheet(doc);
-      if (!sheet) throw new Error('There is no table in this to save as a CSV.');
+      if (!sheet) throw exportError('There is no table in this to save as a CSV.');
       return downloadFile(name, 'csv', toCsv([sheet.columns, ...sheet.rows]));
     }
     case 'xlsx': {
       const sheets = doc.sheets?.length ? doc.sheets : [firstTableAsSheet(doc)].filter(Boolean);
-      if (!sheets.length) throw new Error('There is no table in this to save as a spreadsheet.');
+      if (!sheets.length) throw exportError('There is no table in this to save as a spreadsheet.');
       return writeXlsx(name, sheets);
     }
     case 'docx': return writeDocx(name, doc);
     case 'pdf':  return writePdf(name, doc);
     default:
-      throw new Error(`Cannot save as “${format}”.`);
+      throw exportError(`Cannot save as “${format}”.`);
   }
 }
 
@@ -385,3 +396,88 @@ export function firstTableAsSheet(doc) {
 
 /** What the file will be called, for a confirmation message. */
 export const exportFileName = (baseName, format) => stampedName(baseName, format);
+
+/* ── Goals ─────────────────────────────────────────────────────────────────
+   A goal is a one-page artefact: what changes, what gets delivered, by when,
+   and how far along each project is. Kept here rather than in the component so
+   the same structure feeds every format. */
+
+/**
+ * @param {object[]} goals
+ * @param {{ projectStats?: Record<string, {name, pct, taskCount}>, deliverableProjectIds?: Function }} opts
+ */
+export function buildGoalsDocument(goals = [], opts = {}) {
+  const stats = opts.projectStats || {};
+  const idsOf = opts.deliverableProjectIds || ((d) => d?.projectIds || (d?.projectId ? [d.projectId] : []));
+  const blocks = [];
+
+  if (!goals.length) {
+    blocks.push(paragraph('No goals have been set yet.'));
+  }
+
+  for (const goal of goals) {
+    blocks.push(heading(`${goal.code ? `${goal.code} — ` : ''}${goal.title || 'Untitled goal'}`, 1));
+
+    const facts = [];
+    if (goal.initiative) facts.push(['Initiative', goal.initiative]);
+    if (goal.kpi) facts.push(['KPI', goal.kpi]);
+    // The target date lives on each deliverable, not on the goal.
+    if (facts.length) blocks.push(keyValues(facts));
+
+    const agenda = (goal.changeAgenda || []).filter((a) => a?.from || a?.to);
+    if (agenda.length) {
+      blocks.push(heading('Change agenda', 2));
+      blocks.push(table(['From', 'To'], agenda.map((a) => [a.from || '—', a.to || '—'])));
+    }
+
+    const deliverables = (goal.deliverables || []).filter((d) => d?.text || idsOf(d).length);
+    blocks.push(heading('Deliverables', 2));
+    if (deliverables.length) {
+      blocks.push(table(['#', 'Deliverable', 'Projects', 'Target', 'Progress'], deliverables.map((d, i) => {
+        const linked = idsOf(d).map((pid) => stats[pid]).filter(Boolean);
+        const pct = linked.length
+          ? Math.round(linked.reduce((s, p) => s + (p.pct || 0), 0) / linked.length)
+          : null;
+        return [
+          i + 1,
+          d.text || '—',
+          linked.map((p) => p.name).join(', ') || '—',
+          d.targetDate || '—',
+          pct === null ? '—' : `${pct}%`,
+        ];
+      })));
+    } else {
+      blocks.push(paragraph('No deliverables listed.'));
+    }
+
+    blocks.push(spacer());
+  }
+
+  const rows = [];
+  for (const goal of goals) {
+    for (const [i, d] of (goal.deliverables || []).entries()) {
+      const linked = idsOf(d).map((pid) => stats[pid]).filter(Boolean);
+      rows.push([
+        goal.code || '',
+        goal.title || '',
+        i + 1,
+        d.text || '',
+        linked.map((p) => p.name).join(', '),
+        linked.length ? Math.round(linked.reduce((s, p) => s + (p.pct || 0), 0) / linked.length) : '',
+        d.targetDate || '',
+        d.status || '',
+      ]);
+    }
+  }
+
+  return {
+    title: 'Goals',
+    subtitle: `${goals.length} goal${goals.length === 1 ? '' : 's'} · Task Monitor`,
+    blocks,
+    sheets: [sheetFromRows(
+      'Goals',
+      ['Goal code', 'Goal', '#', 'Deliverable', 'Projects', 'Progress %', 'Target date', 'Status'],
+      rows,
+    )],
+  };
+}

@@ -9,6 +9,10 @@ import {
   draftStatusUpdate,
 } from '../services/anthropic';
 import Markdown from './Markdown';
+import ExportButton from './ExportButton';
+import {
+  bullets, heading, keyValues, paragraph, sheetFromRows, table,
+} from '../services/exporters';
 import { useAiStatus } from '../hooks/useAiStatus';
 
 const RANGES = [
@@ -99,6 +103,66 @@ export default function ReviewView() {
     .filter((a) => a.bottleneckRemarks?.trim())
     .sort((a, b) => b.date.localeCompare(a.date));
 
+  // What "Export" hands over: the same numbers on the page, in a form a manager
+  // can file. Built on demand — see components/ExportButton.
+  const buildReport = () => ({
+    title: `Review — ${range.label}`,
+    subtitle: `${sinceStr} to ${today} · Task Monitor`,
+    blocks: [
+      keyValues([
+        ['Hours logged', `${totalHours.toFixed(1)}h`],
+        ['Tasks completed', tasksCompleted.length],
+        ['Tasks added', tasksAdded.length],
+        ['Activities logged', periodActivities.length],
+        ['Completed entries', completedActivities],
+        ['Blocked entries', blockedActivities],
+        ['Overdue now', overdueTasks.length],
+      ]),
+
+      heading('Hours by project', 1),
+      hoursByProject.length
+        ? table(['Project', 'Hours', 'Share'], hoursByProject.map((p) => [
+          p.name,
+          p.hours.toFixed(1),
+          totalHours ? `${Math.round((p.hours / totalHours) * 100)}%` : '0%',
+        ]))
+        : paragraph('No hours logged in this period.'),
+
+      heading('Completed in this period', 1),
+      tasksCompleted.length
+        ? table(['Task', 'Project', 'Completed'], tasksCompleted.map((t) => [
+          t.title,
+          projectById[t.projectId]?.name || '—',
+          t.actual?.endDate || '',
+        ]))
+        : paragraph('Nothing was completed in this period.'),
+
+      heading('Overdue', 1),
+      overdueTasks.length
+        ? table(['Task', 'Project', 'Was due', 'Status'], overdueTasks.map((t) => [
+          t.title,
+          projectById[t.projectId]?.name || '—',
+          t.plan?.endDate || '',
+          t.status,
+        ]))
+        : paragraph('Nothing is overdue.'),
+
+      heading('Blockers raised', 1),
+      bottlenecks.length
+        ? bullets(bottlenecks.map((a) => `${a.date} — ${a.taskTitle || 'Task'}: ${a.bottleneckRemarks.trim()}`))
+        : paragraph('No blockers were raised in this period.'),
+    ],
+    // So "Excel" gives a usable sheet rather than a flattened report.
+    sheets: [
+      sheetFromRows('Hours by project', ['Project', 'Hours'],
+        hoursByProject.map((p) => [p.name, p.hours])),
+      sheetFromRows('Completed', ['Task', 'Project', 'Completed'],
+        tasksCompleted.map((t) => [t.title, projectById[t.projectId]?.name || '', t.actual?.endDate || ''])),
+      sheetFromRows('Overdue', ['Task', 'Project', 'Was due', 'Status'],
+        overdueTasks.map((t) => [t.title, projectById[t.projectId]?.name || '', t.plan?.endDate || '', t.status])),
+    ],
+  });
+
   if (tasksLoading || activitiesLoading) return <p className="muted">Loading review…</p>;
 
   return (
@@ -109,6 +173,12 @@ export default function ReviewView() {
           <p className="page-subtitle">Summary of your work in the selected period.</p>
         </div>
         <div className="page-actions">
+          <ExportButton
+            build={buildReport}
+            baseName={`review-${range.id}`}
+            kind="document"
+            title="Save this review as a Word, PDF, Markdown or web-page file"
+          />
           {RANGES.map((r) => (
             <button
               key={r.id}

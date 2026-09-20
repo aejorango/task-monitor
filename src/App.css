@@ -10050,3 +10050,58 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--c-border);
   margin-top: 8px;
 }
+
+/* ── Export ▾ menu (ExportButton.jsx) ─────────────────────────────────────
+   A small popover of file formats. Anchored to its button so it works in a
+   page header, a toolbar or a card footer without extra layout. */
+.export-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 230px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg, 10px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  padding: 4px;
+}
+.export-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--r-md, 7px);
+  background: none;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.export-menu-item:hover,
+.export-menu-item:focus-visible {
+  background: var(--c-bg);
+}
+.export-note {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .export-menu { right: auto; left: 0; min-width: 200px; }
+  .export-note { display: none; }
+}
+
+/* Export control inside an expanded minutes card. */
+.minute-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}

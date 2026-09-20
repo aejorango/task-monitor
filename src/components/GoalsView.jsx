@@ -10,6 +10,8 @@ import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addGoal, updateGoal, softDeleteGoal, archiveGoal, uid } from '../services/firebase';
 import WbsModal from './WbsModal';
 import { friendlyError } from '../services/access';
+import ExportButton from './ExportButton';
+import { buildGoalsDocument } from '../services/exporters';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -98,6 +100,12 @@ export default function GoalsView() {
           </p>
         </div>
         <div className="page-actions">
+          <ExportButton
+            build={() => buildGoalsDocument(goals, { projectStats, deliverableProjectIds })}
+            baseName="goals"
+            kind="document"
+            title="Save these goals as a PDF, Word document or web page"
+          />
           <button className="btn btn-primary" onClick={() => setEditing('new')}>
             + New goal
           </button>

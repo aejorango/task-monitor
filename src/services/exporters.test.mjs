@@ -154,3 +154,64 @@ test('the filename is stamped with today, whatever the format', () => {
     assert.equal(exportFileName('weekly status', f.value), `weekly-status-${todayLocal()}.${f.value}`);
   }
 });
+
+// ─── Goals (T-0047) ─────────────────────────────────────────────────────────
+
+import { buildGoalsDocument } from './exporters.js';
+
+const GOALS = [{
+  code: 'G1', title: 'Digitise disbursement', initiative: 'Cut the paper trail',
+  kpi: '80% of requests online',
+  changeAgenda: [{ from: 'Paper forms', to: 'Online forms' }, { from: '', to: '' }],
+  deliverables: [
+    { id: 'd1', text: 'Online request form', projectIds: ['p1'], targetDate: '2026-12-01', status: 'On track' },
+    { id: 'd2', text: 'Staff training', projectIds: ['p1', 'p2'] },
+    { id: 'd3', text: '' },
+  ],
+}];
+const STATS = {
+  p1: { id: 'p1', name: 'SBLAF rollout', pct: 60 },
+  p2: { id: 'p2', name: 'Website revamp', pct: 20 },
+};
+
+test('a goal exports its initiative, KPI, change agenda and deliverables', () => {
+  const md = toMarkdown(buildGoalsDocument(GOALS, { projectStats: STATS }));
+  assert.match(md, /## G1 — Digitise disbursement/);
+  assert.match(md, /\*\*Initiative:\*\* Cut the paper trail/);
+  assert.match(md, /\*\*KPI:\*\* 80% of requests online/);
+  assert.match(md, /### Change agenda/);
+  assert.match(md, /\| Paper forms \| Online forms \|/);
+  assert.match(md, /### Deliverables/);
+  assert.match(md, /Online request form/);
+});
+
+test('deliverable progress is averaged across its projects', () => {
+  const doc = buildGoalsDocument(GOALS, { projectStats: STATS });
+  const t = doc.blocks.find((b) => b.type === 'table' && b.columns.includes('Deliverable'));
+  assert.deepEqual(t.rows[0], [1, 'Online request form', 'SBLAF rollout', '2026-12-01', '60%']);
+  assert.deepEqual(t.rows[1], [2, 'Staff training', 'SBLAF rollout, Website revamp', '—', '40%']);
+});
+
+test('an empty change-agenda pair is not exported as two dashes', () => {
+  const doc = buildGoalsDocument(GOALS, { projectStats: STATS });
+  const agenda = doc.blocks.find((b) => b.type === 'table' && b.columns[0] === 'From');
+  assert.equal(agenda.rows.length, 1);
+});
+
+test('the spreadsheet is one row per deliverable, for tracking', () => {
+  const doc = buildGoalsDocument(GOALS, { projectStats: STATS });
+  assert.equal(doc.sheets[0].name, 'Goals');
+  assert.equal(doc.sheets[0].rows.length, 3);
+  assert.equal(doc.sheets[0].rows[0][5], 60, 'progress as a number, so Excel can chart it');
+});
+
+test('no goals produces a file that says so', () => {
+  assert.match(toMarkdown(buildGoalsDocument([])), /No goals have been set yet/);
+});
+
+test('a goal with nothing in it does not export "undefined"', () => {
+  const md = toMarkdown(buildGoalsDocument([{}], {}));
+  assert.match(md, /## Untitled goal/);
+  assert.match(md, /No deliverables listed/);
+  assert.doesNotMatch(md, /undefined|null/);
+});

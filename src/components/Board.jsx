@@ -25,6 +25,8 @@ import TaskForm from './TaskForm';
 import TaskEditor from './TaskEditor';
 import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
+import ExportButton from './ExportButton';
+import { buildTaskListDocument } from '../services/taskExport';
 
 const COLUMNS = [
   { id: 'todo',  label: 'To Do' },
@@ -37,6 +39,9 @@ const NO_PHASE_ID = '__nophase__';
 export default function Board({ projectFilter, initialTagFilter, initialStatusFilter, onlyMine }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const [editingTask, setEditingTask]   = useState(null);
   const [editingActivity, setEditingActivity] = useState(null);
   const [loggingTask, setLoggingTask]   = useState(null);
@@ -89,6 +94,16 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     projectFiltered.forEach((t) => (t.tags || []).forEach((tg) => set.add(tg)));
     return [...set].sort();
   })();
+
+  // Export exactly what is on screen — the same filters, the same order.
+  const buildTaskExport = () => buildTaskListDocument(filtered, {
+    title: 'Task list',
+    projectById,
+    memberProfiles: activeWorkspace?.memberProfiles || {},
+    projectName: projectById[projectFilter]?.name || null,
+    statusFilter: initialStatusFilter || 'all',
+    tagFilter,
+  });
 
   if (loading) return <p className="muted">Loading tasks…</p>;
   if (!userId) return <p className="muted">Signing you in…</p>;
@@ -169,6 +184,15 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
           </p>
         </div>
         <div className="page-actions">
+          <ExportButton
+            build={buildTaskExport}
+            baseName={projectById[projectFilter]?.name
+              ? `${projectById[projectFilter].name}-tasks`
+              : 'tasks'}
+            kind="table"
+            label="Export"
+            title="Save these tasks as a spreadsheet, PDF or CSV"
+          />
           {canGroupByProject && (
             <button
               className={`chip ${groupByProject ? 'active' : ''}`}

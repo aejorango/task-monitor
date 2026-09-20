@@ -10,6 +10,8 @@ import Icon from './Icon';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import { friendlyError } from '../services/access';
+import ExportButton from './ExportButton';
+import { buildMinutesDocument, minutesFileBase } from '../services/minutesExport';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -287,6 +289,16 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
 
       {open && (
         <div className={`minute-card-body ${hasPriority ? 'has-priority' : ''}`}>
+          <div className="minute-card-actions">
+            <ExportButton
+              build={() => buildMinutesDocument(minute, { projectName: project?.name })}
+              baseName={minutesFileBase(minute)}
+              kind="document"
+              className="btn btn-sm"
+              label="Export"
+              title="Save these minutes as Word, PDF, Markdown or a web page"
+            />
+          </div>
           <div className="minute-body-main">
             {minute.attendees && (
               <div className="minute-section">
