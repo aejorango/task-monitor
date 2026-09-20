@@ -21,3 +21,4 @@ One line per task from the Ideon task sheet.
 - T-0015 — Export file dates use UTC, not the user's day (UI) — src/components/TableView.jsx, src/components/SettingsView.jsx, src/components/ProjectsView.jsx, src/components/WbsModal.jsx, src/components/WBSView.jsx, tests/ui/download.test.mjs
 - T-0016 — Export file dates use UTC, not the user's day (tests & docs) — README.md, CLAUDE.md, CHANGELOG.md
 - T-0017 — Bridge API mode is labelled as subscription billing (API/data layer) — src/services/ai.js, src/services/aiProvider.test.mjs
+- T-0018 — Bridge API mode is labelled as subscription billing (UI) — src/components/SettingsView.jsx, tests/ui/AiBrainPanel.test.mjs

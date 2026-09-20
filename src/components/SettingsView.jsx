@@ -44,7 +44,7 @@ import {
   setModel as setAnthropicModel,
 } from '../services/anthropic';
 import {
-  setAiSettings, providerLabel, fetchBridgeUsage, pushBridgeSettings,
+  setAiSettings, providerLabel, providerHeadline, fetchBridgeUsage, pushBridgeSettings,
 } from '../services/ai';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
@@ -539,19 +539,15 @@ function AiBrainSection() {
   if (seenSettings !== settings) { setSeenSettings(settings); setForm(settings); }
 
   const tone = provider === 'claude-code' ? 'success'
+             : provider === 'bridge-api'  ? 'success'
              : provider === 'api'         ? 'success'
              : provider === 'none'        ? 'danger'
              : !known                     ? 'muted' : 'warn';
 
-  const headline = provider === 'claude-code'
-      ? 'Thinking on your Claude subscription — no API billing.'
-    : provider === 'api'
-      ? 'Answering through the Anthropic API — billed per token.'
-    : provider === 'mock'
-      ? 'Placeholder answers only. Nothing here is a real AI response.'
-    : provider === 'none'
-      ? 'No AI brain is connected, so AI features are switched off.'
-      : 'Checking which AI brain is live…';
+  // One source of truth for the wording — services/ai.js. The panel used to
+  // write its own, which is how a bridge billing API tokens ended up
+  // advertising "no API billing".
+  const headline = providerHeadline(provider, known);
 
   const doRecheck = async () => {
     setBusy(true); setNote('');
@@ -1625,6 +1621,11 @@ function CompanyRow({ company }) {
 // budget they're using and what to do if AI features fail.
 
 function MyCompanyAiStatus({ profile }) {
+  // Whether AI works is a question about the live brain, not about paperwork.
+  // A user with no company still has AI when the local bridge is running, so
+  // gating this card on companyId told those users "not available" while every
+  // ✨ button on the site worked. Ask the provider layer instead.
+  const { provider, known, available } = useAiStatus();
   const companyId = profile?.companyId || null;
   // Read from the companies list to show the name. Non-superadmin can read
   // exactly their own company via the security rule (isMyCompany). We use
@@ -1640,40 +1641,47 @@ function MyCompanyAiStatus({ profile }) {
     return () => unsub();
   }, [companyId]);
 
-  if (!companyId) {
+  // Who is paying, when there is a company behind it.
+  const companyName = company?.name || null;
+  const companyPays = !!companyId
+    && !!(company?.anthropicApiKey || '').trim()
+    // A superadmin can revoke AI for a whole company without removing its key,
+    // so a key on its own is not proof of access.
+    && company?.aiEnabled !== false;
+
+  if (!known) {
     return (
       <section id="settings-ai" className="review-section htu-section">
         <h2 className="review-h2">AI access</h2>
-        <p className="muted small" style={{ marginTop: 0 }}>
-          The AI feature is not available on your end. To enable it, contact
-          your company admin or reach out to{' '}
-          <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
-        </p>
+        <p className="muted small" style={{ marginTop: 0 }}>Checking whether AI is available…</p>
       </section>
     );
   }
 
-  const hasKey = !!(company?.anthropicApiKey || '').trim();
-  // The superadmin can revoke AI for a whole company without removing its
-  // key, so an existing key is not on its own proof of access.
-  const aiAllowed = company?.aiEnabled !== false;
   return (
     <section id="settings-ai" className="review-section htu-section">
       <h2 className="review-h2">AI access</h2>
-      {hasKey && aiAllowed ? (
+      {available ? (
         <>
           <p className="muted small" style={{ marginTop: 0 }}>
-            Your AI usage is provided by <strong>{company?.name || 'your company'}</strong>.
+            {companyPays
+              ? <>AI features are on. Your usage is provided by <strong>{companyName}</strong>.</>
+              : provider === 'mock'
+                ? <>AI features are on, but they are answering with placeholder text
+                    rather than a real AI. Ask your admin to connect an AI brain.</>
+                : <>AI features are on for you.</>}
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="badge badge-soft-success">AI enabled</span>
+            <span className={`badge badge-soft-${provider === 'mock' ? 'warn' : 'success'}`}>
+              {provider === 'mock' ? 'Placeholder answers only' : 'AI enabled'}
+            </span>
           </div>
         </>
       ) : (
         <>
           <p className="muted small" style={{ marginTop: 0 }}>
-            The AI feature is not available on your end. To enable it, contact
-            your company admin or reach out to{' '}
+            AI features are not available on your account yet. Contact your company
+            admin or reach out to{' '}
             <a className="table-link" href="mailto:hello@blueinnovation.ph">hello@blueinnovation.ph</a>.
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
