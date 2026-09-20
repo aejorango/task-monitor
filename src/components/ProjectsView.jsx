@@ -32,6 +32,7 @@ import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import NotebookPicker from './NotebookPicker';
 import { downloadFile } from '../services/download';
 import { useQuickCreate } from '../hooks/useQuickCreate';
+import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -135,7 +136,9 @@ export default function ProjectsView() {
                   return (
                     <div key={p.id} className="project-card" style={{ '--project-color': p.color }} onClick={() => setEditing(p)}>
                       <div className="project-card-head">
-                        <span className="proj-dot" style={{ background: p.color, width: 14, height: 14 }} />
+                        <span className="proj-icon" style={{ color: p.color }} aria-hidden="true">
+                          {iconFor(p) === '◆' && !p.icon ? suggestIcon(p.id) : iconFor(p)}
+                        </span>
                         <h3 className="project-name">{p.name}</h3>
                         {p._shared && (
                           <span
@@ -381,7 +384,9 @@ function ProjectActivityLogModal({ project, onClose }) {
         style={{ maxWidth: 1100, width: '95vw' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <span className="proj-dot" style={{ background: project.color, width: 14, height: 14 }} />
+          <span className="proj-icon" style={{ color: project.color }} aria-hidden="true">
+            {iconFor(project) === '◆' && !project.icon ? suggestIcon(project.id) : iconFor(project)}
+          </span>
           <h3 className="modal-title" style={{ margin: 0 }}>{project.name} — Activity log</h3>
         </div>
         <p className="modal-sub" style={{ marginBottom: 12 }}>
@@ -905,6 +910,11 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   const [name, setName]         = useState(project?.name || seed?.name || '');
   const [description, setDescription] = useState(project?.description || seed?.description || '');
   const [color, setColor]       = useState(project?.color || seed?.color || COLORS[0]);
+  // An icon makes a project recognisable in a list of eight coloured dots.
+  // Falls back to a stable suggestion so an existing project is not blank.
+  const [icon, setIcon]         = useState(
+    () => normalizeIcon(project?.icon, suggestIcon(project?.id || seed?.name || '')),
+  );
   const [segment, setSegment]   = useState(project?.segment || 'Uncategorized');
   const [phases, setPhases]     = useState(
     project?.phases?.length ? project.phases :
@@ -1064,6 +1074,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
     setName(pl.name || '');
     setDescription(pl.description || '');
     setColor(pl.color || COLORS[0]);
+    setIcon(normalizeIcon(pl.icon, icon));
     setPhases((pl.phases || []).map((p) => ({ id: uid(), name: p.name, order: p.order })));
   };
 
@@ -1083,9 +1094,9 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
+        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, icon, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
       } else {
-        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
+        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, icon, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
       }
       onClose();
     } catch (err) {
@@ -1364,6 +1375,23 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
                         className={`pe-swatch${color === c ? ' is-on' : ''}`}
                         style={{ background: c, '--sw': c }}
                       />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="pe-lbl">Icon</span>
+                  <div className="pe-fld pe-icons">
+                    {GROUP_ICONS.map((g) => (
+                      <button
+                        type="button"
+                        key={g}
+                        onClick={() => setIcon(g)}
+                        aria-label={`Icon ${g}`}
+                        aria-pressed={icon === g}
+                        className={`pe-icon-btn${icon === g ? ' is-on' : ''}`}
+                        style={{ color }}
+                      >{g}</button>
                     ))}
                   </div>
                 </div>

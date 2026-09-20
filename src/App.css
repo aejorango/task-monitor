@@ -10228,3 +10228,39 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
   color: var(--c-text-muted);
 }
+
+/* ── Group icons (services/icons.js) ──────────────────────────────────────
+   A project, segment or workspace's mark. Takes the group's colour so a list
+   reads at a glance instead of being a column of identical dots. */
+.proj-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  font-size: 1.05em;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.pe-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pe-icon-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--r-md, 7px);
+  background: none;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pe-icon-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.pe-icon-btn.is-on {
+  border-color: currentColor;
+  background: rgba(255, 255, 255, 0.16);
+}

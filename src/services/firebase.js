@@ -55,6 +55,7 @@ export { todayLocal, nextRecurrenceDates };
 import {
   inviteFields, inviteFor, normalizeEmail, revokeInviteFields, validateInvite,
 } from './invites';
+import { normalizeIcon } from './icons';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -489,7 +490,7 @@ export async function updateWorkspace(workspaceId, updates) {
   });
 }
 
-export async function addSegmentToWorkspace(workspaceId, segmentName) {
+export async function addSegmentToWorkspace(workspaceId, segmentName, icon = null) {
   if (!segmentName.trim()) throw new Error('Segment name is required');
   const ref = doc(db, 'workspaces', workspaceId);
   const snap = await getDoc(ref);
@@ -498,7 +499,7 @@ export async function addSegmentToWorkspace(workspaceId, segmentName) {
   if (segments.some((s) => s.name === segmentName.trim())) {
     throw new Error('Segment already exists');
   }
-  const updated = [...segments, { id: uid(), name: segmentName.trim() }];
+  const updated = [...segments, { id: uid(), name: segmentName.trim(), icon: normalizeIcon(icon) }];
   await updateDoc(ref, { segments: updated, updatedAt: serverTimestamp() });
   return updated;
 }
@@ -900,6 +901,9 @@ export async function addProject(userId, project) {
     name: project.name,
     description: project.description || '',
     color: project.color || PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
+    // An icon per group — see services/icons.js. Only a value from that set is
+    // stored, so nothing arbitrary can be rendered from a project document.
+    icon: normalizeIcon(project.icon),
     phases,
     // Per-project ACL is retained for fine-grained sharing within a workspace.
     acl:     { [userId]: 'admin' },
