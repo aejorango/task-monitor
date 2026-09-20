@@ -78,7 +78,30 @@ export function mentionedUids(text, { members = [], memberProfiles = {}, exclude
   return hit;
 }
 
-/** The names a mention picker offers, as `@handle — Full Name`. */
+/**
+ * The handle the picker should insert for one member: the shortest one nobody
+ * else in the workspace also answers to.
+ *
+ * Inserting a shared handle would be a trap — two people called Mia, you pick
+ * the second, and `mentionedUids` tells the first. The longer full-name handle
+ * is the one that resolves to the person you actually chose.
+ */
+export function preferredHandle(uid, { members = [], memberProfiles = {} } = {}) {
+  const mine = handlesFor(uid, memberProfiles[uid] || {});
+  if (!mine.length) return null;
+
+  const claimed = new Map();
+  for (const other of members) {
+    for (const handle of handlesFor(other, memberProfiles[other] || {})) {
+      claimed.set(handle, (claimed.get(handle) || 0) + 1);
+    }
+  }
+  const unique = mine.filter((h) => (claimed.get(h) || 0) <= 1).sort((a, b) => a.length - b.length);
+  // Nothing unique: fall back to the most specific one they have.
+  return unique[0] || [...mine].sort((a, b) => b.length - a.length)[0];
+}
+
+/** The names a mention picker offers, as `Full Name — @handle`. */
 export function mentionSuggestions({ members = [], memberProfiles = {}, exclude = [], query = '' } = {}) {
   const q = mentionHandle(query);
   const skip = new Set(exclude.filter(Boolean));
@@ -86,7 +109,7 @@ export function mentionSuggestions({ members = [], memberProfiles = {}, exclude 
     .filter((uid) => !skip.has(uid))
     .map((uid) => {
       const profile = memberProfiles[uid] || {};
-      const [handle] = handlesFor(uid, profile);
+      const handle = preferredHandle(uid, { members, memberProfiles });
       return handle && {
         uid,
         handle,
@@ -95,8 +118,37 @@ export function mentionSuggestions({ members = [], memberProfiles = {}, exclude 
       };
     })
     .filter(Boolean)
-    .filter((s) => !q || s.handle.startsWith(q) || mentionHandle(s.name).startsWith(q))
+    .filter((s) => !q
+      || s.handle.startsWith(q)
+      || mentionHandle(s.name).startsWith(q)
+      || handlesFor(s.uid, memberProfiles[s.uid] || {}).some((h) => h.startsWith(q)))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The @token being typed right now, if the caret is inside one.
+ *
+ * @returns {{ query: string, start: number } | null} `start` is the index of
+ *          the "@", so a chosen name can replace exactly what was typed.
+ */
+export function activeMentionQuery(text, caret) {
+  const upto = String(text || '').slice(0, caret ?? String(text || '').length);
+  const m = /(^|[\s(])@([\w.-]*)$/.exec(upto);
+  if (!m) return null;
+  return { query: m[2], start: upto.length - m[2].length - 1 };
+}
+
+/** Put a chosen name into the text, replacing what was being typed. */
+export function applyMentionChoice(text, caret, handle) {
+  const active = activeMentionQuery(text, caret);
+  const source = String(text || '');
+  const at = active ? active.start : (caret ?? source.length);
+  const end = active ? at + 1 + active.query.length : at;
+  const inserted = `@${handle} `;
+  return {
+    text: source.slice(0, at) + inserted + source.slice(end),
+    caret: at + inserted.length,
+  };
 }
 
 const trim = (text) => {
@@ -198,6 +250,20 @@ export function noticesForAssignment({
  */
 export function watchersOf(task) {
   return [...new Set([task?.userId, ...(task?.assignedTo || [])].filter(Boolean))];
+}
+
+/** "just now", "3 hours ago", "12 Sep" — short enough for a narrow inbox row. */
+export function noticeWhen(at, now = Date.now()) {
+  const ms = at?.toDate ? at.toDate().getTime() : (at?.seconds ? at.seconds * 1000 : null);
+  if (!ms) return 'just now';
+  const mins = Math.round((now - ms) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 /** How many of these need attention — what the topbar count shows. */

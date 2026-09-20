@@ -10,6 +10,8 @@ import Icon from './Icon';
 import AiHelper from './AiHelper';
 import TaskDoneCelebration from './TaskDoneCelebration';
 import DueAlertBell from './DueAlertBell';
+import InboxBell from './InboxBell';
+import { goToTask as openTask } from '../services/openTask';
 import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
@@ -233,6 +235,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         )}
         <TutorialGuide route={route} navigate={navigate} />
         <AiHelper />
+        <InboxBell navigate={navigate} />
         <DueAlertBell />
         {timerWidget}
         <GlobalSearch projects={projects} navigate={navigate} />
@@ -529,19 +532,12 @@ function GlobalSearch({ projects, navigate }) {
 
   const goToTask = (t) => {
     rememberRecent({ kind: 'task', id: t.id, label: t.title || 'Task', projectId: t.projectId || null });
-    // Navigate to the Board with the task's project filtered, then dispatch a
-    // global "open task" event. The Board listens for this and opens the
-    // TaskEditor for the matching task. This gives users clear visual feedback
-    // when they click a search result — previously the page just changed URL
-    // and they had to find the task themselves.
-    navigate({ view: 'board', projectFilter: t.projectId || 'all' });
+    // services/openTask.js navigates to the Board with this task's project
+    // filtered and then asks the Board to open its editor — the same two steps
+    // the inbox uses, so a search result and a notice behave identically.
     setQ(''); setOpen(false);
     inputRef.current?.blur();
-    // Small delay so the Board view has a chance to mount / receive the new
-    // projectFilter before we ask it to open the task editor.
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('task-monitor:open-task', { detail: { taskId: t.id } }));
-    }, 50);
+    openTask(t, navigate);
   };
   // Where each "New …" goes. Every one of these lands on the page that owns
   // that thing, with the create flow already open — the point of the palette is

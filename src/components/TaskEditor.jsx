@@ -28,7 +28,9 @@ import {
   addTaskComment,
   updateTaskComment,
   softDeleteTaskComment,
+  notifyAssignment,
 } from '../services/firebase';
+import { memberLabel } from '../services/invites';
 import TaskAiPanel from './TaskAiPanel';
 import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
@@ -317,6 +319,15 @@ export default function TaskEditor({ task, projects, onClose }) {
       // just transition status (which has its own progress logic).
       if (completionPct !== null && status === task.status) updates.progress = completionPct;
       await updateTask(task.id, updates);
+      // Whoever was just put on this task hears about it. After the save, so a
+      // notice that cannot be written never costs somebody their edit.
+      await notifyAssignment({
+        task: { ...task, title: title.trim() },
+        before: task.assignedTo || [],
+        after: assignedTo,
+        byUserId: userId,
+        byName: memberLabel(userId, workspace?.memberProfiles || {}),
+      });
       if (status === 'done' && task.status !== 'done') emitTaskDone({ ...task, title: title.trim() });
       onClose();
     } catch (err) {
@@ -803,7 +814,12 @@ export default function TaskEditor({ task, projects, onClose }) {
             {/* Comments */}
             <section className="pe-card">
               <h4 className="pe-sect"><span className="pe-sect-mark">💬</span>Comments</h4>
-              <CommentsThread task={task} userId={userId} />
+              <CommentsThread
+                task={task}
+                userId={userId}
+                members={workspace?.members || []}
+                memberProfiles={workspace?.memberProfiles || {}}
+              />
             </section>
 
             {/* AI */}
@@ -1148,7 +1164,7 @@ function LinksEditor({ links, onChange, candidates }) {
   );
 }
 
-function CommentsThread({ task, userId }) {
+function CommentsThread({ task, userId, members = [], memberProfiles = {} }) {
   const toast = useToast();
   const ask = useDialog();
   const taskId = task.id;
@@ -1163,7 +1179,13 @@ function CommentsThread({ task, userId }) {
     if (!text) return;
     setPosting(true);
     try {
-      await addTaskComment(userId, task, text);
+      // The audience is what is already on screen: who is in this workspace and
+      // what they are called. addTaskComment turns an @name into a notice.
+      await addTaskComment(userId, task, text, {
+        members,
+        memberProfiles,
+        authorName: memberLabel(userId, memberProfiles),
+      });
       setBody('');
     } catch (err) {
       console.error(err);
@@ -1225,7 +1247,13 @@ function CommentsThread({ task, userId }) {
       )}
 
       <div className="comment-composer">
-        <MarkdownEditor value={body} onChange={setBody} rows={3} placeholder="Leave a note… Markdown supported." />
+        <MarkdownEditor
+          value={body}
+          onChange={setBody}
+          rows={3}
+          placeholder="Leave a note… type @ to tell somebody about it."
+          mentions={{ members, memberProfiles, exclude: [userId] }}
+        />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <button className="btn btn-primary" onClick={post} disabled={posting || !body.trim()}>
             {posting ? 'Posting…' : 'Comment'}

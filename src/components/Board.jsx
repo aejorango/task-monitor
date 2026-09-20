@@ -16,6 +16,7 @@ import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useTimer } from '../hooks/useTimer';
 import { auth } from '../services/firebase';
 import { taskChips } from '../services/customFields';
+import { OPEN_TASK_EVENT } from '../services/openTask';
 import {
   setTaskStatus,
   updateTask,
@@ -68,8 +69,8 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
       const t = tasks.find((x) => x.id === id);
       if (t) setEditingTask(t);
     };
-    window.addEventListener('task-monitor:open-task', onOpen);
-    return () => window.removeEventListener('task-monitor:open-task', onOpen);
+    window.addEventListener(OPEN_TASK_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_TASK_EVENT, onOpen);
   }, [tasks]);
 
   // ⌘K → "New task": put the typed text into the quick-add box and focus it,

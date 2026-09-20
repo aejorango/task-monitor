@@ -10533,3 +10533,108 @@ a:hover { text-decoration: underline; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Inbox (InboxBell.jsx) ────────────────────────────────────────────────── */
+.inbox-wrap { position: relative; display: inline-flex; }
+.topbar-bell.has-unread { color: var(--c-accent); }
+.inbox-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg, 10px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.inbox-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--c-border);
+  position: sticky;
+  top: 0;
+  background: var(--c-surface);
+}
+.inbox-empty { padding: 16px 12px; margin: 0; }
+.inbox-list { list-style: none; margin: 0; padding: 0; }
+.inbox-item + .inbox-item { border-top: 1px solid var(--c-border); }
+.inbox-item.is-unread { background: var(--c-bg); }
+.inbox-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.inbox-row:hover { background: var(--c-hover, rgba(127, 127, 127, 0.08)); }
+.inbox-icon {
+  flex: 0 0 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  font-size: 12px;
+}
+.inbox-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.inbox-kind {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-text-muted);
+}
+.inbox-text { font-size: 13px; line-height: 1.45; color: var(--c-text); }
+.inbox-dot {
+  flex: 0 0 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
+}
+
+/* ── @mention picker (Markdown.jsx) ───────────────────────────────────────── */
+.markdown-input-wrap { position: relative; }
+.mention-picker {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 40;
+  min-width: 220px;
+  max-width: min(320px, calc(100% - 16px));
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md, 7px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+}
+.mention-choice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mention-choice.active,
+.mention-choice:hover { background: var(--c-bg); }
+.mention-choice-name { font-weight: 500; }

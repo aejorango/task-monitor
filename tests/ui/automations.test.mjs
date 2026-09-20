@@ -175,10 +175,11 @@ test('the run log shows the sentence the runner wrote, and is bounded', () => {
   assert.match(src, /The last 50 runs\. Kept for 30 days\./);
 });
 
-test('"Tell someone" reaches the person told — the notices are read here', () => {
-  assert.match(src, /subscribeToMyNotifications\(userId, setNotices\)/);
-  assert.match(src, /Notices for you/);
-  assert.match(src, /markNotificationRead\(notice\.id\)/);
+test('"Tell someone" reaches the person told — the panel says where', () => {
+  // The notices themselves are the topbar inbox (T-0076); this panel points at
+  // it rather than showing a second copy of the same list.
+  assert.match(src, /Anyone a rule tells finds it in their inbox/);
+  assert.doesNotMatch(src, /Notices for you/);
 });
 
 // ─── wiring: the editor and the runner share one vocabulary ─────────────────

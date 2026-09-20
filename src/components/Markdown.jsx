@@ -17,7 +17,8 @@
 // Sanitization: HTML tags are escaped before any inline parsing, so the only
 // HTML we emit is what this renderer produces.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { activeMentionQuery, applyMentionChoice, mentionSuggestions } from '../services/mentions';
 
 function escapeHtml(s) {
   return String(s)
@@ -201,9 +202,52 @@ export default function Markdown({ src, className = 'markdown' }) {
   return <div className={className} dangerouslySetInnerHTML={{ __html: renderMarkdown(src) }} />;
 }
 
-// Editor: textarea + live preview toggle.
-export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '' }) {
+/**
+ * Editor: textarea + live preview toggle, and — when `mentions` is given — a
+ * picker that appears as you type an @, so naming a teammate is choosing from a
+ * list rather than guessing how they spell their own name.
+ *
+ * @param {{ members: string[], memberProfiles: object, exclude?: string[] }} mentions
+ */
+export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '', mentions = null }) {
   const [mode, setMode] = useState('edit'); // 'edit' | 'preview'
+  const [query, setQuery] = useState(null);   // the @token being typed, or null
+  const [active, setActive] = useState(0);
+  const areaRef = useRef(null);
+
+  const choices = query === null || !mentions
+    ? []
+    : mentionSuggestions({ ...mentions, query }).slice(0, 6);
+
+  const refreshQuery = (text, caret) => {
+    if (!mentions) return;
+    const found = activeMentionQuery(text, caret);
+    setQuery(found ? found.query : null);
+    setActive(0);
+  };
+
+  const choose = (choice) => {
+    const area = areaRef.current;
+    const caret = area ? area.selectionStart : (value || '').length;
+    const next = applyMentionChoice(value || '', caret, choice.handle);
+    onChange(next.text);
+    setQuery(null);
+    // Put the caret back after the name we just inserted.
+    requestAnimationFrame(() => {
+      if (!areaRef.current) return;
+      areaRef.current.focus();
+      areaRef.current.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  const onKeyDown = (e) => {
+    if (!choices.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => (i + 1) % choices.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => (i - 1 + choices.length) % choices.length); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(choices[active]); }
+    else if (e.key === 'Escape') { setQuery(null); }
+  };
+
   return (
     <div className="markdown-editor">
       <div className="markdown-toolbar">
@@ -222,13 +266,38 @@ export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '' }) 
         </span>
       </div>
       {mode === 'edit' ? (
-        <textarea
-          className="textarea markdown-textarea"
-          rows={rows}
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-        />
+        <div className="markdown-input-wrap">
+          <textarea
+            ref={areaRef}
+            className="textarea markdown-textarea"
+            rows={rows}
+            value={value || ''}
+            onChange={(e) => { onChange(e.target.value); refreshQuery(e.target.value, e.target.selectionStart); }}
+            onKeyUp={(e) => refreshQuery(e.target.value, e.target.selectionStart)}
+            onClick={(e) => refreshQuery(e.target.value, e.target.selectionStart)}
+            onKeyDown={onKeyDown}
+            onBlur={() => setTimeout(() => setQuery(null), 150)}
+            placeholder={placeholder}
+          />
+          {choices.length > 0 && (
+            <ul className="mention-picker" role="listbox" aria-label="People you can mention">
+              {choices.map((c, i) => (
+                <li key={c.uid}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={i === active}
+                    className={`mention-choice ${i === active ? 'active' : ''}`}
+                    onMouseDown={(e) => { e.preventDefault(); choose(c); }}
+                  >
+                    <span className="mention-choice-name">{c.name}</span>
+                    <span className="muted small">@{c.handle}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : (
         <div className="markdown-preview">
           {value

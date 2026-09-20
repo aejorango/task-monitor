@@ -275,6 +275,8 @@ src/
 │   ├── DueTaskAlertModal.jsx ← two-column due alert: task + actions left, GenAI prompt right
 │   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
+│   ├── InboxBell.jsx         ← topbar 📥: unread count, opens InboxPanel
+│   ├── InboxPanel.jsx        ← the list of notices (presentational, harness-friendly)
 │   ├── NotebookPicker.jsx    ← cache-only notebook select (never spawns the CLI)
 │   ├── AddToNotebookButton.jsx ← ＋ Notebook on a task/artifact URL
 │   ├── DueAlertBell.jsx      ← topbar 🔔: waiting count, pause / resume alerts for today
@@ -289,6 +291,7 @@ src/
 ├── hooks/
 │   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
 │   ├── useDueAlertQueue.js   ← one current due task + snooze / skip / markDone
+│   ├── useInbox.js           ← one notices listener, however many components ask
 │   ├── useKnowledgeStatus.js ← is the knowledge base usable + which notebooks
 │   ├── useNotifications.js   ← service worker, permission, browser-notification scan
 │   └── useSettings.js        ← localStorage-backed settings + theme application
@@ -444,6 +447,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Inserting a short @handle from a picker. `preferredHandle()` picks the shortest handle **nobody else answers to** — offering "@mia" when there are two Mias would notify the first one whatever you clicked. `mentionedUids` resolves by first claim, so the picker has to hand back something unambiguous.
+- ❌ Navigating to a task by hand. `goToTask(task, navigate)` in `services/openTask.js` does the two steps (filter the Board to its project, then fire `OPEN_TASK_EVENT`); search results and the inbox both use it, so they behave identically.
 - ❌ Writing a notice by hand. `mentions.js` builds the whole sentence (`buildNotice`) so an old notice still reads correctly after the wording changes, and the rules only accept `kind` in mention/comment/assignment from a browser — `automation` is the function's, written with admin credentials. Raise them with `raiseNotices`, **after** the message itself is written: a notice that fails must never cost somebody their comment.
 - ❌ Reading `TASK_TABLE_COLUMNS` directly in a component. It is the built-ins only; the projects' own fields are added by `columnCatalogue(ctx)`, and `ctx` must carry `projects` or a custom column silently disappears from a saved view. Every `tableViews` function takes that ctx — including `normalizeTableConfig` and `tableConfigFields`.
 - ❌ Storing an upload under the uploader. `users/{uid}/…` made the uploader the only person who could ever delete the file, so an admin who deleted somebody else's activity left the bytes behind for ever. Every upload goes through `uploadFile({ workspaceId, … })`.

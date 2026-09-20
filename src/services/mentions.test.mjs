@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildNotice, handlesFor, mentionHandle, mentionSuggestions, mentionTokens,
+  buildNotice, handlesFor, mentionHandle, mentionSuggestions, mentionTokens, preferredHandle,
   mentionedUids, noticesForAssignment, noticesForComment, sortNotices,
   unreadCount, watchersOf,
 } from './mentions.js';
@@ -58,6 +58,27 @@ test('two people who would share a handle: exactly one is told, never the wrong 
   const hit = mentionedUids('@ana look', { members: ['u-1', 'u-2'], memberProfiles: twoAnas });
   assert.equal(hit.length, 1);
   assert.equal(hit[0], 'u-1', 'the first member to claim the handle keeps it');
+});
+
+test('the picker inserts a handle that resolves to the person you chose', () => {
+  const twoMias = {
+    'u-1': { displayName: 'Mia Santos' },
+    'u-2': { displayName: 'Mia Cruz' },
+  };
+  const two = ['u-1', 'u-2'];
+  const handles = Object.fromEntries(
+    mentionSuggestions({ members: two, memberProfiles: twoMias }).map((s) => [s.uid, s.handle]),
+  );
+  assert.equal(handles['u-1'], 'miasantos');
+  assert.equal(handles['u-2'], 'miacruz', 'inserting "@mia" would tell the wrong Mia');
+  // …and each really does resolve back to the person the picker named.
+  for (const [uid, handle] of Object.entries(handles)) {
+    assert.deepEqual(mentionedUids(`@${handle} hi`, { members: two, memberProfiles: twoMias }), [uid]);
+  }
+});
+
+test('a name nobody else answers to is offered short', () => {
+  assert.equal(preferredHandle('u-ace', { members, memberProfiles }), 'ace');
 });
 
 test('the picker offers each member once, by name, filtered as you type', () => {

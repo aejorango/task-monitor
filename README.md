@@ -214,6 +214,26 @@ chips on the board card, can be added as columns in **Reports → Task table**
 as columns to every task export. Two projects with a field of the same name are
 labelled with the project so they can be told apart.
 
+## Inbox and @mentions
+
+Type **@** in a comment and a picker offers the people in the workspace by name;
+the name it inserts is one that resolves back to the person you chose, even when
+two of them are called Mia. Posting tells them:
+
+| What happened | Who hears about it |
+| --- | --- |
+| You named somebody with an @ | That person — “Ace mentioned you on “Disbursement report”: …” |
+| You commented without naming anybody | The task's creator and whoever it is assigned to |
+| You put somebody on a task | That person — “Ace assigned you “Board pack for Friday”” |
+| An automation was told to tell somebody | That person |
+
+They land in the **📥 inbox** in the topbar, with a count of what is unread.
+Opening a row goes to the task and marks it read; *Mark all as read* clears the
+rest. You never hear about your own message, and somebody both mentioned and
+watching is told once.
+
+Nothing is emailed — there is no SMTP here (see *Out of scope*).
+
 ## Automations
 
 **Settings → Automations** makes the app do something itself when something
@@ -397,6 +417,7 @@ run together.
 | `tests/ui/attachments.test.mjs` | Uploads go to the workspace; deletes take the bytes with them |
 | `tests/ui/customFields.test.mjs` | A custom field reaches the card, the table and the export |
 | `tests/ui/inboxApi.test.mjs` | Notices are raised where the message is written, and cannot lose it |
+| `tests/ui/inbox.test.mjs` | The topbar inbox, the @ picker, and getting to the task |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
@@ -468,6 +489,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/due-alert.html` | The due-task alert dialog (`?ai=0` forces the offline template, `&nb=1` fakes a notebook) |
 | `/dev/knowledge.html` | Settings → Knowledge base against the live bridge |
 | `/dev/automations.html` | The automation rule editor, with sample projects, people and connections |
+| `/dev/inbox.html` | The inbox panel with sample notices, and the @mention picker |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 
 ## Working with Claude Code

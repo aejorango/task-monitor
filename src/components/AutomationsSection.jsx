@@ -15,7 +15,6 @@ import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
   addAutomation, updateAutomation, softDeleteAutomation,
   subscribeToAutomations, subscribeToAutomationRuns, subscribeToWebhooks,
-  subscribeToMyNotifications, markNotificationRead,
 } from '../services/firebase';
 import {
   ACTIONS, CONDITION_FIELDS, OPERATORS, TRIGGERS, describeRule, validateRule,
@@ -83,7 +82,6 @@ export default function AutomationsSection({ userId, isAdmin = false }) {
   const [rules, setRules] = useState([]);
   const [runs, setRuns] = useState([]);
   const [webhooks, setWebhooks] = useState([]);
-  const [notices, setNotices] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showRuns, setShowRuns] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -102,11 +100,6 @@ export default function AutomationsSection({ userId, isAdmin = false }) {
     if (!showRuns || !workspaceId) return undefined;
     return subscribeToAutomationRuns(workspaceId, setRuns);
   }, [showRuns, workspaceId]);
-
-  // "Tell someone" writes a notice. This is where the person told reads it.
-  useEffect(() => subscribeToMyNotifications(userId, setNotices), [userId]);
-
-  const unread = notices.filter((n) => !n.read);
 
   // Turns any id in a rule into the name a person recognises.
   const nameFor = useMemo(() => (id) => (
@@ -157,40 +150,15 @@ export default function AutomationsSection({ userId, isAdmin = false }) {
     catch (err) { console.error(err); toast.error(friendlyError(err, 'Could not change that rule.')); }
   };
 
-  const dismiss = async (notice) => {
-    try { await markNotificationRead(notice.id); }
-    catch (err) { console.error(err); toast.error(friendlyError(err, 'Could not dismiss that notice.')); }
-  };
-
   return (
     <section id="settings-automations" className="review-section htu-section">
       <h2 className="review-h2">Automations</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
         Make the app do something for you when something happens — tell a person,
         assign a task, add a tag, or open a follow-up. No typing: every part of a
-        rule is a choice.
+        rule is a choice. Anyone a rule tells finds it in their inbox, at the top
+        of the screen.
       </p>
-
-      {unread.length > 0 && (
-        <div className="au-notices">
-          <h3 className="au-notices-h">Notices for you</h3>
-          <ul className="dep-list">
-            {unread.map((n) => (
-              <li key={n.id} className="dep-item" style={{ gridTemplateColumns: '1fr auto auto' }}>
-                <span className="dep-title">
-                  {n.text}
-                  <span className="muted small" style={{ display: 'block' }}>
-                    {n.at?.toDate ? n.at.toDate().toLocaleString() : 'just now'}
-                  </span>
-                </span>
-                <button className="btn btn-sm btn-ghost" onClick={() => dismiss(n)}>
-                  Mark as read
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {!workspaceId ? (
         <p className="muted small">Pick a workspace first — rules belong to one.</p>
