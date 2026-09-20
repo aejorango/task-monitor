@@ -632,8 +632,7 @@ function ActivityListInline({ taskId, onEditActivity }) {
               className="link-danger"
               title="Edit entry"
               style={{ color: 'var(--c-text-3)', marginLeft: 'auto' }}
-              onClick={() => onEditActivity && onEditActivity(a)}
-            >✎</button>
+              onClick={() => onEditActivity && onEditActivity(a)} aria-label="Edit entry">✎</button>
             <button
               className="link-danger"
               title="Delete entry"

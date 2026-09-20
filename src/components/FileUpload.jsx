@@ -110,7 +110,7 @@ export default function FileUpload({ taskId, attachments, onChange, multiple = t
                 {a.name}
               </a>
               {a.size && <span className="muted small mono">{formatBytes(a.size)}</span>}
-              <button type="button" className="link-danger" onClick={() => remove(a)}>✕</button>
+              <button type="button" className="link-danger" onClick={() => remove(a)} aria-label="Remove">✕</button>
             </li>
           ))}
         </ul>

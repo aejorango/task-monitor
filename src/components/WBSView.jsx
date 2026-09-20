@@ -916,8 +916,7 @@ function ScopedActivityLogModal({ scope, onClose }) {
                         <button
                           className="btn btn-sm btn-ghost"
                           title="Edit this activity entry"
-                          onClick={() => setEditing(r)}
-                        >✎</button>
+                          onClick={() => setEditing(r)} aria-label="Edit this activity entry">✎</button>
                       </td>
                     </tr>
                   ))}

@@ -476,8 +476,7 @@ function ProjectActivityLogModal({ project, onClose }) {
                       <button
                         className="btn btn-sm btn-ghost"
                         title="Edit this activity entry"
-                        onClick={() => setEditing(r)}
-                      >✎</button>
+                        onClick={() => setEditing(r)} aria-label="Edit this activity entry">✎</button>
                     </td>
                   </tr>
                 ))}
@@ -699,7 +698,7 @@ function ProjectSharing({ project, bare = false }) {
                   <option value="editor">editor</option>
                   <option value="admin">admin</option>
                 </select>
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeMember(memberUid)}>✕</button>
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeMember(memberUid)} aria-label="Remove">✕</button>
               </>
             )}
           </li>
@@ -851,7 +850,7 @@ function CustomFieldsEditor({ fields, onChange, bare = false }) {
                   placeholder="comma, separated, values"
                 />
               )}
-              <button type="button" className="btn btn-sm btn-ghost" onClick={() => remove(f.id)}>✕</button>
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => remove(f.id)} aria-label="Remove">✕</button>
             </li>
           ))}
         </ul>
@@ -873,7 +872,7 @@ function TemplateCard({ template, onUse, note }) {
       <div className="template-card-head">
         <span className="badge badge-soft-info">{template.kind}</span>
         <strong>{template.name}</strong>
-        <button className="btn btn-sm btn-ghost link-danger" onClick={handleDelete} style={{ marginLeft: 'auto' }}>✕</button>
+        <button className="btn btn-sm btn-ghost link-danger" onClick={handleDelete} style={{ marginLeft: 'auto' }} aria-label="Remove">✕</button>
       </div>
       {template.kind === 'project' && (
         <p className="muted small">
@@ -1335,9 +1334,9 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
                     </div>
                     <span className="pe-pct">{st.total ? `${st.pct}%` : '—'}</span>
                     <div className="pe-phase-ctl">
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0} title="Move up">↑</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1} title="Move down">↓</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1} title="Remove phase">✕</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0} title="Move up" aria-label="Move up">↑</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1} title="Move down" aria-label="Move down">↓</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1} title="Remove phase" aria-label="Remove phase">✕</button>
                     </div>
                   </div>
                 );
@@ -1387,7 +1386,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
                         }}
                       />
                       <button type="button" className="btn btn-sm" onClick={addNewSegment} disabled={!newSegmentInput.trim()}>Add</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => setNewSegmentInput(null)}>✕</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => setNewSegmentInput(null)} aria-label="Remove">✕</button>
                     </div>
                   )}
                 </div>
@@ -1877,16 +1876,14 @@ function SegmentManager({ projects, onClose }) {
                           <button
                             className="btn btn-sm btn-ghost"
                             onClick={() => startEdit(seg)}
-                            title="Rename segment"
-                          >
+                            title="Rename segment" aria-label="Rename segment">
                             ✎
                           </button>
                           <button
                             className="btn btn-sm btn-ghost link-danger"
                             onClick={() => deleteSegment(seg)}
                             disabled={isSaving}
-                            title="Delete segment (projects move to Uncategorized)"
-                          >
+                            title="Delete segment (projects move to Uncategorized)" aria-label="Delete segment (projects move to Uncategorized)">
                             ✕
                           </button>
                         </div>

@@ -1286,7 +1286,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
                   <span className="badge badge-soft-muted">{role}</span>
                 )}
                 {isAdmin && role !== 'owner' && (
-                  <button className="btn btn-sm btn-ghost link-danger" onClick={() => remove(uid)} disabled={busy}>✕</button>
+                  <button className="btn btn-sm btn-ghost link-danger" onClick={() => remove(uid)} disabled={busy} aria-label="Remove">✕</button>
                 )}
               </div>
             );
@@ -1313,8 +1313,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
                       className="btn btn-sm btn-ghost link-danger"
                       onClick={() => withdraw(inv.email)}
                       disabled={busy}
-                      title="Withdraw this invitation"
-                    >✕</button>
+                      title="Withdraw this invitation" aria-label="Withdraw this invitation">✕</button>
                   )}
                 </div>
               ))}

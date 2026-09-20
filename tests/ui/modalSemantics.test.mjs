@@ -120,3 +120,40 @@ test('a modal that must not be dismissed mid-operation says so', () => {
     assert.match(read(f), /importing \? undefined : onClose/, `${f} can be dismissed mid-import`);
   }
 });
+
+// ─── Icon-only buttons (T-0069 / POL-002) ───────────────────────────────────
+
+test('every icon-only button says what it does', () => {
+  // ✕ ✎ ▶ ↑ ↓ ⎘ mean nothing to a screen reader, and nothing to anyone on a
+  // touch device where there is no hover to reveal a title.
+  const SYMBOLS = '✕✎▶↑↓⎘×⎙↩✓⚙≡▲▼';
+  const pattern = new RegExp(
+    `<button\\b((?:[^<>]|\\{[^{}]*\\})*?)>\\s*([${SYMBOLS}])\\s*</button>`, 'gs',
+  );
+  const offenders = [];
+  for (const f of files) {
+    const src = read(f);
+    for (const m of src.matchAll(pattern)) {
+      if (!/aria-label=/.test(m[1])) {
+        offenders.push(`${f}: <button>${m[2]}</button>`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test('a label matches the title it sits next to, rather than contradicting it', () => {
+  const offenders = [];
+  for (const f of files) {
+    const src = read(f);
+    for (const m of src.matchAll(/<button\b((?:[^<>]|\{[^{}]*\})*?)>/gs)) {
+      const attrs = m[1];
+      const title = /title="([^"]+)"/.exec(attrs);
+      const label = /aria-label="([^"]+)"/.exec(attrs);
+      if (title && label && title[1] !== label[1]) {
+        offenders.push(`${f}: title "${title[1]}" vs aria-label "${label[1]}"`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'two different descriptions of one button');
+});

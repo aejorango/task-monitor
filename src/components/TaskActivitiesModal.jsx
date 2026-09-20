@@ -153,8 +153,7 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
                       <button
                         className="btn btn-sm btn-ghost"
                         title="Edit this entry"
-                        onClick={() => setEditingActivity(a)}
-                      >✎</button>
+                        onClick={() => setEditingActivity(a)} aria-label="Edit this entry">✎</button>
                     </td>
                   </tr>
                 ))}

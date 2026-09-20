@@ -216,6 +216,11 @@ components/ExportButton.jsx← "Export ▾" — the menu, the spinner, the filen
 ## Telling the user something
 
 ```
+hooks/useModalDialog.js ← turns an EXISTING modal into a real dialog: spread
+                          backdropProps + dialogProps, give the heading
+                          `id={modal.titleId}` (or pass `title:` when there is
+                          no heading). role=dialog, aria-modal, focus trap,
+                          Escape, focus restore, backdrop click.
 components/Toast.jsx   ← useToast(): a message, optionally with Undo
 components/Dialog.jsx  ← useDialog(): await ask.confirm(…) / ask.prompt(…)
                          plus the Modal shell (role=dialog, focus trap, Escape)
@@ -384,6 +389,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Promising something the app cannot do — an approval email above all. There is no backend and no SMTP (see Out of Scope), so `services/approvalCopy.js` says "no email is sent, the page lets you in the moment someone approves" instead. `tests/ui/approvalScreens.test.mjs` fails the build if any screen promises one.
 - ❌ Calling the session "anonymous". Anonymous auth was removed; use `sessionLine(profile, auth.currentUser)`.
 - ❌ `alert()`, `confirm()` or `prompt()`. They block the page, cannot be themed, and give a screen-reader user no title and no focus management. Use `useToast()` (`toast.success/error/info`, with `{ undo }` where something can be taken back) and `useDialog()` (`await ask.confirm({ title, message, confirmLabel, danger })` / `ask.prompt(...)`). `tests/ui/noNativeDialogs.test.mjs` fails the build otherwise.
+- ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
+- ❌ An icon-only button (`✕ ✎ ▶ ↑ ↓ ⎘`) with no `aria-label`. It means nothing to a screen reader, and nothing on a touch device where there is no hover to reveal a `title`. Make the two match.
 - ❌ A confirm button that says "OK". Say what will happen — Delete, Remove, Revoke — and pass `danger: true` when it destroys something.
 - ❌ Showing a repo filename, a config key or "check the console" to a user. Error copy goes through `friendlyError(err, '<plain sentence>')` in `services/access.js`; `tests/ui/copy.test.mjs` fails the build otherwise.
 - ❌ Drag-and-drop: if a card click triggers a drag, wrap inner buttons with `onPointerDown={(e) => e.stopPropagation()}` and `onClick={(e) => e.stopPropagation()}` so dnd-kit doesn't capture the gesture

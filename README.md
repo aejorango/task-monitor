@@ -334,6 +334,8 @@ Firestore emulator is a JAR; it never touches the real project.
 | `tests/ui/exporters.test.mjs` | The real .xlsx, .docx and .pdf bytes are valid files |
 | `tests/ui/noNativeDialogs.test.mjs` | No alert/confirm/prompt; every confirm labels its action |
 | `tests/ui/dialog.test.mjs` | Focus trap, Escape, focus restore, aria-modal |
+| `tests/ui/modalSemantics.test.mjs` | Every modal is a real dialog; every icon button is labelled |
+| `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |

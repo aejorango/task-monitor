@@ -622,7 +622,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
                   <span className="minute-pri-num">{i + 1}</span>
                   <input className="input input-sm" value={x.text} placeholder="What he keeps bringing up"
                     onChange={(e) => setPri('bossMentions', x.id, e.target.value)} />
-                  <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delPri('bossMentions', x.id)}>✕</button>
+                  <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delPri('bossMentions', x.id)} aria-label="Remove">✕</button>
                 </div>
               ))}
               <button className="btn btn-sm" onClick={() => addPri('bossMentions')}>+ Add</button>
@@ -635,7 +635,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
                   <span className="minute-pri-num">{i + 1}</span>
                   <input className="input input-sm" value={x.text} placeholder="What he rejected / resisted"
                     onChange={(e) => setPri('bossPushbacks', x.id, e.target.value)} />
-                  <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delPri('bossPushbacks', x.id)}>✕</button>
+                  <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delPri('bossPushbacks', x.id)} aria-label="Remove">✕</button>
                 </div>
               ))}
               <button className="btn btn-sm" onClick={() => addPri('bossPushbacks')}>+ Add</button>
@@ -660,7 +660,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
                     <input type="date" className="input input-sm" value={it.due} onChange={(e) => setItem(it.id, { due: e.target.value })} />
                   </div>
                 </div>
-                <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delItem(it.id)}>✕</button>
+                <button className="btn btn-sm btn-ghost" title="Remove" onClick={() => delItem(it.id)} aria-label="Remove">✕</button>
               </div>
             ))}
             <button className="btn btn-sm" onClick={addItem}>+ Add action item</button>

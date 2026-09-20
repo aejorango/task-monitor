@@ -73,8 +73,7 @@ export default function LandingView() {
                 type="button"
                 className="link-danger"
                 onClick={() => setError(null)}
-                style={{ marginLeft: 'auto' }}
-              >✕</button>
+                style={{ marginLeft: 'auto' }} aria-label="Remove">✕</button>
             </div>
             <p className="auth-error-msg">{error.message}</p>
           </div>

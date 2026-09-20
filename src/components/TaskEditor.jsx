@@ -631,7 +631,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                 <div className="tag-input-wrap">
                   {tags.map((t) => (
                     <span key={t} className="tag-pill">
-                      #{t} <button type="button" onClick={() => removeTag(t)}>×</button>
+                      #{t} <button type="button" onClick={() => removeTag(t)} aria-label="Remove">×</button>
                     </span>
                   ))}
                   <input
@@ -684,9 +684,9 @@ export default function TaskEditor({ task, projects, onClose }) {
                     <span className="te-sub-text">{s.text}</span>
                     <span className="te-sub-ctl" onClick={(e) => e.stopPropagation()}>
                       <button type="button" className="btn btn-sm btn-ghost" title="Promote to its own task" onClick={() => promoteSubtask(s)}>↗</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, -1)} disabled={i === 0}>↑</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, 1)} disabled={i === subtasks.length - 1}>↓</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeSubtask(s.id)}>✕</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, -1)} disabled={i === 0} aria-label="Move up">↑</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, 1)} disabled={i === subtasks.length - 1} aria-label="Move down">↓</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeSubtask(s.id)} aria-label="Remove">✕</button>
                     </span>
                   </div>
                 ))}
@@ -722,7 +722,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                             {d.status === 'done' ? 'DONE' : 'BLOCKED BY'}
                           </span>
                           <span className="te-dep-title">{d.title}</span>
-                          <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeDep(d.id)}>✕</button>
+                          <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeDep(d.id)} aria-label="Remove">✕</button>
                         </div>
                       ))}
                     </div>
@@ -1104,7 +1104,7 @@ function LinksEditor({ links, onChange, candidates }) {
               <div key={i} className="te-dep">
                 <span className={`badge badge-soft-${def.badge}`}>{def.icon} {def.label}</span>
                 <span className="te-dep-title">{target?.title || '(deleted task)'}</span>
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => remove(i)}>✕</button>
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => remove(i)} aria-label="Remove">✕</button>
               </div>
             );
           })}

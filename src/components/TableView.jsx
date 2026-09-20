@@ -231,8 +231,7 @@ export default function TableView({ projectFilter }) {
                       <button
                         className="btn btn-sm btn-ghost"
                         title="Edit entry"
-                        onClick={() => setEditing(r)}
-                      >✎</button>
+                        onClick={() => setEditing(r)} aria-label="Edit entry">✎</button>
                       <button
                         className="btn btn-sm btn-ghost"
                         title="Delete entry"
