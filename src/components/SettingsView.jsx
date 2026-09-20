@@ -6,6 +6,8 @@ import { useProjects, useTasks, useAllActivities, useAuth, useWebhooks } from '.
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
   addWorkspaceMember,
+  inviteToWorkspaceByEmail,
+  revokeWorkspaceInvite,
   removeWorkspaceMember,
   updateWorkspaceMemberRole,
   backfillWorkspaceMemberProfiles,
@@ -51,6 +53,7 @@ import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 import KnowledgeSection from './KnowledgeSection';
 import { sessionLine, SETTINGS_SUBTITLE } from '../services/approvalCopy';
+import { memberLabel, memberSubLabel, validateInvite } from '../services/invites';
 import { versionLine } from '../services/appVersion';
 import { downloadFile } from '../services/download';
 import { friendlyError } from '../services/access';
@@ -1060,6 +1063,7 @@ function WorkspacesSection({ currentUser }) {
           workspace={showMembers}
           currentUid={currentUser?.uid}
           isAdmin={showMembers.acl?.[currentUser?.uid] === 'owner' || showMembers.acl?.[currentUser?.uid] === 'admin'}
+          isSuperadmin={isSuperadmin}
           onClose={() => setShowMembers(false)}
         />
       )}
@@ -1067,9 +1071,12 @@ function WorkspacesSection({ currentUser }) {
   );
 }
 
-function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
+function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = false, onClose }) {
+  const [newEmail, setNewEmail] = useState('');
   const [newUid, setNewUid] = useState('');
   const [newRole, setNewRole] = useState('editor');
+  const [inviteError, setInviteError] = useState(null);
+  const [invited, setInvited] = useState(null);
   const [busy, setBusy] = useState(false);
   // Resolve names for members whose profile isn't denormalized yet (added
   // before profile-snapshotting). Best-effort; persists what it can.
@@ -1080,12 +1087,40 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
     return () => { alive = false; };
   }, [workspace.id, (workspace.members || []).join(',')]);
   const profOf = (uid) => workspace.memberProfiles?.[uid] || resolved[uid] || null;
+  const pendingInvites = (workspace.pendingInvites || [])
+    .filter((i) => i?.email)
+    .sort((a, b) => String(a.email).localeCompare(String(b.email)));
 
+  // The normal way in: type an email. Nobody has to find a Firebase UID, and
+  // the person joins themselves next time they open the app.
+  const invite = async () => {
+    setInviteError(null); setInvited(null);
+    const check = validateInvite(newEmail, newRole, workspace);
+    if (!check.ok) { setInviteError(check.error); return; }
+    setBusy(true);
+    try {
+      await inviteToWorkspaceByEmail(workspace, check.email, check.role, currentUid);
+      setInvited(check.email);
+      setNewEmail('');
+    } catch (err) {
+      console.error(err);
+      setInviteError(friendlyError(err, 'Could not send that invitation. Try again.'));
+    } finally { setBusy(false); }
+  };
+
+  const withdraw = async (email) => {
+    setBusy(true);
+    try { await revokeWorkspaceInvite(workspace, email); }
+    catch (err) { console.error(err); setInviteError(friendlyError(err, 'Could not withdraw that invitation.')); }
+    finally { setBusy(false); }
+  };
+
+  // Escape hatch for a superadmin who already has an Account ID in hand.
   const add = async () => {
     if (!newUid.trim()) return;
     setBusy(true);
     try { await addWorkspaceMember(workspace, newUid.trim(), newRole); setNewUid(''); }
-    catch (err) { console.error(err); alert('Could not add member: ' + (err.message || '')); }
+    catch (err) { console.error(err); alert(friendlyError(err, 'Could not add that member.')); }
     finally { setBusy(false); }
   };
   const remove = async (uid) => {
@@ -1109,7 +1144,9 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
         <h3 className="modal-title">{workspace.name} — members</h3>
         <p className="modal-sub">
-          Members can see and edit everything in this workspace. Owners can add/remove members and change roles. Ask a member for their Account ID (Settings → Account) and add them below.
+          Members can see and edit everything in this workspace. Admins can invite
+          people, remove them and change their role. Invite someone by their email
+          address — they join automatically the next time they open the app.
         </p>
 
         <div className="ws-members-list">
@@ -1117,8 +1154,9 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
             const role = workspace.acl?.[uid] || 'editor';
             const isMe = uid === currentUid;
             const prof = profOf(uid);
-            const primary = prof?.displayName || prof?.email || `${uid.slice(0, 8)}…`;
-            const secondary = prof?.displayName ? prof?.email : null;
+            const primary = memberLabel(uid, workspace.memberProfiles || {}, { selfUid: currentUid })
+              || memberLabel(uid, { [uid]: prof || {} }, { selfUid: currentUid });
+            const secondary = memberSubLabel(uid, { [uid]: prof || {} });
             return (
               <div key={uid} className="ws-member-row">
                 {prof?.photoURL ? (
@@ -1137,9 +1175,11 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
                       {secondary}
                     </div>
                   )}
-                  <div className="mono muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {uid}
-                  </div>
+                  {isSuperadmin && (
+                    <div className="mono muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title="Account ID">
+                      {uid}
+                    </div>
+                  )}
                 </div>
                 {isAdmin && role !== 'owner' ? (
                   <select
@@ -1164,15 +1204,47 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
           })}
         </div>
 
+        {pendingInvites.length > 0 && (
+          <div className="field" style={{ marginTop: 12 }}>
+            <label className="label">Invited — waiting for them to sign in</label>
+            <div className="ws-members-list">
+              {pendingInvites.map((inv) => (
+                <div key={inv.email} className="ws-member-row">
+                  <span className="account-avatar fallback" style={{ width: 28, height: 28, fontSize: 12 }}>
+                    {(inv.email[0] || '?').toUpperCase()}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {inv.email}
+                    </div>
+                    <div className="muted small">Joins as {inv.role} when they next open the app</div>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      className="btn btn-sm btn-ghost link-danger"
+                      onClick={() => withdraw(inv.email)}
+                      disabled={busy}
+                      title="Withdraw this invitation"
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {isAdmin && (
           <div className="field" style={{ marginTop: 12 }}>
-            <label className="label">Add member by Account ID</label>
+            <label className="label">Invite someone by email</label>
             <div style={{ display: 'flex', gap: 6 }}>
               <input
-                className="input input-sm mono"
-                value={newUid}
-                onChange={(e) => setNewUid(e.target.value)}
-                placeholder="Account ID"
+                className="input input-sm"
+                type="email"
+                value={newEmail}
+                onChange={(e) => { setNewEmail(e.target.value); setInviteError(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') invite(); }}
+                placeholder="name@company.com"
+                autoComplete="off"
                 style={{ flex: 1 }}
               />
               <select className="select select-sm" value={newRole} onChange={(e) => setNewRole(e.target.value)} style={{ width: 110 }}>
@@ -1180,11 +1252,44 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, onClose }) {
                 <option value="editor">editor</option>
                 <option value="viewer">viewer</option>
               </select>
-              <button className="btn btn-sm" onClick={add} disabled={busy || !newUid.trim()}>Add</button>
+              <button className="btn btn-sm btn-primary" onClick={invite} disabled={busy || !newEmail.trim()}>
+                Invite
+              </button>
             </div>
+            {inviteError && <p className="auth-error-msg" style={{ marginTop: 6 }}>{inviteError}</p>}
+            {invited && (
+              <p className="muted small" style={{ marginTop: 6 }}>
+                <span className="badge badge-soft-success">Invited</span>{' '}
+                {invited} joins this workspace the next time they sign in. No email is
+                sent — tell them it is waiting.
+              </p>
+            )}
             <p className="muted small" style={{ marginTop: 6 }}>
-              The user must have signed in at least once. Copy their Account ID from <em>Settings → User Management</em> (or they can copy their own from <em>Settings → Account</em>). Their name and email appear here as soon as they're added; if not yet available, it fills in once they next open the app.
+              They can already have an account or not — either way, the invitation is
+              waiting for them when they sign in with that address.
             </p>
+
+            {isSuperadmin && (
+              <details style={{ marginTop: 10 }}>
+                <summary className="muted small" style={{ cursor: 'pointer' }}>
+                  Add by Account ID (advanced)
+                </summary>
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <input
+                    className="input input-sm mono"
+                    value={newUid}
+                    onChange={(e) => setNewUid(e.target.value)}
+                    placeholder="Account ID"
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn btn-sm" onClick={add} disabled={busy || !newUid.trim()}>Add</button>
+                </div>
+                <p className="muted small" style={{ marginTop: 6 }}>
+                  Adds someone immediately, without waiting for them to sign in. Account
+                  IDs are listed in <em>Settings → User Management</em>.
+                </p>
+              </details>
+            )}
           </div>
         )}
 
