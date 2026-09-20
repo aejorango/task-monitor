@@ -10038,3 +10038,15 @@ a:hover { text-decoration: underline; }
   opacity: 0.75;
   font-variant-numeric: tabular-nums;
 }
+
+/* "Load older…" row under a paginated list (Activity table, Work Performed).
+   The live listener holds one page; older history loads on request. */
+.load-more-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 4px 4px;
+  border-top: 1px solid var(--c-border);
+  margin-top: 8px;
+}

@@ -2,12 +2,13 @@
 // React hooks wrapping the Firestore subscriptions. Every collection-level
 // hook is scoped to the user's currently-active workspace.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   subscribeToTasks,
-  subscribeToActivities,
   subscribeToRecentActivities,
   subscribeToAllActivities,
+  loadMoreActivities,
+  ACTIVITY_PAGE_SIZE,
   subscribeToProjects,
   subscribeToProjectsAcrossWorkspaces,
   subscribeToTasksAcrossWorkspaces,
@@ -277,19 +278,58 @@ export function useAllActivities() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, ready, sharedProjectIdsKey]);
 
+  // ── Older history, fetched on demand ────────────────────────────────────
+  // The live listener holds one page (the newest ACTIVITY_PAGE_SIZE entries).
+  // "Load more" appends older pages with a one-shot read, so a workspace with
+  // years of history costs one page unless somebody asks to see further back.
+  const [olderActivities, setOlderActivities] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // A workspace switch invalidates every page we have fetched. Adjusted during
+  // render (the React-recommended pattern) rather than in an effect, so the
+  // previous workspace's history never paints for a frame.
+  const [seenWorkspace, setSeenWorkspace] = useState(workspaceId);
+  if (seenWorkspace !== workspaceId) {
+    setSeenWorkspace(workspaceId);
+    if (olderActivities.length) setOlderActivities([]);
+    if (!hasMore) setHasMore(true);
+  }
+
   // Gate on (ready && userId) so stale shared data never leaks past
   // sign-out — see useTasks/useProjects for the same pattern.
   const activities = useMemo(() => {
     if (!ready || !userId) return [];
     const map = new Map();
     workspaceActivities.forEach((a) => map.set(a.id, a));
+    olderActivities.forEach((a) => { if (!map.has(a.id)) map.set(a.id, a); });
     if (sharedProjectIds.length > 0) {
       sharedActivities.forEach((a) => { if (!map.has(a.id)) map.set(a.id, a); });
     }
-    return [...map.values()];
-  }, [workspaceActivities, sharedActivities, sharedProjectIds, ready, userId]);
+    return [...map.values()].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }, [workspaceActivities, olderActivities, sharedActivities, sharedProjectIds, ready, userId]);
 
-  return { activities, loading };
+  // True only once a full page came back — a half-empty page IS the end.
+  const mayHaveMore = hasMore && workspaceActivities.length >= ACTIVITY_PAGE_SIZE;
+
+  const loadMore = useCallback(async () => {
+    if (!workspaceId || loadingMore || !mayHaveMore) return;
+    const oldest = activities[activities.length - 1]?.date;
+    if (!oldest) return;
+    setLoadingMore(true);
+    try {
+      const res = await loadMoreActivities(workspaceId, oldest);
+      setOlderActivities((prev) => [...prev, ...res.activities]);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.error('[activities] load more failed:', err);
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [workspaceId, loadingMore, mayHaveMore, activities]);
+
+  return { activities, loading, loadMore, hasMore: mayHaveMore, loadingMore };
 }
 
 // ─── useWebhooks ───────────────────────────────────────────────────────────

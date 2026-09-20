@@ -32,7 +32,7 @@ const COMPLETION_COLORS = {
 
 /* ── main component ─────────────────────────────────────── */
 export default function WorkPerformedView({ projectFilter }) {
-  const { activities, loading } = useAllActivities();
+  const { activities, loading, loadMore, hasMore, loadingMore } = useAllActivities();
   const { byId: projectById }   = useProjects();
   const { tasks }               = useTasks();
   const { userId }              = useAuth();
@@ -338,6 +338,18 @@ export default function WorkPerformedView({ projectFilter }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="load-more-row">
+          <button type="button" className="btn" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading…' : 'Load older work'}
+          </button>
+          <span className="muted small">
+            Showing the most recent entries. Older work loads on request so the page
+            stays fast.
+          </span>
         </div>
       )}
 

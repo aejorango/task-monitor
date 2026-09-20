@@ -32,7 +32,7 @@ const COMPLETION_OPTIONS = [
 ];
 
 export default function TableView({ projectFilter }) {
-  const { activities, loading } = useAllActivities();
+  const { activities, loading, loadMore, hasMore, loadingMore } = useAllActivities();
   const { byId: projectById } = useProjects();
   const { tasks } = useTasks();
   const taskById = useMemo(() => {
@@ -236,6 +236,18 @@ export default function TableView({ projectFilter }) {
               })}
             </tbody>
           </table>
+
+          {hasMore && (
+            <div className="load-more-row">
+              <button type="button" className="btn" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? 'Loading…' : 'Load older activities'}
+              </button>
+              <span className="muted small">
+                Showing the {sorted.length} most recent. Older entries load on request so
+                the page stays fast.
+              </span>
+            </div>
+          )}
         </div>
       )}
 

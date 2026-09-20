@@ -41,3 +41,4 @@ One line per task from the Ideon task sheet.
 - T-0035 — Company Anthropic key is shipped to every member's browser (UI) — src/components/SettingsView.jsx, tests/ui/companyKey.test.mjs
 - T-0036 — Company Anthropic key is shipped to every member's browser (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0037 — Whole-collection subscriptions will not scale (API/data layer) — src/services/firebase.js, firestore.indexes.json, firebase.json, package.json, scripts/firebase-deploy.mjs, src/services/firestoreQueries.test.mjs
+- T-0038 — Whole-collection subscriptions will not scale (UI) — src/hooks/useTasks.js, src/components/TableView.jsx, src/components/WorkPerformedView.jsx, src/App.css, tests/ui/activityPaging.test.mjs
