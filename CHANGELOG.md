@@ -32,3 +32,4 @@ One line per task from the Ideon task sheet.
 - T-0026 — CLI install instructions shown to every user (API/data layer) — src/services/knowledgeCopy.js, src/services/knowledgeCopy.test.mjs
 - T-0027 — CLI install instructions shown to every user (UI) — src/components/KnowledgeSection.jsx, src/components/SettingsView.jsx, tests/ui/KnowledgeSection.test.mjs
 - T-0028 — CLI install instructions shown to every user (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
+- T-0029 — Stale copy: anonymous session, email notification promise (API/data layer) — src/services/approvalCopy.js, src/services/approvalCopy.test.mjs
