@@ -4,6 +4,31 @@ This is the working backlog. Each tier is a coherent buildout shipped as one
 deploy. Tier 1 starts immediately after Phase 1 ships; later tiers run
 autonomously in sequence.
 
+> **Where this stands (21 September 2026).** The 84 rows of the 20 September
+> audit (`02-audit-2026-09-20.md`, `audit-and-task-2026-09-20.xlsx`) are all
+> done — see `task-status.md` for the per-row record and `CHANGELOG.md` for the
+> files. That work overtook parts of this roadmap; the corrections below are the
+> ones that matter when reading it.
+>
+> - **1.2 File uploads** — attachments no longer live under `users/{uid}/…`.
+>   They belong to the workspace (`workspaces/{workspaceId}/{taskId}/…`), so any
+>   member can open or delete one, and deleting an activity removes its bytes
+>   (T-0073). The old prefix is frozen, readable only by its uploader.
+> - **AI feature design (below)** — the "key in `localStorage`, direct browser
+>   call" note is out of date. A company's Anthropic key is held server-side in
+>   `companies/{id}/secrets/anthropic` and reached through the `aiProxy` Cloud
+>   Function; the browser never holds it (T-0034/35). `localStorage` is now only
+>   a superadmin's own device key. The default brain is the Claude Code CLI via
+>   the local bridge.
+> - **Shipped beyond this roadmap**, each with its own tests and docs:
+>   automations, the inbox and @mentions, the workload planner, the task table,
+>   the timesheet, the import wizard, the template gallery, Trash and undo, the
+>   command palette, exports to seven formats, read-only client share links, and
+>   recurrence that runs on schedule rather than only on completion.
+>
+> `CLAUDE.md` is the current architecture, and its Common Pitfalls list is where
+> the traps found during that work are written down. Read it before this file.
+
 ---
 
 ## Tier 1 — High-value, fills real gaps
@@ -135,4 +160,4 @@ The AI task generator (Phase 1) and AI assist (Tier 2) share a service:
 
 ---
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-09-21 (status block at the top; the tiers below predate the audit)_
