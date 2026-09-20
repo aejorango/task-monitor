@@ -23,3 +23,4 @@ One line per task from the Ideon task sheet.
 - T-0017 — Bridge API mode is labelled as subscription billing (API/data layer) — src/services/ai.js, src/services/aiProvider.test.mjs
 - T-0018 — Bridge API mode is labelled as subscription billing (UI) — src/components/SettingsView.jsx, tests/ui/AiBrainPanel.test.mjs
 - T-0019 — Bridge API mode is labelled as subscription billing (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
+- T-0020 — Sidebar user block polls auth every 500 ms — src/components/AppShell.jsx, tests/ui/SidebarUserBlock.test.mjs

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTasks, useAllActivities, useProjects, useSavedViews } from '../hooks/useTasks';
 import { useActiveWorkspaceId, setActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useOnline } from '../hooks/useOnline';
-import { addSavedView, softDeleteSavedView, auth } from '../services/firebase';
+import { addSavedView, softDeleteSavedView, auth, onAuthChange } from '../services/firebase';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import Icon from './Icon';
 import AiHelper from './AiHelper';
@@ -370,32 +370,35 @@ function SidebarSavedViews({ route, navigate }) {
 // ─── Sidebar user block ───────────────────────────────────
 
 function SidebarUserBlock({ userId, ready, navigate, userProfile }) {
+  // Subscribe, don't poll. The previous 500 ms interval re-rendered the whole
+  // sidebar twice a second forever, and could not even see what it was looking
+  // for: Firebase mutates `auth.currentUser` in place, so an identity check
+  // never fires on a profile change — only on sign-in and sign-out, which is
+  // exactly what onAuthChange reports.
   const [user, setUser] = useState(auth.currentUser);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const u = auth.currentUser;
-      if (u !== user) setUser(u);
-    }, 500);
-    return () => clearInterval(interval);
-  }, [user]);
+  useEffect(() => onAuthChange(setUser), []);
 
   if (!ready) return <span className="muted-2">signing in…</span>;
   if (ready && !userId) return <span className="session-pill warn">auth offline</span>;
 
   const isSuperadmin = userProfile?.role === 'superadmin';
+  // The Firestore profile is the live copy — it updates when the user edits
+  // their name or photo, which the auth object does not.
+  const displayName = userProfile?.displayName || user?.displayName || user?.email || '';
+  const photoURL    = userProfile?.photoURL    || user?.photoURL    || '';
+  const email       = userProfile?.email       || user?.email       || '';
 
   return (
     <button
       className="sidebar-user-block"
       onClick={() => navigate({ view: 'settings' })}
-      title={user?.email || user?.displayName}
+      title={email || displayName}
     >
-      {user?.photoURL
-        ? <img src={user.photoURL} alt="" className="sidebar-user-avatar" />
-        : <div className="sidebar-user-avatar fallback">{(user?.displayName || user?.email || '?')[0].toUpperCase()}</div>}
+      {photoURL
+        ? <img src={photoURL} alt="" className="sidebar-user-avatar" />
+        : <div className="sidebar-user-avatar fallback">{(displayName || '?')[0].toUpperCase()}</div>}
       <div className="sidebar-user-text">
-        <div className="sidebar-user-name">{user?.displayName || user?.email}</div>
+        <div className="sidebar-user-name">{displayName}</div>
         <div className="sidebar-user-sub">{isSuperadmin ? 'Superadmin' : 'Signed in'}</div>
       </div>
     </button>
