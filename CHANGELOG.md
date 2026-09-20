@@ -49,3 +49,4 @@ One line per task from the Ideon task sheet.
 - T-0043 — Webhooks are stored but never delivered (API/data layer) — functions/webhooks.js, functions/index.js, functions/src/webhookEvents.js, functions/src/webhookEvents.test.mjs, functions/src/signature.test.mjs, firestore.rules, firestore.indexes.json, src/services/firebase.js
 - T-0044 — Webhooks are stored but never delivered (UI) — src/components/SettingsView.jsx, src/App.css, tests/ui/webhookDelivery.test.mjs
 - T-0045 — Webhooks are stored but never delivered (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
+- T-0046 — No Word, Excel, PDF or Markdown exports (API/data layer) — src/services/exporters.js, src/services/exporters.test.mjs, tests/ui/exporters.test.mjs, package.json
