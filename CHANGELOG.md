@@ -14,3 +14,4 @@ One line per task from the Ideon task sheet.
 - T-0008 — No error boundary; render errors blank the app — src/components/ErrorBoundary.jsx, src/services/errorMessages.js, src/services/errorMessages.test.mjs, src/App.jsx, src/main.jsx, src/App.css, dev/error-boundary.html, dev/error-boundary.jsx, tests/ui/*.mjs, package.json
 - T-0009 — Tests cover only bridge parsing and due-alert rules (API/data layer) — src/services/csv.js, src/services/csv.test.mjs, src/services/askAiCore.js, src/services/askAiCore.test.mjs, src/services/askAi.js, src/services/nlpQuickAdd.js, src/services/nlpQuickAdd.test.mjs
 - T-0010 — Tests cover only bridge parsing and due-alert rules (UI) — src/components/CsvImporter.jsx, src/services/csv.js, src/services/csv.test.mjs, tests/ui/CsvImporter.test.mjs, tests/ui/dom.mjs, tests/ui/jsx-hooks.mjs
+- T-0011 — Tests cover only bridge parsing and due-alert rules (tests & docs) — README.md, CLAUDE.md, CHANGELOG.md

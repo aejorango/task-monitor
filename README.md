@@ -170,16 +170,48 @@ rules so the two stay in step).
 | Read presence (who else is on a task) | Members of that task's workspace |
 | Set your own `companyId` | Nobody — superadmins assign companies |
 
-### Running the rules tests
-
-The rules have their own test suite against the Firestore emulator. It needs
-Java (the emulator is a JAR) and never touches the real project.
+### Tests
 
 ```bash
-npm test          # fast unit tests — bridge, due alerts, access rules
-npm run test:rules # Firestore emulator: security rules (tests/rules/*.test.mjs)
-npm run test:all   # both
+npm test            # fast: pure logic + component tests (no network, no emulator)
+npm run test:rules  # Firestore emulator: the security rules
+npm run test:all    # both — what to run before a deploy
 ```
+
+`npm test` needs nothing but Node. `npm run test:rules` needs Java, because the
+Firestore emulator is a JAR; it never touches the real project.
+
+| Suite | Covers |
+| --- | --- |
+| `bridge/ai.test.mjs` | Hermetic CLI invocation, denied-tool handling, JSON extraction |
+| `bridge/settings.test.mjs` | What a web page may change on the bridge, and the admin code |
+| `bridge/notebooklm.test.mjs` | NotebookLM CLI payload parsing, timeouts, concurrency |
+| `src/services/dueAlerts.test.mjs` | Which task is due for an alert, and in what order |
+| `src/services/recurrence.test.mjs` | Recurring-task date maths and the next instance's payload |
+| `src/services/csv.test.mjs` | CSV parsing, column matching, and what an import will do |
+| `src/services/nlpQuickAdd.test.mjs` | The quick-add parser (priority, tags, dates, @names) |
+| `src/services/askAiCore.test.mjs` | Ask AI: digest facts, intent routing, task search, answers |
+| `src/services/access.test.mjs` | Who may share a project; plain-language error text |
+| `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
+| `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
+| `tests/rules/*.test.mjs` | firestore.rules, against the emulator |
+
+**Where logic lives.** Anything worth testing is a pure module under
+`src/services/`, not a function inside a component or inside `firebase.js`:
+
+- `recurrence.js` — date maths + the next recurrence payload
+- `csv.js` — CSV in and out, column matching, import preview
+- `askAiCore.js` — the whole Ask AI analysis engine, with no Firebase import
+  (`askAi.js` adds only the parts that write or call a model)
+- `access.js` — the permission checks that mirror `firestore.rules`
+- `dueAlerts.js`, `errorMessages.js`, `nlpQuickAdd.js`
+
+Components import from those modules and render the result. A new piece of
+logic goes in a service with a test, not in a `.jsx` file.
+
+**Component tests** run the real component in jsdom — see `tests/ui/dom.mjs`
+for `mount`, `clickText` and `text`. `tests/ui/jsx-loader.mjs` compiles JSX with
+the transform Vite already ships, so there is no second toolchain to configure.
 
 ## Documentation
 

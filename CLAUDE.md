@@ -153,7 +153,8 @@ and `generateClaudePromptFull`.
 
 ## Conventions
 
-- **Dates as YYYY-MM-DD strings** in user's local timezone (Asia/Manila). Helper: `todayLocal()` in firebase.js.
+- **Dates as YYYY-MM-DD strings** in user's local timezone (Asia/Manila). Helper: `todayLocal()` — defined in `services/recurrence.js`, re-exported from firebase.js.
+- **Logic goes in a pure service, not in a component or in firebase.js.** `services/recurrence.js`, `services/csv.js`, `services/askAiCore.js`, `services/access.js`, `services/dueAlerts.js`, `services/errorMessages.js` and `services/nlpQuickAdd.js` import no Firebase and no network — that is what makes them testable with `node --test`. Components render what those modules return.
 - **Timestamps** (`createdAt`, `updatedAt`, `loggedAt`, `lastActivityAt`) use `serverTimestamp()`.
 - **Soft delete** via `deleted: false` flag; **archive** via `archived: false`. Never hard-delete tasks because activities reference them.
 - **`userId` on every document** — keeps security rules trivial.
@@ -256,8 +257,11 @@ src/
 
 ```bash
 npm run bridge       # AI bridge on 127.0.0.1:4319 (Claude Code CLI brain)
-npm test             # unit tests: bridge/*.test.mjs + src/**/*.test.mjs (node --test, no deps)
+npm test             # bridge/*.test.mjs + src/**/*.test.mjs + tests/ui/*.test.mjs
+                     # (node --test; jsdom + a rolldown JSX loader for components)
                      # never spawns `claude` or `notebooklm` — fixtures only
+npm run test:rules   # firestore.rules against the Firestore emulator (needs Java)
+npm run test:all     # both — run this before a deploy
 notebooklm login     # optional: connect the NotebookLM knowledge base (see README)
 npm run dev          # local at http://localhost:5173/task-monitor/
                      # dev/due-alert.html — harness that renders the due-task
