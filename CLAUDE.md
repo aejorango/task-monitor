@@ -58,6 +58,21 @@ tasks/{taskId}:
   activityCount, totalHoursLogged, attachmentCount, lastActivityAt
   archived, deleted, createdAt, updatedAt
 
+automations/{ruleId}:                                              ← v13
+  userId, workspaceId, name
+  trigger                          ← one of TRIGGERS in functions/src/automations.js
+  conditions: [{ field, operator, value }, ...]   ← ANDed
+  action, actionValue              ← one of ACTIONS; the value is an id or a word
+  enabled, deleted, createdAt, updatedAt
+
+automationRuns/{runId}:            ← written by the function, read-only in a browser
+  ruleId, ruleName, workspaceId, taskId, taskTitle
+  description                      ← the same sentence the editor previews
+  outcome: 'done' | 'skipped', message, at, expiresAt
+
+notifications/{noticeId}:          ← "Tell someone"; a person reads their own
+  userId, workspaceId, text, taskId, read, source: 'automation', at
+
 savedViews/{viewId}:                                               ← v12
   userId, workspaceId, name, icon
   view, projectFilter, tagFilter, statusFilter   ← the filters
@@ -100,7 +115,7 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
    then save the whole arrangement as a saved view or export it. Logic lives in the pure
    `services/tableViews.js`; the saved view stores `{ columns, groupBy, sortBy, sortDir }`.
 7. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
-8. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
+8. **Settings** — Per-device prefs: theme override, default project, week start. **Automations** section: rules as dropdowns, the run log, and the notices they raised for you. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
 
 ## v5 Cross-cutting features
 
@@ -111,6 +126,7 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 - **Notifications** — Service worker at `public/sw.js`. Browser notifications fired for newly-overdue tasks (deduped by `localStorage`-tracked "shown" set). Permission requested from Settings. Scan runs on load + every 5 min.
 - **Google sign-in** — `signInWithGoogle()` does `linkWithPopup` if anonymous (keeps existing data), `signInWithPopup` otherwise. `signOutUser()` signs out then re-anonymous-signs-in so the app stays usable. Sidebar footer shows avatar + name when signed in.
 - **Due-task alerts** — `DueTaskAlertModal` is mounted once in `ApprovedApp` (App.jsx) and shows **one task at a time**. Eligibility lives in the pure module `src/services/dueAlerts.js` (`isDueForAlert`, `buildAlertQueue`): not done, has `plan.endDate`, and `plan.endDate <= today + leadDays`. Queue order: most overdue → priority → title. `useDueAlertQueue` recomputes every 60 s and on task changes, keeps the on-screen task pinned, and hides (without dequeuing) during quiet hours, while another `.modal-backdrop` / the celebration is open, or while the timer runs for that task. **Snooze / skip are per-device localStorage** (`task-monitor.dueAlerts.{snooze,skip}.v1.<uid>`) — tasks are shared, so never persist them on the task doc. The prompt block calls `generateClaudePrompt` once per task and caches it in `task-monitor.dueAlerts.prompt.v1.<taskId>` keyed by `updatedAt` (user edits are kept); **Run** goes through `askAI` (`meta.kind = 'due-alert-run'`). The browser notification scan (`useOverdueScan`) uses the same `buildAlertQueue`, so both surfaces agree. Settings → *Due-task alerts* stores `settings.dueAlerts` `{ enabled, leadDays, defaultSnoozeMin, quietFrom, quietTo }`. Keyboard: Esc = default snooze, D = done, S = skip. The × in the dialog header is **close all**: it mutes every alert for the rest of the day on this device (`task-monitor.dueAlerts.mutedOn.v1.<uid>`, nothing is skipped); `DueAlertBell` in the topbar shows the waiting count and toggles that mute.
+- **Automations** — "when this happens, do that", authored in Settings → Automations as dropdowns and run by `onTaskAutomations` (`functions/automations.js`). The vocabularies, the matching, the plan, the one-sentence description and the refusals all live in the pure `functions/src/automations.js`, which the **editor imports directly** — one vocabulary, so the form and the runner can never mean different things. Admin-only to write, member-readable. Every run is logged to `automationRuns`; "Tell someone" writes a `notifications` doc that the same panel shows the person it was for. Loop guards: `wouldLoop()` refuses a rule that would set off its own trigger, and every write the runner makes carries `lastAutomationRunId` so the next `onDocumentWritten` ignores it.
 
 ## AI provider layer
 
@@ -252,6 +268,7 @@ src/
 │   ├── TaskEditor.jsx        ← modal with tabs: Details / Subtasks / Dependencies
 │   ├── DueTaskAlertModal.jsx ← two-column due alert: task + actions left, GenAI prompt right
 │   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
+│   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
 │   ├── NotebookPicker.jsx    ← cache-only notebook select (never spawns the CLI)
 │   ├── AddToNotebookButton.jsx ← ＋ Notebook on a task/artifact URL
 │   ├── DueAlertBell.jsx      ← topbar 🔔: waiting count, pause / resume alerts for today
@@ -415,4 +432,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Passing `ask --new`. It **deletes** the notebook's server-side conversation and the turns are not recoverable. Continue with `-c <conversationId>` instead.
 - ❌ Using `payload.error` as an error message. In this CLI `error` is a **boolean** flag — read `payload.message`, or the user is told the problem is "true". Covered by `bridge/notebooklm.test.mjs`.
 - ❌ Letting a picker or a validator call the CLI. `NotebookPicker` and `validateNotebookChoice` read `cachedNotebooks()` only; a `null` cache means "don't know", never "it's gone" — a saved `notebookId` is kept with a warning, never cleared.
+- ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
+- ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
+- ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
 - ❌ Rendering a failed grounding as a clean answer. Propagate `degraded` + `reason` and show the "not grounded" badge; `grounding` is `null` when the lookup failed.

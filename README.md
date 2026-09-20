@@ -207,6 +207,38 @@ Anywhere there is something worth keeping, there is an **Export ▾** button:
 Every filename is `<name>-YYYY-MM-DD.<ext>` in your own timezone. The Excel and
 PDF libraries load only when you actually export something.
 
+## Automations
+
+**Settings → Automations** makes the app do something itself when something
+happens. A rule is three plain-language choices — nothing is typed but a name:
+
+| | |
+| --- | --- |
+| **When this happens** | a task is created · completed · becomes overdue · is assigned · is changed · work is logged on it |
+| **Only when** | any number of conditions, all of which must hold — project, priority, status, tag, assigned to, task name |
+| **Then** | tell someone · assign it · set its priority · move it to a phase · add a tag · create a follow-up task · send it to a webhook |
+
+Every id is shown as the name you know it by — a project, a person, a phase, a
+connection — and the rule is read back to you as one sentence *before* you save
+it: “When a task is completed and its project is “SBLAF rollout”, create a
+follow-up task (Write the handover note).” A rule that is not finished cannot be
+saved; the form says what is missing instead.
+
+- **Admins write them, everybody can see them.** Rules act on the whole
+  workspace, so authoring is owner/admin only — but no member is surprised by a
+  task that changed by itself.
+- **What they did.** Every run is logged with the sentence and the outcome, and
+  shown under *What they did* — the last 50, kept for 30 days.
+- **Notices.** “Tell someone” raises an in-app notice for that person, shown at
+  the top of the same panel. Nothing is emailed: there is no SMTP here.
+- **No runaway rules.** A rule that would set off its own trigger is refused
+  before it writes, and every write a rule makes is marked so it cannot start
+  another round.
+
+Rules run in `functions/automations.js`; deploy it with
+`npm run deploy:functions` (Blaze plan). Until it is deployed, rules can be
+written and read but nothing runs them.
+
 ## Webhooks
 
 **Settings → Webhooks** posts a small JSON body to a URL you choose when
@@ -312,6 +344,8 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/aiProxy.test.mjs` | The browser never holds a company key |
 | `functions/src/authorize.test.mjs` | Who the AI proxy lets spend the company budget |
 | `functions/src/webhookEvents.test.mjs` | Which webhooks fire, for what, and with what body |
+| `functions/src/automations.test.mjs` | What a rule means: conditions, actions, the sentence, the refusals |
+| `functions/src/automationFlow.test.mjs` | The acceptance path: task completed → follow-up, and the loop guards |
 | `functions/src/signature.test.mjs` | The HMAC a receiver checks |
 | `bridge/notebooklm.test.mjs` | NotebookLM CLI payload parsing, timeouts, concurrency |
 | `src/services/dueAlerts.test.mjs` | Which task is due for an alert, and in what order |
@@ -335,6 +369,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `tests/ui/noNativeDialogs.test.mjs` | No alert/confirm/prompt; every confirm labels its action |
 | `tests/ui/dialog.test.mjs` | Focus trap, Escape, focus restore, aria-modal |
 | `tests/ui/modalSemantics.test.mjs` | Every modal is a real dialog; every icon button is labelled |
+| `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
@@ -404,6 +439,7 @@ sign-in — the fastest way to iterate on a component:
 | --- | --- |
 | `/dev/due-alert.html` | The due-task alert dialog (`?ai=0` forces the offline template, `&nb=1` fakes a notebook) |
 | `/dev/knowledge.html` | Settings → Knowledge base against the live bridge |
+| `/dev/automations.html` | The automation rule editor, with sample projects, people and connections |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 
 ## Working with Claude Code

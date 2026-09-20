@@ -75,3 +75,4 @@ One line per task from the Ideon task sheet.
 - T-0069 — Modals lack dialog semantics, focus trap and Esc (tests & docs) — 10 components across src/components/, CLAUDE.md, README.md, tests/ui/modalSemantics.test.mjs
 - T-0070 — Automation rules replacing dead webhooks (API/data layer) — functions/automations.js, functions/index.js, functions/src/automations.js, functions/src/automations.test.mjs, firestore.rules, firestore.indexes.json, tests/rules/automations.rules.test.mjs
 - T-0071 — Automation rules replacing dead webhooks (UI) — src/components/AutomationsSection.jsx, src/components/SettingsView.jsx, src/services/firebase.js, src/App.css, functions/src/automations.js, dev/automations.html, dev/automations.jsx, tests/ui/automations.test.mjs
+- T-0072 — Automation rules replacing dead webhooks (tests & docs) — functions/src/automationFlow.test.mjs, README.md, CLAUDE.md, CHANGELOG.md
