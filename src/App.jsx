@@ -102,13 +102,11 @@ export default function App() {
     return <FullPageSpinner label="Loading your profile…" />;
   }
 
-  // Profile is null when the doc hasn't been created yet (the sign-in flow
-  // creates it, but the listener can race here). Treat as pending until the
-  // profile arrives so we never accidentally let an unprofiled user in.
-  if (!profile || profile.status === 'pending') {
-    return <PendingApprovalView user={{ uid: userId }} profile={profile} />;
-  }
-  if (profile.status === 'rejected') {
+  // Approval is an allowlist on both sides of the wire: firestore.rules opens
+  // up only for users/{uid}.status == 'approved', so the screen must agree
+  // exactly. Anything else — pending, rejected, a status we don't recognise,
+  // or a profile document that hasn't arrived yet — waits outside.
+  if (profile?.status !== 'approved') {
     return <PendingApprovalView user={{ uid: userId }} profile={profile} />;
   }
 
