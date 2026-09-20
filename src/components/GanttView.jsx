@@ -140,6 +140,7 @@ export default function GanttView({ projectFilter }) {
     build: () => buildTaskListDocument(rows, {
       title: 'Timeline',
       projectById,
+      projects,
       memberProfiles,
       projectName: projectById[projectFilter]?.name || null,
     }),

@@ -5,6 +5,7 @@
 // looking at — filters applied — into the exporters' document model, so the
 // Board, Gantt and Projects pages all hand over the same thing.
 
+import { allFields, formatValue } from './customFields';
 import { heading, paragraph, sheetFromRows, table } from './exporters';
 
 const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
@@ -17,12 +18,25 @@ export const TASK_COLUMNS = [
   'Progress', 'Hours logged', 'Tags', 'Requested by',
 ];
 
+/**
+ * The projects' own custom fields, as extra columns after the built-in ones —
+ * so a field somebody defined and filled in fifty times leaves the app with
+ * everything else instead of being stuck in the task editor.
+ */
+export function customColumns(projects = []) {
+  return allFields(projects);
+}
+
+export function exportColumns(projects = []) {
+  return [...TASK_COLUMNS, ...customColumns(projects).map((f) => f.label)];
+}
+
 const names = (uids, memberProfiles = {}) => (uids || [])
   .map((uid) => memberProfiles[uid]?.displayName || memberProfiles[uid]?.email || '')
   .filter(Boolean);
 
-/** One task as a row of TASK_COLUMNS. */
-export function taskRow(task, { projectById = {}, memberProfiles = {} } = {}) {
+/** One task as a row of `exportColumns(projects)`. */
+export function taskRow(task, { projectById = {}, memberProfiles = {}, projects = [] } = {}) {
   const project = projectById[task.projectId];
   const phase = project?.phases?.find((p) => p.id === task.phaseId);
   const people = [...names(task.assignedTo, memberProfiles), ...(task.assignedToExternal || [])];
@@ -42,6 +56,7 @@ export function taskRow(task, { projectById = {}, memberProfiles = {} } = {}) {
     task.totalHoursLogged ?? 0,
     (task.tags || []).join(', '),
     task.requestedBy || '',
+    ...customColumns(projects).map((f) => formatValue(f, task.customValues?.[f.id])),
   ];
 }
 
@@ -94,6 +109,6 @@ export function buildTaskListDocument(tasks = [], opts = {}) {
     title,
     subtitle,
     blocks,
-    sheets: [sheetFromRows('Tasks', TASK_COLUMNS, rows)],
+    sheets: [sheetFromRows('Tasks', exportColumns(opts.projects), rows)],
   };
 }

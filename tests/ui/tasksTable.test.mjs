@@ -108,15 +108,15 @@ test('the route renders it and passes the saved view through', () => {
 test('a saved view restores its own columns when reopened', () => {
   const src = fs.readFileSync(path.join(root, 'src', 'components', 'TasksTableView.jsx'), 'utf8');
   assert.match(src, /views\.find\(\(v\) => v\.id === savedViewId\)/);
-  assert.match(src, /normalizeTableConfig\(savedView\)/);
+  assert.match(src, /normalizeTableConfig\(savedView, ctx\)/);
   assert.match(src, /if \(seenView !== savedViewId\)/,
     'switching between two saved views must swap the table');
 });
 
 test('saving writes only the four table fields', () => {
   const src = fs.readFileSync(path.join(root, 'src', 'components', 'TasksTableView.jsx'), 'utf8');
-  assert.match(src, /updateSavedView\(savedView\.id, tableConfigFields\(config\)\)/);
-  assert.match(src, /\.\.\.tableConfigFields\(config\),/);
+  assert.match(src, /updateSavedView\(savedView\.id, tableConfigFields\(config, ctx\)\)/);
+  assert.match(src, /\.\.\.tableConfigFields\(config, ctx\),/);
 });
 
 test('the sidebar link carries the saved view id into the route', () => {

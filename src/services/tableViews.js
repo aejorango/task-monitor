@@ -9,6 +9,7 @@
 // Pure: the column definitions carry their own accessor, so a component renders
 // what this returns without knowing anything about task shape.
 
+import { customFieldColumns } from './customFields';
 import { memberLabel } from './invites';
 
 const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
@@ -105,6 +106,29 @@ function assigneeNames(task, ctx) {
 
 export const COLUMN_BY_ID = Object.fromEntries(TASK_TABLE_COLUMNS.map((c) => [c.id, c]));
 
+// A project's own fields are columns too, but they are not known until the
+// projects are loaded — so every function below takes the context and looks the
+// catalogue up from it. Memoised on the projects array, because a table with
+// 500 rows asks for the catalogue once per row.
+const catalogueCache = new WeakMap();
+
+/** Every column available given these projects: the built-ins plus custom fields. */
+export function columnCatalogue(ctx = {}) {
+  const projects = ctx.projects;
+  if (!Array.isArray(projects) || projects.length === 0) {
+    return { list: TASK_TABLE_COLUMNS, byId: COLUMN_BY_ID };
+  }
+  const cached = catalogueCache.get(projects);
+  if (cached) return cached;
+
+  const list = [...TASK_TABLE_COLUMNS, ...customFieldColumns(projects)];
+  const built = { list, byId: Object.fromEntries(list.map((c) => [c.id, c])) };
+  catalogueCache.set(projects, built);
+  return built;
+}
+
+const columnById = (id, ctx) => columnCatalogue(ctx).byId[id];
+
 /** Shown when a view does not say otherwise. */
 export const DEFAULT_COLUMNS = ['title', 'project', 'status', 'priority', 'assignee', 'due', 'progress'];
 
@@ -129,28 +153,42 @@ export const DEFAULT_TABLE_CONFIG = {
  * Clean a stored config back into something renderable. A view saved before a
  * column existed — or after one was removed — must still open.
  */
-export function normalizeTableConfig(raw) {
+export function normalizeTableConfig(raw, ctx = {}) {
   const cfg = raw && typeof raw === 'object' ? raw : {};
+  const { byId } = columnCatalogue(ctx);
 
   let columns = Array.isArray(cfg.columns)
-    ? cfg.columns.filter((id) => COLUMN_BY_ID[id])
+    ? cfg.columns.filter((id) => byId[id])
     : [...DEFAULT_COLUMNS];
   columns = [...new Set(columns)];
   // The task title is what makes a row identifiable; never let it be hidden.
   if (!columns.includes('title')) columns = ['title', ...columns];
   if (columns.length === 1 && columns[0] === 'title') columns = [...DEFAULT_COLUMNS];
 
-  const groupBy = GROUP_OPTIONS.some((g) => g.value === cfg.groupBy) ? cfg.groupBy : 'none';
-  const sortBy = COLUMN_BY_ID[cfg.sortBy] ? cfg.sortBy : DEFAULT_TABLE_CONFIG.sortBy;
+  const groupBy = groupOptions(ctx).some((g) => g.value === cfg.groupBy) ? cfg.groupBy : 'none';
+  const sortBy = byId[cfg.sortBy] ? cfg.sortBy : DEFAULT_TABLE_CONFIG.sortBy;
   const sortDir = cfg.sortDir === 'desc' ? 'desc' : 'asc';
 
   return { columns, groupBy, sortBy, sortDir };
 }
 
 /** Only the four fields, so a whole component's state never lands in Firestore. */
-export function tableConfigFields(cfg) {
-  const { columns, groupBy, sortBy, sortDir } = normalizeTableConfig(cfg);
+export function tableConfigFields(cfg, ctx = {}) {
+  const { columns, groupBy, sortBy, sortDir } = normalizeTableConfig(cfg, ctx);
   return { columns, groupBy, sortBy, sortDir };
+}
+
+/**
+ * What a table can be grouped by, including the project's own select fields —
+ * "group by Client" is the question a custom field is usually there to answer.
+ * A free-text or number field would make one group per value, so only `select`
+ * fields are offered.
+ */
+export function groupOptions(ctx = {}) {
+  const extra = columnCatalogue(ctx).list
+    .filter((c) => c.custom && c.field?.type === 'select')
+    .map((c) => ({ value: c.id, label: c.label }));
+  return [...GROUP_OPTIONS, ...extra];
 }
 
 /** Nulls and blanks sort last in either direction — they are "not yet", not "first". */
@@ -166,8 +204,8 @@ function compareValues(a, b, dir) {
 }
 
 export function sortTasks(tasks, cfg, ctx = {}) {
-  const { sortBy, sortDir } = normalizeTableConfig(cfg);
-  const col = COLUMN_BY_ID[sortBy];
+  const { sortBy, sortDir } = normalizeTableConfig(cfg, ctx);
+  const col = columnById(sortBy, ctx);
   return [...tasks].sort((a, b) =>
     compareValues(col.value(a, ctx), col.value(b, ctx), sortDir)
     // A stable tiebreak, so the order does not shuffle between renders.
@@ -179,11 +217,11 @@ export function sortTasks(tasks, cfg, ctx = {}) {
  * @returns {{ key, label, tasks }[]} one entry when grouping is off
  */
 export function groupTasks(tasks, cfg, ctx = {}) {
-  const { groupBy } = normalizeTableConfig(cfg);
+  const { groupBy } = normalizeTableConfig(cfg, ctx);
   const sorted = sortTasks(tasks, cfg, ctx);
   if (groupBy === 'none') return [{ key: 'all', label: null, tasks: sorted }];
 
-  const col = COLUMN_BY_ID[groupBy === 'assignee' ? 'assignee' : groupBy];
+  const col = columnById(groupBy, ctx);
   const groups = new Map();
   for (const task of sorted) {
     const label = col.text(task, ctx) || '—';
@@ -206,28 +244,28 @@ export function groupTasks(tasks, cfg, ctx = {}) {
 
 /** The cells of one row, in the view's column order. */
 export function rowCells(task, cfg, ctx = {}) {
-  const { columns } = normalizeTableConfig(cfg);
+  const { columns } = normalizeTableConfig(cfg, ctx);
   return columns.map((id) => {
-    const col = COLUMN_BY_ID[id];
+    const col = columnById(id, ctx);
     return { id, label: col.label, text: col.text(task, ctx), align: col.align || 'left' };
   });
 }
 
 /** The header, in the view's column order. */
-export function headerCells(cfg) {
-  const { columns, sortBy, sortDir } = normalizeTableConfig(cfg);
+export function headerCells(cfg, ctx = {}) {
+  const { columns, sortBy, sortDir } = normalizeTableConfig(cfg, ctx);
   return columns.map((id) => ({
     id,
-    label: COLUMN_BY_ID[id].label,
-    align: COLUMN_BY_ID[id].align || 'left',
+    label: columnById(id, ctx).label,
+    align: columnById(id, ctx).align || 'left',
     sorted: id === sortBy ? sortDir : null,
   }));
 }
 
 /** Clicking a header: same column flips the direction, a new column starts ascending. */
-export function toggleSort(cfg, columnId) {
-  const current = normalizeTableConfig(cfg);
-  if (!COLUMN_BY_ID[columnId]) return current;
+export function toggleSort(cfg, columnId, ctx = {}) {
+  const current = normalizeTableConfig(cfg, ctx);
+  if (!columnById(columnId, ctx)) return current;
   if (current.sortBy === columnId) {
     return { ...current, sortDir: current.sortDir === 'asc' ? 'desc' : 'asc' };
   }

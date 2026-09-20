@@ -11,9 +11,9 @@ import { useTasks, useProjects, useSavedViews, useAuth } from '../hooks/useTasks
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addSavedView, updateSavedView } from '../services/firebase';
 import {
-  DEFAULT_TABLE_CONFIG, GROUP_OPTIONS, TASK_TABLE_COLUMNS,
-  groupTasks, headerCells, normalizeTableConfig, rowCells, tableConfigFields,
-  toggleSort,
+  DEFAULT_TABLE_CONFIG,
+  columnCatalogue, groupOptions, groupTasks, headerCells, normalizeTableConfig,
+  rowCells, tableConfigFields, toggleSort,
 } from '../services/tableViews';
 import { buildTaskListDocument } from '../services/taskExport';
 import { friendlyError } from '../services/access';
@@ -36,8 +36,17 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
     [workspaces, workspaceId],
   );
 
+  // Everything the columns need to render themselves — including the projects,
+  // because a project's own custom fields are columns too.
+  const ctx = useMemo(
+    () => ({ projectById, memberProfiles, projects }),
+    [projectById, memberProfiles, projects],
+  );
+  const columns = columnCatalogue(ctx).list;
+  const grouping = groupOptions(ctx);
+
   const savedView = savedViewId ? views.find((v) => v.id === savedViewId) : null;
-  const [config, setConfig] = useState(() => normalizeTableConfig(savedView));
+  const [config, setConfig] = useState(() => normalizeTableConfig(savedView, ctx));
   const [picker, setPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState(null);
@@ -48,7 +57,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
   const [seenView, setSeenView] = useState(savedViewId);
   if (seenView !== savedViewId) {
     setSeenView(savedViewId);
-    setConfig(normalizeTableConfig(savedView));
+    setConfig(normalizeTableConfig(savedView, ctx));
   }
 
   useEffect(() => {
@@ -71,26 +80,25 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
     [tasks, projectFilter],
   );
 
-  const ctx = useMemo(() => ({ projectById, memberProfiles }), [projectById, memberProfiles]);
   const groups = useMemo(() => groupTasks(visible, config, ctx), [visible, config, ctx]);
-  const header = headerCells(config);
+  const header = headerCells(config, ctx);
 
   const toggleColumn = (id) => {
     setConfig((c) => {
       const has = c.columns.includes(id);
-      const columns = has ? c.columns.filter((x) => x !== id) : [...c.columns, id];
-      return normalizeTableConfig({ ...c, columns });
+      const next = has ? c.columns.filter((x) => x !== id) : [...c.columns, id];
+      return normalizeTableConfig({ ...c, columns: next }, ctx);
     });
   };
 
   const moveColumn = (id, delta) => {
     setConfig((c) => {
-      const columns = [...c.columns];
-      const i = columns.indexOf(id);
+      const next = [...c.columns];
+      const i = next.indexOf(id);
       const j = i + delta;
-      if (i < 0 || j < 0 || j >= columns.length) return c;
-      [columns[i], columns[j]] = [columns[j], columns[i]];
-      return normalizeTableConfig({ ...c, columns });
+      if (i < 0 || j < 0 || j >= next.length) return c;
+      [next[i], next[j]] = [next[j], next[i]];
+      return normalizeTableConfig({ ...c, columns: next }, ctx);
     });
   };
 
@@ -98,7 +106,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
     setSaving(true); setNote(null);
     try {
       if (savedView) {
-        await updateSavedView(savedView.id, tableConfigFields(config));
+        await updateSavedView(savedView.id, tableConfigFields(config, ctx));
         setNote({ ok: true, text: `Saved to “${savedView.name}”.` });
       } else {
         const name = window.prompt('Name this view', 'My task table');
@@ -108,7 +116,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
           name: name.trim(),
           view: 'tasks-table',
           projectFilter,
-          ...tableConfigFields(config),
+          ...tableConfigFields(config, ctx),
         });
         setNote({ ok: true, text: `Saved as “${name.trim()}”. It is in the sidebar.` });
       }
@@ -124,6 +132,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
   const buildExport = () => buildTaskListDocument(groups.flatMap((g) => g.tasks), {
     title: savedView?.name || 'Task table',
     projectById,
+    projects,
     memberProfiles,
     projectName: projectById[projectFilter]?.name || null,
   });
@@ -163,9 +172,9 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
         <select
           className="select select-sm"
           value={config.groupBy}
-          onChange={(e) => setConfig((c) => normalizeTableConfig({ ...c, groupBy: e.target.value }))}
+          onChange={(e) => setConfig((c) => normalizeTableConfig({ ...c, groupBy: e.target.value }, ctx))}
         >
-          {GROUP_OPTIONS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+          {grouping.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
         </select>
 
         <span className="tt-column-picker" ref={pickerRef}>
@@ -183,7 +192,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
               <p className="muted small" style={{ margin: '4px 8px 8px' }}>
                 Tick what to show. Use the arrows to reorder.
               </p>
-              {TASK_TABLE_COLUMNS.map((col) => {
+              {columns.map((col) => {
                 const on = config.columns.includes(col.id);
                 const pos = config.columns.indexOf(col.id);
                 return (
@@ -221,7 +230,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
                 type="button"
                 className="btn btn-sm btn-ghost"
                 style={{ margin: '6px 8px 4px' }}
-                onClick={() => setConfig(normalizeTableConfig(DEFAULT_TABLE_CONFIG))}
+                onClick={() => setConfig(normalizeTableConfig(DEFAULT_TABLE_CONFIG, ctx))}
               >
                 Reset to the default columns
               </button>
@@ -258,7 +267,7 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
                     <button
                       type="button"
                       className="tt-sort"
-                      onClick={() => setConfig((c) => toggleSort(c, h.id))}
+                      onClick={() => setConfig((c) => toggleSort(c, h.id, ctx))}
                       title={`Sort by ${h.label}`}
                     >
                       {h.label}

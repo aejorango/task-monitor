@@ -207,6 +207,13 @@ Anywhere there is something worth keeping, there is an **Export ▾** button:
 Every filename is `<name>-YYYY-MM-DD.<ext>` in your own timezone. The Excel and
 PDF libraries load only when you actually export something.
 
+**Custom fields travel with the task.** A project can define fields of its own
+(Client, Contract value, Go-live) in the project editor. The values show as
+chips on the board card, can be added as columns in **Reports → Task table**
+— sorted, grouped (for a select field) and saved in a view — and are appended
+as columns to every task export. Two projects with a field of the same name are
+labelled with the project so they can be told apart.
+
 ## Automations
 
 **Settings → Automations** makes the app do something itself when something
@@ -373,6 +380,7 @@ run together.
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
 | `src/services/uploadPaths.test.mjs` | Where an attachment is stored, and which files stop being referenced |
 | `src/services/tableViews.test.mjs` | Columns, grouping and sorting for the task table |
+| `src/services/customFields.test.mjs` | A project's own fields: labels, values, chips and columns |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
 | `src/services/minutesExport.test.mjs` | Minutes as a document |
@@ -386,6 +394,7 @@ run together.
 | `tests/ui/dialog.test.mjs` | Focus trap, Escape, focus restore, aria-modal |
 | `tests/ui/modalSemantics.test.mjs` | Every modal is a real dialog; every icon button is labelled |
 | `tests/ui/attachments.test.mjs` | Uploads go to the workspace; deletes take the bytes with them |
+| `tests/ui/customFields.test.mjs` | A custom field reaches the card, the table and the export |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |

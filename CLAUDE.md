@@ -252,6 +252,7 @@ module-level helper cannot, so it returns a result and the component speaks.
 - **Logic goes in a pure service, not in a component or in firebase.js.** `services/recurrence.js`, `services/csv.js`, `services/askAiCore.js`, `services/access.js`, `services/dueAlerts.js`, `services/errorMessages.js` and `services/nlpQuickAdd.js` import no Firebase and no network — that is what makes them testable with `node --test`. Components render what those modules return.
 - **Every downloadable file is date-stamped**: `<name>-YYYY-MM-DD.<ext>` from `downloadFile()` in `services/download.js`, using `todayLocal()` — never `new Date().toISOString()`, which is UTC and stamps Manila mornings with yesterday. Nothing outside that module may set `a.download`.
 - **Timestamps** (`createdAt`, `updatedAt`, `loggedAt`, `lastActivityAt`) use `serverTimestamp()`.
+- **A custom field is described in one place.** `services/customFields.js` turns a project's `customFields` into labels, chips (`taskChips`) and table columns (`customFieldColumns`); `tableViews.js` merges those into the column catalogue, so a field can be shown, sorted, grouped, saved in a view and exported like any built-in column. A column id is `custom:<fieldId>` — a view whose field has since been deleted still opens, without that column.
 - **An attachment belongs to the workspace.** Uploads go to `workspaces/{workspaceId}/{taskId|general|logo}/…` — `uploadPath()` in the pure `services/uploadPaths.js` builds every one and refuses a path with no workspace. `storage.rules` reads that workspace document to decide access, so any member can open, replace or delete the file. `users/{uid}/…` is frozen legacy: readable and deletable by its uploader, never written again.
 - **Soft delete** via `deleted: false` flag; **archive** via `archived: false`. Never hard-delete tasks because activities reference them.
 - **`userId` on every document** — keeps security rules trivial.
@@ -294,6 +295,7 @@ src/
 │   ├── askAi.js              ← Ask AI digest + narration
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
+│   ├── customFields.js       ← a project's own fields as chips, columns and labels
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
 ├── App.jsx                   ← root: routes view based on URL hash
@@ -437,6 +439,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Reading `TASK_TABLE_COLUMNS` directly in a component. It is the built-ins only; the projects' own fields are added by `columnCatalogue(ctx)`, and `ctx` must carry `projects` or a custom column silently disappears from a saved view. Every `tableViews` function takes that ctx — including `normalizeTableConfig` and `tableConfigFields`.
 - ❌ Storing an upload under the uploader. `users/{uid}/…` made the uploader the only person who could ever delete the file, so an admin who deleted somebody else's activity left the bytes behind for ever. Every upload goes through `uploadFile({ workspaceId, … })`.
 - ❌ Deleting an activity without its files. `deleteActivity` / `bulkDeleteActivities` call `deleteUploads(attachmentPaths(...))` and `editActivity` calls `deleteUploads(orphanedPaths(...))` — **after** the batch commits, so a file the bucket refuses to drop can never block the record from going.
 - ❌ Rendering a failed grounding as a clean answer. Propagate `degraded` + `reason` and show the "not grounded" badge; `grounding` is `null` when the lookup failed.

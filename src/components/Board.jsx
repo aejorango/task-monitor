@@ -15,6 +15,7 @@ import { useTasks, useProjects, useActivities } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useTimer } from '../hooks/useTimer';
 import { auth } from '../services/firebase';
+import { taskChips } from '../services/customFields';
 import {
   setTaskStatus,
   updateTask,
@@ -108,6 +109,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   const buildTaskExport = () => buildTaskListDocument(filtered, {
     title: 'Task list',
     projectById,
+    projects,
     memberProfiles: activeWorkspace?.memberProfiles || {},
     projectName: projectById[projectFilter]?.name || null,
     statusFilter: initialStatusFilter || 'all',
@@ -502,6 +504,9 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
   const subtaskCount = task.subtasks?.length || 0;
   const subtasksDone = task.subtasks?.filter((s) => s.done).length || 0;
   const tags = task.tags || [];
+  // The project's own fields — "Client: Acme" — so a field you filled in is
+  // visible where the work is, not only inside the editor.
+  const customChips = taskChips(task, project);
   const depsCount = task.dependsOn?.length || 0;
   const isRecurring = !!task.recurrence;
   const isTrackingThis = running && timerState?.taskId === task.id;
@@ -563,6 +568,18 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
             <span key={tg} className="tag-pill small">#{tg}</span>
           ))}
           {tags.length > 4 && <span className="muted small">+{tags.length - 4}</span>}
+        </div>
+      )}
+
+      {customChips.length > 0 && (
+        <div className="task-card-tags">
+          {customChips.slice(0, 3).map((chip) => (
+            <span key={chip.id} className="field-chip" title={`${chip.label}: ${chip.text}`}>
+              <span className="field-chip-label">{chip.label}</span>
+              <span className="field-chip-value">{chip.text}</span>
+            </span>
+          ))}
+          {customChips.length > 3 && <span className="muted small">+{customChips.length - 3}</span>}
         </div>
       )}
 
