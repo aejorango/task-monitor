@@ -1,15 +1,18 @@
 // src/components/TaskForm.jsx — quick-add card with expandable details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { addTask } from '../services/firebase';
 import { useAuth, useTemplates } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { parseQuickAdd } from '../services/nlpQuickAdd';
+import { pickDefaultProjectId } from '../services/preferences';
+import { useSettings } from '../hooks/useSettings';
 
 export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const { userId, ready } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const { templates } = useTemplates();
+  const { settings } = useSettings();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -43,17 +46,17 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
     setTplOpen(false);
   };
 
-  // When projectFilter narrows to a specific project, prefill projectId
-  useEffect(() => {
-    if (projectFilter !== 'all' && !projectId) setProjectId(projectFilter);
-  }, [projectFilter, projectId]);
+  // Which project the box starts on: the one the Board is filtered to, else the
+  // user's Settings → Defaults choice, else the first one. Derived during
+  // render rather than pushed into state by an effect, so it stays correct when
+  // the filter changes or the default project is deleted — and so the form
+  // never flashes an empty dropdown on first paint.
+  const effectiveProjectId = projectId || pickDefaultProjectId(projects, {
+    projectFilter,
+    defaultProject: settings.defaultProject,
+  }) || '';
 
-  // Default to first project if available and none selected
-  useEffect(() => {
-    if (!projectId && projects.length > 0) setProjectId(projects[0].id);
-  }, [projects, projectId]);
-
-  const selectedProject = projects.find((p) => p.id === projectId);
+  const selectedProject = projects.find((p) => p.id === effectiveProjectId);
 
   // Live-parse the title field. The structured tokens (date, priority, tag,
   // requestedBy) are shown as chips and applied on submit.
@@ -83,7 +86,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
         title: (parsed.title || title).trim(),
         description: description.trim(),
         category: selectedProject?.name || 'Personal',
-        projectId: projectId || null,
+        projectId: effectiveProjectId || null,
         phaseId: phaseId || null,
         priority: mergedPriority,
         requestedBy: mergedRequestedBy,
@@ -124,7 +127,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
           disabled={!ready}
           data-tutorial="quick-add-input"
         />
-        <select className="select" value={projectId} onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }} style={{ width: 180 }}>
+        <select className="select" value={effectiveProjectId} onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }} style={{ width: 180 }}>
           {projects.length === 0 && <option value="">No projects</option>}
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
