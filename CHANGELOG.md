@@ -70,3 +70,4 @@ One line per task from the Ideon task sheet.
 - T-0064 — 95 native alert/prompt/confirm dialogs (API/data layer) — src/components/Dialog.jsx, src/App.jsx, src/App.css, tests/ui/dialog.test.mjs, tests/ui/dom.mjs
 - T-0065 — 95 native alert/prompt/confirm dialogs (UI) — 21 components across src/components/, tests/ui/noNativeDialogs.test.mjs
 - T-0066 — 95 native alert/prompt/confirm dialogs (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
+- T-0067 — Modals lack dialog semantics, focus trap and Esc (API/data layer) — src/hooks/useModalDialog.js, tests/ui/useModalDialog.test.mjs
