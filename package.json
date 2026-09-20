@@ -7,7 +7,7 @@
     "start": "node scripts/start.mjs",
     "dev": "vite",
     "bridge": "node bridge/server.mjs",
-    "test": "node --import ./tests/ui/jsx-loader.mjs --test bridge/*.test.mjs src/**/*.test.mjs tests/ui/*.test.mjs functions/src/*.test.mjs",
+    "test": "node --import ./tests/ui/jsx-loader.mjs --test bridge/*.test.mjs src/**/*.test.mjs src/templates/*.test.mjs tests/ui/*.test.mjs functions/src/*.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project task-monitor-rules-test 'node --test tests/rules/*.test.mjs'",
     "test:all": "npm test && npm run test:rules",
     "build": "vite build",

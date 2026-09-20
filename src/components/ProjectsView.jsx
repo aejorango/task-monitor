@@ -30,6 +30,7 @@ import AssigneePicker from './AssigneePicker';
 import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import NotebookPicker from './NotebookPicker';
+import TemplateGallery from './TemplateGallery';
 import { downloadFile } from '../services/download';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
@@ -48,6 +49,8 @@ export default function ProjectsView() {
   const projectTemplates = templates.filter((t) => t.kind === 'project');
   const taskTemplates    = templates.filter((t) => t.kind === 'task');
   const [editing, setEditing] = useState(null);          // project or 'new'
+
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   // ⌘K → "New project": open the editor with what they typed.
   useQuickCreate('project', useCallback(() => setEditing('new'), []));
@@ -113,6 +116,9 @@ export default function ProjectsView() {
           <button className="btn btn-secondary" onClick={() => setManagingSegments(true)}>
             ⚙ Segments
           </button>
+          <button className="btn btn-secondary" onClick={() => setGalleryOpen(true)}>
+            ◈ From a template
+          </button>
           <button className="btn btn-primary" onClick={() => setEditing('new')} data-tutorial="new-project-btn">
             + New project
           </button>
@@ -123,7 +129,18 @@ export default function ProjectsView() {
         <div className="empty-state">
           <div className="empty-state-icon">◉</div>
           <p>No projects yet.</p>
-          <p className="small">Click <strong>+ New project</strong> to create one.</p>
+          <p className="small">
+            Start from a ready-made process — client project, product launch, audit,
+            event, new joiner — or build your own from scratch.
+          </p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={() => setGalleryOpen(true)}>
+              ◈ Start from a template
+            </button>
+            <button className="btn" onClick={() => setEditing('new')}>
+              Start from scratch
+            </button>
+          </div>
         </div>
       ) : (
         <div className="segments-container">
@@ -246,6 +263,8 @@ export default function ProjectsView() {
           onClose={() => setEditing(null)}
         />
       )}
+
+      {galleryOpen && <TemplateGallery onClose={() => setGalleryOpen(false)} />}
 
       {createFromTemplate && (
         <ProjectEditor

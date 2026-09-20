@@ -10347,3 +10347,37 @@ a:hover { text-decoration: underline; }
   .iw-map { grid-template-columns: 1fr; }
   .iw-kind { flex-basis: 100%; }
 }
+
+/* ── Template gallery (TemplateGallery.jsx) ───────────────────────────────
+   Ready-made processes, so the first project is not an empty box. */
+.tg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.tg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg, 10px);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  cursor: pointer;
+}
+.tg-card:hover { border-color: var(--c-accent); }
+.tg-card.is-on {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px var(--c-accent) inset;
+}
+.tg-icon { font-size: 20px; line-height: 1; color: var(--c-accent); }
+.tg-name { font-weight: 600; font-size: 14.5px; }
+.tg-summary { line-height: 1.45; }
+.tg-meta { opacity: 0.8; }
+
+@media (max-width: 720px) {
+  .tg-grid { grid-template-columns: 1fr; }
+}
