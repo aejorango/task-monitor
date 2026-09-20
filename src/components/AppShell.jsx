@@ -25,6 +25,7 @@ const VIEWS = [
   { id: 'goals',          label: 'Goals',            icon: 'goals' },
   { id: 'messages',       label: 'Messages',         icon: 'messages' },
   { id: 'minutes',        label: 'Minutes',          icon: 'minutes' },
+  { id: 'tasks-table',    label: 'Task table',       icon: 'wbs' },
   { id: 'table',          label: 'Activity Log',     icon: 'list' },
   { id: 'work-performed', label: 'Work Performed',   icon: 'clock' },
   { id: 'review',         label: 'Review',           icon: 'review' },
@@ -41,7 +42,7 @@ const VIEWS = [
 // its other children are skipped from the flat list.
 const NAV_GROUPS = [
   { id: 'board-group',   label: 'Board',   icon: 'board',     childIds: ['board', 'calendar', 'gantt', 'wbs'] },
-  { id: 'reports-group', label: 'Reports', icon: 'analytics', childIds: ['table', 'work-performed', 'review', 'artifacts', 'analytics'] },
+  { id: 'reports-group', label: 'Reports', icon: 'analytics', childIds: ['tasks-table', 'table', 'work-performed', 'review', 'artifacts', 'analytics'] },
 ];
 const SIDEBAR_ITEMS = (() => {
   const childToGroup = new Map();

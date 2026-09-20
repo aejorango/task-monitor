@@ -18,6 +18,7 @@ import PendingApprovalView from './components/PendingApprovalView';
 import './App.css';
 
 const TableView         = lazy(() => import('./components/TableView'));
+const TasksTableView    = lazy(() => import('./components/TasksTableView'));
 const GanttView         = lazy(() => import('./components/GanttView'));
 const CalendarView      = lazy(() => import('./components/CalendarView'));
 const DashboardView     = lazy(() => import('./components/DashboardView'));
@@ -175,7 +176,8 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'ask-ai'    && <AskAiView />}
         {route.view === 'dashboard' && <DashboardView projectFilter={route.projectFilter} navigate={navigate} />}
         {route.view === 'board'     && <Board    projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} initialStatusFilter={route.statusFilter} onlyMine={route.onlyMine} />}
-        {route.view === 'table'     && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
+        {route.view === 'table'       && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
+        {route.view === 'tasks-table' && <TasksTableView projectFilter={route.projectFilter} savedViewId={route.savedViewId} />}
         {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} />}
         {route.view === 'goals'     && <GoalsView />}

@@ -10105,3 +10105,84 @@ a:hover { text-decoration: underline; }
   gap: 8px;
   margin-bottom: 10px;
 }
+
+/* ── Task table (TasksTableView.jsx) ──────────────────────────────────────
+   A configurable report: chosen columns, optional grouping, click-to-sort. */
+.tt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.tt-toolbar-label {
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+}
+.tt-column-picker { position: relative; display: inline-block; }
+.tt-column-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg, 10px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  padding: 6px 0;
+}
+.tt-column-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 10px;
+}
+.tt-column-row:hover { background: var(--c-bg); }
+.tt-column-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+.tt-column-move { display: flex; gap: 2px; flex-shrink: 0; }
+
+.tt-table th { padding: 0; }
+.tt-sort {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: inherit;
+  cursor: pointer;
+}
+.tt-sort:hover { color: var(--c-accent); }
+.tt-sort-arrow { font-size: 9px; opacity: 0.8; }
+.tt-table th.num .tt-sort,
+.tt-table td.num { text-align: right; justify-content: flex-end; }
+
+.tt-group-row td {
+  background: var(--c-bg);
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  padding: 8px 12px;
+}
+.tt-row { cursor: pointer; }
+.tt-row:hover { background: var(--c-bg); }
+
+@media (max-width: 720px) {
+  .tt-column-menu { width: min(300px, calc(100vw - 40px)); }
+}
