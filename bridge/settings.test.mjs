@@ -111,7 +111,10 @@ test('token comparison rejects a wrong or missing token', () => {
   assert.equal(tokenMatches(t), true);
   assert.equal(tokenMatches(''), false);
   assert.equal(tokenMatches(null), false);
-  assert.equal(tokenMatches(t.slice(0, -1) + '0'), false);
+  // Flip the last character to a definitely-different one — appending '0'
+  // matches the real token 1 time in 16.
+  const flipped = t.slice(0, -1) + (t.at(-1) === 'a' ? 'b' : 'a');
+  assert.equal(tokenMatches(flipped), false);
   assert.equal(tokenMatches(t + 'extra'), false);
 });
 

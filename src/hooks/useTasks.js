@@ -4,7 +4,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  onAuthChange,
   subscribeToTasks,
   subscribeToActivities,
   subscribeToRecentActivities,
@@ -23,22 +22,39 @@ import {
   subscribeToWebhooks,
   todayLocal,
 } from '../services/firebase';
-import { useActiveWorkspaceId, useWorkspaces } from './useWorkspace';
+import {
+  useActiveWorkspaceId, useWorkspaces, subscribeToAuthState, peekAuthState,
+} from './useWorkspace';
 import { mergeProjectLists } from '../services/projects';
+import { createSharedSubscription } from '../services/sharedSubscription';
+
+// ─── Shared listeners ───────────────────────────────────────────────────────
+// One Firestore query per (collection, workspace), however many components ask.
+// Board cards call these hooks by the hundred; see services/sharedSubscription.
+
+const workspaceActivitiesCache = createSharedSubscription(
+  (workspaceId, emit) => subscribeToAllActivities(workspaceId, emit),
+  { name: 'activities', empty: [] },
+);
+
+const workspaceTasksCache = createSharedSubscription(
+  (workspaceId, emit) => subscribeToTasks(workspaceId, emit),
+  { name: 'tasks', empty: [] },
+);
+
+const workspaceProjectsCache = createSharedSubscription(
+  (workspaceId, emit) => subscribeToProjects(workspaceId, emit),
+  { name: 'projects', empty: [] },
+);
 
 // ─── useAuth ────────────────────────────────────────────────────────────────
 
 export function useAuth() {
-  const [userId, setUserId] = useState(null);
-  const [ready, setReady] = useState(false);
+  // One onAuthStateChanged for the whole app — this hook is called from dozens
+  // of components, including inside list items. See services/sharedSubscription.
+  const [{ userId, ready }, setAuth] = useState(() => peekAuthState());
 
-  useEffect(() => {
-    const unsub = onAuthChange((user) => {
-      setUserId(user?.uid || null);
-      setReady(true);
-    });
-    return () => unsub();
-  }, []);
+  useEffect(() => subscribeToAuthState(setAuth), []);
 
   return { userId, ready };
 }
@@ -65,11 +81,10 @@ export function useProjects() {
       return;
     }
     setLoading(true);
-    const unsub = subscribeToProjects(workspaceId, (data) => {
+    return workspaceProjectsCache.subscribe(workspaceId, (data) => {
       setWorkspaceProjects(data);
       setLoading(false);
     });
-    return () => unsub();
   }, [userId, ready, workspaceId]);
 
   // Projects shared with this user from OTHER workspaces. Without this, a
@@ -118,11 +133,10 @@ export function useTasks() {
       return;
     }
     setLoading(true);
-    const unsub = subscribeToTasks(workspaceId, (data) => {
+    return workspaceTasksCache.subscribe(workspaceId, (data) => {
       setWorkspaceTasks(data);
       setLoading(false);
     });
-    return () => unsub();
   }, [userId, ready, workspaceId]);
 
   // Shared projects this user is in — drives the shared-tasks query below.
@@ -201,7 +215,10 @@ export function useActivities(taskId) {
       return;
     }
     setLoading(true);
-    const unsub = subscribeToAllActivities(workspaceId, (all) => {
+    // Derived from the ONE workspace-wide activities listener, not a new query
+    // per task. Every expanded Board card used to open its own subscription to
+    // the whole collection and then filter it client-side anyway.
+    return workspaceActivitiesCache.subscribe(workspaceId, (all) => {
       setActivities(
         all
           .filter((a) => a.taskId === taskId)
@@ -209,7 +226,6 @@ export function useActivities(taskId) {
       );
       setLoading(false);
     });
-    return () => unsub();
   }, [taskId, workspaceId]);
 
   return { activities, loading };
@@ -233,11 +249,10 @@ export function useAllActivities() {
       return;
     }
     setLoading(true);
-    const unsub = subscribeToAllActivities(workspaceId, (data) => {
+    return workspaceActivitiesCache.subscribe(workspaceId, (data) => {
       setWorkspaceActivities(data);
       setLoading(false);
     });
-    return () => unsub();
   }, [userId, ready, workspaceId]);
 
   // Shared projects — drives the shared-activities query.

@@ -11,6 +11,7 @@
 //   4. null → triggers default-workspace creation in migration
 
 import { useEffect, useState } from 'react';
+import { createSharedSubscription } from '../services/sharedSubscription';
 import {
   onAuthChange,
   subscribeToWorkspaces,
@@ -62,19 +63,38 @@ export function useActiveWorkspaceId() {
 
 const _wsMigrationKickedOff = new Set();
 
+// ONE workspaces listener per user, however many components ask. Board cards
+// render AssigneeBadges, which needs memberProfiles — with a listener per card
+// that was hundreds of identical onSnapshot subscriptions on a busy board.
+const workspacesCache = createSharedSubscription(
+  (userId, emit) => subscribeToWorkspaces(userId, emit),
+  { name: 'workspaces', empty: [] },
+);
+
+// Same for auth: every hook that needs a uid used to register its own
+// onAuthStateChanged.
+const authCache = createSharedSubscription(
+  (_key, emit) => onAuthChange((u) => emit({ userId: u?.uid || null, ready: true })),
+  { name: 'auth', empty: { userId: null, ready: false } },
+);
+
+export function subscribeToAuthState(cb) {
+  return authCache.subscribe('auth', cb);
+}
+
+/** The last known auth state, for seeding useState without a blank frame. */
+export function peekAuthState() {
+  return authCache.peek('auth');
+}
+
 export function useWorkspaces() {
-  const [userId, setUserId] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [workspaces, setWorkspaces] = useState([]);
+  const [{ userId, ready: authReady }, setAuth] = useState(() => authCache.peek('auth'));
+  // Seed from whatever the shared listener already has, so a card mounting
+  // later paints with data instead of an empty frame.
+  const [workspaces, setWorkspaces] = useState(() => workspacesCache.peek(authCache.peek('auth').userId) || []);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsub = onAuthChange((u) => {
-      setUserId(u?.uid || null);
-      setAuthReady(true);
-    });
-    return () => unsub();
-  }, []);
+  useEffect(() => subscribeToAuthState(setAuth), []);
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -100,7 +120,7 @@ export function useWorkspaces() {
         .catch((err) => console.error('[workspace-migration] failed:', err));
     }
 
-    const unsub = subscribeToWorkspaces(userId, (data) => {
+    return workspacesCache.subscribe(userId, (data) => {
       setWorkspaces(data);
       setLoading(false);
 
@@ -113,7 +133,6 @@ export function useWorkspaces() {
         setActiveWorkspaceId(next);
       }
     });
-    return () => unsub();
   }, [authReady, userId]);
 
   return { workspaces, loading, userId, authReady };

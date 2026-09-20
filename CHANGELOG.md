@@ -36,3 +36,4 @@ One line per task from the Ideon task sheet.
 - T-0030 — Stale copy: anonymous session, email notification promise (UI) — src/components/PendingApprovalView.jsx, src/components/LandingView.jsx, src/components/SettingsView.jsx, tests/ui/approvalScreens.test.mjs
 - T-0031 — Stale copy: anonymous session, email notification promise (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0032 — Package version and deploy account hardcoded — package.json, vite.config.js, scripts/firebase-deploy.mjs, src/services/appVersion.js, src/services/appVersion.test.mjs, src/components/SettingsView.jsx, src/components/AppShell.jsx, src/App.css, README.md
+- T-0033 — Board cards each open their own workspace listeners — src/services/sharedSubscription.js, src/services/sharedSubscription.test.mjs, src/hooks/useWorkspace.js, src/hooks/useTasks.js, tests/ui/sharedListeners.test.mjs, bridge/settings.test.mjs
