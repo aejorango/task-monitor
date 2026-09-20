@@ -60,8 +60,8 @@ export default function LandingView() {
         </div>
 
         <p className="landing-fineprint">
-          New accounts are placed in a pending state until an administrator
-          approves them. You will be notified once your access is granted.
+          A new account waits for an administrator to approve it. Once you sign
+          in, leave the page open — it lets you in as soon as someone does.
         </p>
 
         {error && (

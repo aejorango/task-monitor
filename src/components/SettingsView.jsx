@@ -49,6 +49,7 @@ import {
 import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 import KnowledgeSection from './KnowledgeSection';
+import { sessionLine, SETTINGS_SUBTITLE } from '../services/approvalCopy';
 import { downloadFile } from '../services/download';
 import { friendlyError } from '../services/access';
 
@@ -227,7 +228,7 @@ export default function SettingsView() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Per-device preferences. Stored in local storage.</p>
+          <p className="page-subtitle">{SETTINGS_SUBTITLE}</p>
         </div>
       </div>
 
@@ -384,7 +385,7 @@ export default function SettingsView() {
         <section id="settings-data" className="review-section htu-section">
           <h2 className="review-h2-accent">Your data on this device</h2>
           <p className="muted small">
-            Anonymous session <span className="mono">{userId}</span>. {projects.length} projects,
+            {sessionLine(profile, auth.currentUser)} {projects.length} projects,
             {' '}{tasks.length} active tasks, {activities.length} activity entries.
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>

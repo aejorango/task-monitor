@@ -3,10 +3,12 @@
 // rejected (status === 'rejected'). Only options are to wait or sign out.
 
 import { auth, signOutUser, SUPERADMIN_EMAILS } from '../services/firebase';
+import { approvalCopy } from '../services/approvalCopy';
 
 export default function PendingApprovalView({ profile }) {
   const user = auth.currentUser;
-  const rejected = profile?.status === 'rejected';
+  const copy = approvalCopy(profile);
+  const rejected = copy.state === 'rejected';
   const logo = `${import.meta.env.BASE_URL}blueinnov_logo.webp`;
 
   const handleSignOut = async () => {
@@ -41,29 +43,18 @@ export default function PendingApprovalView({ profile }) {
           </div>
         </div>
 
-        {rejected ? (
-          <>
-            <h2 className="landing-h2" style={{ color: 'var(--c-danger)' }}>
-              Access denied
-            </h2>
-            <p className="landing-sub">
-              Your access request was declined by an administrator. If you
-              believe this is a mistake, please contact a Blue Innovation
-              superadmin to review your request.
-            </p>
-          </>
-        ) : (
-          <>
-            <h2 className="landing-h2">Waiting for approval</h2>
-            <p className="landing-sub">
-              Your sign-in was received. A Blue Innovation superadmin needs to
-              approve your account before you can access the app.
-            </p>
-            <div className="pending-status">
-              <div className="pending-status-dot" />
-              <span>Pending review · we'll notify you by email when approved</span>
-            </div>
-          </>
+        <h2
+          className="landing-h2"
+          style={rejected ? { color: 'var(--c-danger)' } : undefined}
+        >
+          {copy.title}
+        </h2>
+        <p className="landing-sub">{copy.message}</p>
+        {copy.waitNote && (
+          <div className="pending-status">
+            <div className="pending-status-dot" />
+            <span>{copy.waitNote}</span>
+          </div>
         )}
 
         <div className="pending-admin-list">
