@@ -19,7 +19,21 @@ import {
   isAiAllowedForUser,
 } from './aiCredentials';
 
+// What a user may PICK in Settings. 'bridge-api' is not here: nobody chooses
+// it — it is what "the bridge" turns out to be when the bridge is running on an
+// API key rather than the CLI.
 export const PROVIDERS = ['claude-code', 'api', 'mock'];
+
+// Providers that reach a model through the local bridge. Both route the same
+// way; they differ in who pays and in what the bridge can do.
+export const BRIDGE_PROVIDERS = ['claude-code', 'bridge-api'];
+export const isBridgeProvider = (p) => BRIDGE_PROVIDERS.includes(p);
+
+// Only the Claude Code CLI can browse the web or read a NotebookLM notebook —
+// they are CLI capabilities, not bridge capabilities. A bridge running on an
+// API key has neither, and must say so rather than quietly answering without.
+export const canBrowse = (p) => p === 'claude-code';
+export const canGround = (p) => p === 'claude-code';
 export const DETECT_TTL_MS   = 60_000;
 export const BRIDGE_PROBE_MS = 2_500;
 export const BRIDGE_TIMEOUT_MS     = 130_000;
@@ -74,7 +88,7 @@ export function setAiSettings(patch = {}) {
 
 /* ── detection ────────────────────────────────────────────────────────── */
 
-// 'claude-code' | 'api' | 'mock' | 'none' | null (not probed yet)
+// 'claude-code' | 'bridge-api' | 'api' | 'mock' | 'none' | null (not probed yet)
 let _mode = null;
 let _modeAt = 0;
 let _inflight = null;
@@ -165,8 +179,11 @@ export async function detectProvider({ force = false } = {}) {
     if (!isAiAllowedForUser()) {
       next = 'none';
     } else if (provider === 'claude-code') {
-      await probeBridge();
-      next = 'claude-code';                       // honoured even if down: askAI reports it
+      // Honoured even if the bridge is down: askAI reports that. But if the
+      // bridge IS up and running on an API key, say so — the AI brain panel
+      // must not promise "no API billing" while tokens are being billed.
+      const { ok, aiMode } = await probeBridge();
+      next = (ok && aiMode === 'api') ? 'bridge-api' : 'claude-code';
     } else if (provider === 'api' || provider === 'mock') {
       next = provider;
     } else {
@@ -175,7 +192,7 @@ export async function detectProvider({ force = false } = {}) {
       // 'claude-code' when the CLI is genuinely the bridge's live brain.
       if (ok && aiMode === 'claude-code') next = 'claude-code';
       else if (getEffectiveApiKey())      next = 'api';
-      else if (ok && aiMode === 'api')    next = 'claude-code';   // bridge has its own key
+      else if (ok && aiMode === 'api')    next = 'bridge-api';    // bridge has its own key
       else if (allowMock)                 next = 'mock';
       else                                next = 'none';
     }
@@ -231,10 +248,31 @@ export function isAiAvailable() {
 export function providerLabel(provider) {
   switch (provider) {
     case 'claude-code': return 'Claude Code CLI — your subscription, no API billing';
+    case 'bridge-api':  return 'Anthropic API via your local bridge — billed per token';
     case 'api':         return 'Anthropic API — billed per token';
     case 'mock':        return 'Mock — placeholder text, not a real AI response';
     case 'none':        return 'Not connected';
     default:            return 'Checking…';
+  }
+}
+
+// One sentence for the AI brain panel: what is answering, and who pays.
+export function providerHeadline(provider, known = true) {
+  switch (provider) {
+    case 'claude-code':
+      return 'Thinking on your Claude subscription — no API billing.';
+    case 'bridge-api':
+      return 'Answering through the Anthropic API on your local bridge — billed per token. '
+           + 'Log in to the Claude Code CLI (`claude`) to use your subscription instead.';
+    case 'api':
+      return 'Answering through the Anthropic API — billed per token.';
+    case 'mock':
+      return 'Placeholder answers only. Nothing here is a real AI response.';
+    case 'none':
+      return 'No AI brain is connected, so AI features are switched off.';
+    default:
+      return known ? 'No AI brain is connected, so AI features are switched off.'
+                   : 'Checking which AI brain is live…';
   }
 }
 
@@ -355,7 +393,15 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
 
   if (provider === 'none') throw noBrain();
 
-  if (provider === 'claude-code') {
+  if (isBridgeProvider(provider)) {
+    // A bridge running on an API key cannot browse or ground — those are CLI
+    // capabilities. Ask for them anyway and the answer comes back degraded
+    // rather than silently ungrounded.
+    const lostCapabilities = [
+      web && !canBrowse(provider) ? WEB_UNAVAILABLE(provider) : null,
+      ground && !canGround(provider) ? GROUND_UNAVAILABLE : null,
+    ].filter(Boolean).join(' ');
+
     try {
       const out = await bridgeFetch('/ai/complete', {
         method: 'POST',
@@ -363,7 +409,13 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
         body: { system, user: userPrompt, maxTokens: maxTokens || aiSettings().maxTokens, web, meta, ground },
       });
       // The bridge already recorded this call and may have degraded it itself.
-      return { ...out, ms: out.ms ?? (Date.now() - started) };
+      const base = { ...out, ms: out.ms ?? (Date.now() - started) };
+      if (!lostCapabilities) return base;
+      return {
+        ...base,
+        degraded: true,
+        reason: [base.reason, lostCapabilities].filter(Boolean).join(' '),
+      };
     } catch (err) {
       const why = err?.name === 'AbortError'
         ? `the AI bridge at ${aiSettings().bridgeUrl} did not respond`
