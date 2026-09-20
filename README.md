@@ -324,6 +324,19 @@ rules so the two stay in step).
 | Join a workspace you were invited to | The holder of that email address, at exactly the role offered, once — the invitation is consumed |
 | Read presence (who else is on a task) | Members of that task's workspace |
 | Set your own `companyId` | Nobody — superadmins assign companies |
+| Open, replace or delete an attachment | Any member of the workspace the file belongs to |
+
+**Attachments belong to the workspace, not to the uploader.** A file goes to
+`workspaces/{workspaceId}/{taskId}/…` in Storage and `storage.rules` decides
+access by reading that workspace document — so an admin cleaning up somebody
+else's activity removes the bytes as well as the record, and a person who has
+left does not take their files hostage. Deleting an activity (one or in bulk),
+and removing an attachment while editing one, delete the stored objects.
+
+Files uploaded before this change are still under `users/{uid}/…`: their
+uploader can still open and delete them, nothing new is written there, and the
+old download links keep working. Deploy both rule sets together with
+`npm run deploy:rules`.
 
 ### Tests
 
@@ -334,7 +347,9 @@ npm run test:all    # both — what to run before a deploy
 ```
 
 `npm test` needs nothing but Node. `npm run test:rules` needs Java, because the
-Firestore emulator is a JAR; it never touches the real project.
+Firestore and Storage emulators are JARs; it never touches the real project.
+Storage rules read the workspace document out of Firestore, so both emulators
+run together.
 
 | Suite | Covers |
 | --- | --- |
@@ -356,6 +371,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/access.test.mjs` | Who may share a project; plain-language error text |
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
+| `src/services/uploadPaths.test.mjs` | Where an attachment is stored, and which files stop being referenced |
 | `src/services/tableViews.test.mjs` | Columns, grouping and sorting for the task table |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
@@ -369,11 +385,12 @@ Firestore emulator is a JAR; it never touches the real project.
 | `tests/ui/noNativeDialogs.test.mjs` | No alert/confirm/prompt; every confirm labels its action |
 | `tests/ui/dialog.test.mjs` | Focus trap, Escape, focus restore, aria-modal |
 | `tests/ui/modalSemantics.test.mjs` | Every modal is a real dialog; every icon button is labelled |
+| `tests/ui/attachments.test.mjs` | Uploads go to the workspace; deletes take the bytes with them |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
-| `tests/rules/*.test.mjs` | firestore.rules, against the emulator |
+| `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
 
 **Where logic lives.** Anything worth testing is a pure module under
 `src/services/`, not a function inside a component or inside `firebase.js`:

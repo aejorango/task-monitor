@@ -107,7 +107,7 @@ export default function ActivityEditor({ activity, onClose }) {
 
         <div className="field">
           <label className="label">Files & links</label>
-          <FileUpload taskId={activity.taskId} attachments={attachments} onChange={setAttachments} />
+          <FileUpload taskId={activity.taskId} workspaceId={activity.workspaceId} attachments={attachments} onChange={setAttachments} />
           <div className="attach-row" style={{ marginTop: 8 }}>
             <input className="input input-sm" value={attachName} onChange={(e) => setAttachName(e.target.value)} placeholder="Label" />
             <input type="url" className="input input-sm" value={attachUrl} onChange={(e) => setAttachUrl(e.target.value)} placeholder="…or paste a link" />

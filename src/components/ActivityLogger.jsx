@@ -122,7 +122,7 @@ export default function ActivityLogger({ task, userId, onClose }) {
 
         <div className="field">
           <label className="label">Files & links</label>
-          <FileUpload taskId={task.id} attachments={attachments} onChange={setAttachments} />
+          <FileUpload taskId={task.id} workspaceId={task.workspaceId} attachments={attachments} onChange={setAttachments} />
           <div className="attach-row" style={{ marginTop: 8 }}>
             <input className="input input-sm" value={attachName} onChange={(e) => setAttachName(e.target.value)} placeholder="Label" />
             <input type="url" className="input input-sm" value={attachUrl} onChange={(e) => setAttachUrl(e.target.value)} placeholder="…or paste a link (Drive, Dropbox, etc.)" />

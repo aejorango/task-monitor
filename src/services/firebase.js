@@ -56,6 +56,7 @@ import {
   inviteFields, inviteFor, normalizeEmail, revokeInviteFields, validateInvite,
 } from './invites';
 import { normalizeIcon } from './icons';
+import { attachmentPaths, orphanedPaths, safeFilename, uploadPath } from './uploadPaths';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -1364,7 +1365,11 @@ export async function editActivity(oldActivity, updates) {
     });
   }
 
-  return await batch.commit();
+  const result = await batch.commit();
+  // Taking an attachment off in the editor has to remove the bytes too, or the
+  // row goes and the file stays for ever.
+  await deleteUploads(orphanedPaths(oldActivity.attachments, updates.attachments));
+  return result;
 }
 
 export async function deleteActivity(activity) {
@@ -1376,7 +1381,10 @@ export async function deleteActivity(activity) {
     attachmentCount:  increment(-(activity.attachments?.length || 0)),
     updatedAt:        serverTimestamp(),
   });
-  return await batch.commit();
+  const result = await batch.commit();
+  // The record is gone; its files go with it, whoever uploaded them.
+  await deleteUploads(attachmentPaths(activity));
+  return result;
 }
 
 // Bulk delete — used by Table bulk actions. Groups counter updates per-task.
@@ -1398,7 +1406,9 @@ export async function bulkDeleteActivities(activities) {
       updatedAt:        serverTimestamp(),
     });
   });
-  return await batch.commit();
+  const result = await batch.commit();
+  await deleteUploads(attachmentPaths(activities));
+  return result;
 }
 
 // Bulk update completionStatus on multiple activities (no counter changes).
@@ -1772,14 +1782,16 @@ export async function maybeCompressImage(file, { maxEdge = 1600, quality = 0.85 
   return blob.size < file.size ? blob : file;
 }
 
-// Upload a file to Firebase Storage under users/{uid}/{taskId}/{filename}.
+// Upload a file to Firebase Storage under workspaces/{workspaceId}/{scope}/…
 // Returns { name, url, type, size, path } shaped to fit our `attachments` array.
 // `onProgress(fraction)` is called as the upload progresses.
-export async function uploadFile({ userId, taskId, file, filename, onProgress }) {
-  const base = `users/${userId}/${taskId || 'general'}`;
-  const safeName = (filename || file.name || 'file').replace(/[^\w.\-]/g, '_');
-  const finalName = `${Date.now()}-${safeName}`;
-  const path = `${base}/${finalName}`;
+//
+// The workspace is required: a file stored per-uploader is a file only that
+// uploader can ever delete, which left orphaned bytes behind every time an
+// admin deleted somebody else's activity (IMP-008).
+export async function uploadFile({ workspaceId, taskId, scope, file, filename, onProgress }) {
+  const path = uploadPath({ workspaceId, taskId, scope, filename: filename || file?.name });
+  const safeName = safeFilename(filename || file?.name);
 
   const compressed = await maybeCompressImage(file);
   const ref = storageRef(storage, path);
@@ -1816,6 +1828,18 @@ export async function deleteUpload(path) {
     // object-not-found is fine; warn for anything else
     if (err?.code !== 'storage/object-not-found') console.warn('deleteUpload failed:', err);
   }
+}
+
+/**
+ * Remove stored files that nothing references any more.
+ *
+ * Best effort, and never inside the batch that removes the record: a file that
+ * cannot be removed (a legacy `users/…` object somebody else uploaded) must not
+ * stop the record from going. Pasted links have no `path` and are never
+ * touched.
+ */
+export async function deleteUploads(paths) {
+  await Promise.all((paths || []).map((p) => deleteUpload(p)));
 }
 
 

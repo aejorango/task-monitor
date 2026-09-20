@@ -4,9 +4,14 @@
 import { useState, useRef } from 'react';
 import { uploadFile, deleteUpload } from '../services/firebase';
 import { useAuth } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { friendlyError } from '../services/access';
 
-export default function FileUpload({ taskId, attachments, onChange, multiple = true }) {
+export default function FileUpload({ taskId, workspaceId, attachments, onChange, multiple = true }) {
   const { userId } = useAuth();
+  const activeWorkspaceId = useActiveWorkspaceId();
+  // Files belong to the workspace, so everybody in it can open and remove them.
+  const fileWorkspaceId = workspaceId || activeWorkspaceId;
   const [uploading, setUploading] = useState([]); // [{ name, progress }]
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
@@ -15,6 +20,10 @@ export default function FileUpload({ taskId, attachments, onChange, multiple = t
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0 || !userId) return;
+    if (!fileWorkspaceId) {
+      setError('Pick a workspace before attaching a file.');
+      return;
+    }
     setError(null);
     const list = Array.from(files);
     const slots = list.map((f) => ({ id: Math.random().toString(36).slice(2), name: f.name, progress: 0 }));
@@ -25,7 +34,7 @@ export default function FileUpload({ taskId, attachments, onChange, multiple = t
       const slot = slots[i];
       try {
         const att = await uploadFile({
-          userId,
+          workspaceId: fileWorkspaceId,
           taskId: taskId || null,
           file: f,
           onProgress: (frac) => {
@@ -35,7 +44,7 @@ export default function FileUpload({ taskId, attachments, onChange, multiple = t
         onChange([...(attachments || []), att]);
       } catch (err) {
         console.error(err);
-        setError(`${f.name}: ${err.message || err}`);
+        setError(`${f.name}: ${friendlyError(err, 'That file could not be uploaded.')}`);
       } finally {
         setUploading((cur) => cur.filter((s) => s.id !== slot.id));
       }

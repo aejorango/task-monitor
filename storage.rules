@@ -1,14 +1,43 @@
-// Firebase Storage rules — paste into Firebase Console → Storage → Rules.
-// Same model as Firestore: only the owner (matched by path prefix) can read/write.
+// Firebase Storage rules — deploy with `npm run deploy:rules`.
+//
+// An attachment belongs to the WORKSPACE, not to whoever happened to upload it.
+// Files used to live under users/{uid}/…, which meant an admin who deleted
+// somebody else's activity removed the record and left the bytes behind for
+// ever. Access is now decided the same way Firestore decides it: by reading the
+// workspace document and looking for the requester in its members list.
 
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Per-user files: users/{uid}/...
-    // The first path segment must match the requester's auth uid.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function workspace(workspaceId) {
+      return firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data;
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId))
+        && request.auth.uid in workspace(workspaceId).members;
+    }
+
+    // Workspace files: workspaces/{workspaceId}/{taskId or 'general' or 'logo'}/…
+    // Every member can add one, open one, replace one and delete one — that is
+    // what makes an admin able to clean up after a member who has left.
+    match /workspaces/{workspaceId}/{allPaths=**} {
+      allow read, write: if isWorkspaceMember(workspaceId);
+    }
+
+    // Legacy: files uploaded before the path changed. Still readable and still
+    // deletable, but only by the person who put them there — which is exactly
+    // the limitation the rule above exists to remove. Nothing new is written
+    // here; `uploadPath()` refuses to build such a path.
     match /users/{uid}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // Nothing else is accessible.

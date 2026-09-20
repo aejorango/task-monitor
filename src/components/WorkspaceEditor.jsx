@@ -44,6 +44,12 @@ export default function WorkspaceEditor({ workspace, onClose }) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !userId) return;
+    if (!workspace?.id) {
+      // The logo lives in the workspace's own folder, and everybody in the
+      // workspace may manage it — so the workspace has to exist first.
+      setLogoError('Create the workspace first, then come back and add a logo. You can paste an image link now.');
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       setLogoError('Logo must be an image file.');
       return;
@@ -55,8 +61,8 @@ export default function WorkspaceEditor({ workspace, onClose }) {
     try {
       const prevPath = logoPath;
       const att = await uploadFile({
-        userId,
-        taskId: `workspace-logos/${workspace?.id || 'new'}`,
+        workspaceId: workspace.id,
+        scope: 'logo',
         file,
         onProgress: setUploadPct,
       });
@@ -185,6 +191,7 @@ export default function WorkspaceEditor({ workspace, onClose }) {
           <label className="label">Logo (optional)</label>
           <p className="muted small" style={{ marginTop: 0 }}>
             Use a logo image instead of the icon below. Either <strong>upload</strong> a file or <strong>paste a public image URL</strong>.
+            {!workspace?.id && ' A new workspace has to be created before a file can be uploaded to it — paste a link for now.'}
           </p>
 
           <input
@@ -195,7 +202,11 @@ export default function WorkspaceEditor({ workspace, onClose }) {
             onChange={onLogoChange}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <button type="button" className="btn btn-sm" onClick={pickLogo} disabled={uploading}>
+            <button
+              type="button" className="btn btn-sm" onClick={pickLogo}
+              disabled={uploading || !workspace?.id}
+              title={workspace?.id ? undefined : 'Create the workspace first'}
+            >
               {uploading ? `Uploading… ${Math.round(uploadPct * 100)}%` : (logoUrl && logoPath ? 'Replace uploaded logo' : '⬆ Upload image')}
             </button>
             {logoUrl && !uploading && (
