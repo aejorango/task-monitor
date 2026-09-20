@@ -11,3 +11,4 @@ One line per task from the Ideon task sheet.
 - T-0005 — Approval gate is client-side only; pending users can write data — firestore.rules, src/App.jsx, tests/rules/approval.rules.test.mjs
 - T-0006 — Next recurring task is created without workspaceId — src/services/recurrence.js, src/services/recurrence.test.mjs, src/services/firebase.js, src/hooks/useWorkspace.js
 - T-0007 — Bridge lets web pages set the executable it spawns — bridge/ai.mjs, bridge/server.mjs, bridge/settings.test.mjs, src/services/ai.js, src/components/SettingsView.jsx, README.md
+- T-0008 — No error boundary; render errors blank the app — src/components/ErrorBoundary.jsx, src/services/errorMessages.js, src/services/errorMessages.test.mjs, src/App.jsx, src/main.jsx, src/App.css, dev/error-boundary.html, dev/error-boundary.jsx, tests/ui/*.mjs, package.json

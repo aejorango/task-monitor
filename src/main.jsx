@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { registerServiceWorker } from './hooks/useNotifications.js'
 import { purgeStaleCacheOnce } from './services/firebase.js'
 
@@ -10,7 +11,11 @@ function boot() {
 
   createRoot(document.getElementById('root')).render(
     <StrictMode>
-      <App />
+      {/* Last line of defence: if the shell itself throws, the user still gets
+          a card with a Reload button instead of a blank white page. */}
+      <ErrorBoundary scope="app">
+        <App />
+      </ErrorBoundary>
     </StrictMode>,
   )
 }

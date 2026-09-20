@@ -9903,3 +9903,62 @@ a:hover { text-decoration: underline; }
   .db-log { display: none; }
   .db-flush .db-head, .db-flush .db-empty { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ── Error boundary card (ErrorBoundary.jsx) ──────────────────────────────
+   Shown in place of a page that crashed. scope="view" sits inside the shell
+   so the sidebar stays usable; scope="app" fills the window. Tokens only, so
+   it follows light/dark like everything else. */
+.crash-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  padding: 32px;
+  margin: 40px auto;
+  max-width: 520px;
+  text-align: center;
+}
+.crash-card.crash-app {
+  margin: 12vh auto;
+}
+.crash-icon {
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 12px;
+  color: var(--c-warn, var(--c-text-muted));
+}
+.crash-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  color: var(--c-text);
+}
+.crash-body {
+  color: var(--c-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+}
+.crash-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.crash-detail-toggle {
+  margin-top: 16px;
+}
+.crash-detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md, 8px);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  text-align: left;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .crash-card { margin: 24px 12px; padding: 24px 20px; }
+}

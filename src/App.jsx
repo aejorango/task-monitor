@@ -1,6 +1,7 @@
 // src/App.jsx — root shell + view router with code-split non-Board views.
 
 import { lazy, Suspense, useEffect } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth, useProjects } from './hooks/useTasks';
 import { useWorkspaces, useSyncMyMemberProfile } from './hooks/useWorkspace';
 import { useMyCompany } from './hooks/useCompany';
@@ -33,6 +34,17 @@ const GoalsView         = lazy(() => import('./components/GoalsView'));
 const MessagesView      = lazy(() => import('./components/MessagesView'));
 const MinutesView       = lazy(() => import('./components/MinutesView'));
 const AskAiView         = lazy(() => import('./components/AskAiView'));
+
+// What each route is called in the sidebar — the error card says "We could not
+// show the Gantt page", not "view 'gantt' threw".
+const VIEW_NAMES = {
+  dashboard: 'Dashboard', board: 'Board', table: 'Activity Log', gantt: 'Gantt',
+  wbs: 'WBS', goals: 'Goals', messages: 'Messages', minutes: 'Minutes',
+  calendar: 'Calendar', review: 'Review', artifacts: 'Artifacts',
+  analytics: 'Analytics', projects: 'Projects', settings: 'Settings',
+  'work-performed': 'Work Performed', 'how-to-use': 'How to use',
+  'ask-ai': 'Ask AI', invite: 'invite',
+};
 
 function ViewSpinner() {
   return (
@@ -88,9 +100,11 @@ export default function App() {
   // InviteClaimView prompts for Google sign-in when the user isn't signed in.
   if (route.view === 'invite') {
     return (
+      <ErrorBoundary scope="app">
       <Suspense fallback={<FullPageSpinner label="Loading invite…" />}>
         <InviteClaimView inviteId={route.projectFilter} navigate={navigate} />
       </Suspense>
+      </ErrorBoundary>
     );
   }
 
@@ -155,6 +169,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
       timerWidget={<TimerWidget />}
       userProfile={profile}
     >
+      <ErrorBoundary scope="view" viewName={VIEW_NAMES[route.view] || ''} resetKey={route.view}>
       <Suspense fallback={<ViewSpinner />}>
         {route.view === 'invite'    && <InviteClaimView inviteId={route.projectFilter} navigate={navigate} />}
         {route.view === 'ask-ai'    && <AskAiView />}
@@ -175,6 +190,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'work-performed' && <WorkPerformedView projectFilter={route.projectFilter} />}
         {route.view === 'how-to-use'     && <HowToUseView />}
       </Suspense>
+      </ErrorBoundary>
     </AppShell>
     </>
   );
