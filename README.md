@@ -381,6 +381,7 @@ run together.
 | `src/services/uploadPaths.test.mjs` | Where an attachment is stored, and which files stop being referenced |
 | `src/services/tableViews.test.mjs` | Columns, grouping and sorting for the task table |
 | `src/services/customFields.test.mjs` | A project's own fields: labels, values, chips and columns |
+| `src/services/mentions.test.mjs` | Who a comment is for, and what their notice says |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
 | `src/services/minutesExport.test.mjs` | Minutes as a document |
@@ -395,6 +396,7 @@ run together.
 | `tests/ui/modalSemantics.test.mjs` | Every modal is a real dialog; every icon button is labelled |
 | `tests/ui/attachments.test.mjs` | Uploads go to the workspace; deletes take the bytes with them |
 | `tests/ui/customFields.test.mjs` | A custom field reaches the card, the table and the export |
+| `tests/ui/inboxApi.test.mjs` | Notices are raised where the message is written, and cannot lose it |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |

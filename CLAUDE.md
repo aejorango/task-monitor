@@ -70,8 +70,12 @@ automationRuns/{runId}:            ← written by the function, read-only in a b
   description                      ← the same sentence the editor previews
   outcome: 'done' | 'skipped', message, at, expiresAt
 
-notifications/{noticeId}:          ← "Tell someone"; a person reads their own
-  userId, workspaceId, text, taskId, read, source: 'automation', at
+notifications/{noticeId}:          ← the inbox: mentions, comments, assignments,
+  userId, workspaceId                  and whatever an automation raised
+  kind: 'mention'|'comment'|'assignment'|'automation'
+  source: 'person' | 'automation', fromUserId
+  text                               ← the whole sentence, built by mentions.js
+  taskId, taskTitle, read, at
 
 savedViews/{viewId}:                                               ← v12
   userId, workspaceId, name, icon
@@ -295,6 +299,7 @@ src/
 │   ├── askAi.js              ← Ask AI digest + narration
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
+│   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── customFields.js       ← a project's own fields as chips, columns and labels
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
@@ -439,6 +444,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Writing a notice by hand. `mentions.js` builds the whole sentence (`buildNotice`) so an old notice still reads correctly after the wording changes, and the rules only accept `kind` in mention/comment/assignment from a browser — `automation` is the function's, written with admin credentials. Raise them with `raiseNotices`, **after** the message itself is written: a notice that fails must never cost somebody their comment.
 - ❌ Reading `TASK_TABLE_COLUMNS` directly in a component. It is the built-ins only; the projects' own fields are added by `columnCatalogue(ctx)`, and `ctx` must carry `projects` or a custom column silently disappears from a saved view. Every `tableViews` function takes that ctx — including `normalizeTableConfig` and `tableConfigFields`.
 - ❌ Storing an upload under the uploader. `users/{uid}/…` made the uploader the only person who could ever delete the file, so an admin who deleted somebody else's activity left the bytes behind for ever. Every upload goes through `uploadFile({ workspaceId, … })`.
 - ❌ Deleting an activity without its files. `deleteActivity` / `bulkDeleteActivities` call `deleteUploads(attachmentPaths(...))` and `editActivity` calls `deleteUploads(orphanedPaths(...))` — **after** the batch commits, so a file the bucket refuses to drop can never block the record from going.

@@ -383,13 +383,32 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // In-app notices, including the ones automations raise. A person reads and
-    // dismisses their own; nobody writes one from a browser.
+    // In-app notices: a mention, a comment on a task you are on, a task you
+    // were just given, or something an automation did.
+    //
+    // A person reads and dismisses their own, and nothing else. Writing one is
+    // allowed — there is no backend to do it — but only in a workspace you are
+    // a member of, only FOR a member of that same workspace, only FROM
+    // yourself, and only unread: so a notice can name its sender truthfully and
+    // nobody can reach somebody they do not already share a workspace with.
+    function isNoticeForTeammate() {
+      let n = request.resource.data;
+      return isWorkspaceMember(n.workspaceId)
+          && n.userId is string
+          && n.userId in get(/databases/$(database)/documents/workspaces/$(n.workspaceId)).data.members
+          && n.fromUserId == request.auth.uid
+          && n.read == false
+          && n.kind in ['mention', 'comment', 'assignment']
+          && n.text is string
+          && n.text.size() <= 300;
+    }
+
     match /notifications/{noticeId} {
       allow read:   if isApproved() && resource.data.userId == request.auth.uid;
       allow update: if isApproved() && resource.data.userId == request.auth.uid
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow create, delete: if false;
+      allow create: if isNoticeForTeammate();
+      allow delete: if false;
     }
 
     // ─── Webhook delivery log (written by the webhook functions) ───────────

@@ -57,6 +57,7 @@ import {
 } from './invites';
 import { normalizeIcon } from './icons';
 import { attachmentPaths, orphanedPaths, safeFilename, uploadPath } from './uploadPaths';
+import { noticesForAssignment, noticesForComment, watchersOf } from './mentions';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -1848,11 +1849,20 @@ export async function deleteUploads(paths) {
 
 // Note: `task` here can be either a task object (preferred — carries workspaceId
 // directly) or the raw taskId for back-compat. Callers should pass the task.
-export async function addTaskComment(userId, task, body) {
+/**
+ * Add a comment, and tell the people it concerns.
+ *
+ * `audience` is what the caller already has on screen — the workspace's members
+ * and their profiles, plus the author's own name. Without it the comment is
+ * still saved; nobody is just told about it.
+ *
+ * @param {{ members?: string[], memberProfiles?: object, authorName?: string }} audience
+ */
+export async function addTaskComment(userId, task, body, audience = null) {
   const taskObj = typeof task === 'string' ? null : task;
   const taskId  = typeof task === 'string' ? task  : task?.id;
   if (!taskObj?.workspaceId) throw new Error('addTaskComment requires a task with workspaceId');
-  return await addDoc(taskCommentsRef, {
+  const written = await addDoc(taskCommentsRef, {
     userId,
     workspaceId: taskObj.workspaceId,
     // Denormalize projectId so the security rule can grant project members
@@ -1864,6 +1874,28 @@ export async function addTaskComment(userId, task, body) {
     createdAt: serverTimestamp(),
     deleted: false,
   });
+
+  if (audience) {
+    await raiseNotices(noticesForComment({
+      body: String(body || ''),
+      task: taskObj,
+      authorId: userId,
+      authorName: audience.authorName,
+      members: audience.members || [],
+      memberProfiles: audience.memberProfiles || {},
+      watchers: audience.watchers || watchersOf(taskObj),
+    }));
+  }
+  return written;
+}
+
+/**
+ * Tell whoever has just been given this task. Called with the assignee lists
+ * from before and after the change; nobody hears about a task they already had,
+ * and nobody hears about giving a task to themselves.
+ */
+export async function notifyAssignment({ task, before = [], after = [], byUserId, byName }) {
+  return raiseNotices(noticesForAssignment({ task, before, after, byUserId, byName }));
 }
 
 export async function updateTaskComment(commentId, body) {
@@ -2240,6 +2272,30 @@ export function subscribeToMyNotifications(userId, callback, { max = 20 } = {}) 
 /** Dismiss one notice. `read` is the only field a browser may change. */
 export async function markNotificationRead(noticeId) {
   return updateDoc(doc(db, 'notifications', noticeId), { read: true });
+}
+
+/** Clear the whole inbox in one go. */
+export async function markAllNotificationsRead(notices = []) {
+  const unread = notices.filter((n) => n && n.id && !n.read);
+  if (!unread.length) return null;
+  const batch = writeBatch(db);
+  unread.forEach((n) => batch.update(doc(db, 'notifications', n.id), { read: true }));
+  return batch.commit();
+}
+
+/**
+ * Write the notices somebody just earned.
+ *
+ * Best effort, and deliberately not inside the batch that saved the comment or
+ * the task: a notice that cannot be written (the recipient left the workspace
+ * between the comment being typed and sent) must never lose the message itself.
+ */
+export async function raiseNotices(notices = []) {
+  if (!notices.length) return;
+  await Promise.all(notices.map((n) => addDoc(collection(db, 'notifications'), {
+    ...n,
+    at: serverTimestamp(),
+  }).catch((err) => console.warn('could not raise a notice', err))));
 }
 
 // ─── WEBHOOKS ───────────────────────────────────────────────────────────────

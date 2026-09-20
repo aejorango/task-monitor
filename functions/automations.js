@@ -76,10 +76,15 @@ async function perform(plan, rule, task, runId) {
       await db().collection('notifications').add({
         userId: plan.userId,
         workspaceId: rule.workspaceId,
+        // Same shape as the notices a person raises (src/services/mentions.js),
+        // so one inbox shows both.
+        kind: 'automation',
+        source: 'automation',
+        fromUserId: null,
         text: plan.text,
         taskId: task?.id || null,
+        taskTitle: task?.title || '',
         read: false,
-        source: 'automation',
         at: FieldValue.serverTimestamp(),
       });
       return { ok: true, message: 'Told them.' };
