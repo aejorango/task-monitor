@@ -1898,6 +1898,30 @@ export async function notifyAssignment({ task, before = [], after = [], byUserId
   return raiseNotices(noticesForAssignment({ task, before, after, byUserId, byName }));
 }
 
+/**
+ * Apply a workload-planner move: the patch `moveTaskPlan()` worked out, and the
+ * notice the new owner deserves. One function so a drag can never quietly
+ * reassign somebody's week without telling them.
+ *
+ * @param {object} task    the task as it is now
+ * @param {object} patch   from services/workload.js `moveTaskPlan`
+ * @param {{ byUserId, byName }} by
+ */
+export async function applyTaskMove(task, patch, { byUserId, byName } = {}) {
+  if (!task?.id || !patch || !Object.keys(patch).length) return null;
+  const result = await updateTask(task.id, patch);
+  if (patch.assignedTo) {
+    await notifyAssignment({
+      task,
+      before: task.assignedTo || [],
+      after: patch.assignedTo,
+      byUserId,
+      byName,
+    });
+  }
+  return result;
+}
+
 export async function updateTaskComment(commentId, body) {
   return await updateDoc(doc(db, 'taskComments', commentId), {
     body: String(body || ''),

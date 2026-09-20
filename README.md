@@ -402,6 +402,7 @@ run together.
 | `src/services/tableViews.test.mjs` | Columns, grouping and sorting for the task table |
 | `src/services/customFields.test.mjs` | A project's own fields: labels, values, chips and columns |
 | `src/services/mentions.test.mjs` | Who a comment is for, and what their notice says |
+| `src/services/workload.test.mjs` | The workload grid, and what dropping a task on a cell means |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
 | `src/services/minutesExport.test.mjs` | Minutes as a document |
@@ -419,6 +420,7 @@ run together.
 | `tests/ui/inboxApi.test.mjs` | Notices are raised where the message is written, and cannot lose it |
 | `tests/ui/inbox.test.mjs` | The topbar inbox, the @ picker, and getting to the task |
 | `tests/ui/inboxFlow.test.mjs` | A mentions B → B's inbox shows it → it opens the task |
+| `tests/ui/workloadApi.test.mjs` | A move is one write plus the notice the new owner deserves |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |

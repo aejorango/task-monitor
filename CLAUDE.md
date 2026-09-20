@@ -303,6 +303,7 @@ src/
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
+│   ├── workload.js           ← the people × weeks grid, and what a drop means
 │   ├── customFields.js       ← a project's own fields as chips, columns and labels
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
