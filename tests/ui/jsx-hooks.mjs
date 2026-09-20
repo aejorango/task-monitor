@@ -5,6 +5,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { transformSync } from 'rolldown/experimental';
 
 const JSX = /\.jsx$/;
+// App modules also read `import.meta.env` (Vite's build-time constant). Node
+// has no such thing, so every app file is rewritten to read a global the test
+// harness controls — see tests/ui/dom.mjs.
+const APP_SOURCE = /\/(src|dev)\/[^?]*\.(js|jsx)$/;
+const VENDOR = /\/node_modules\//;
 // App components import App.css; there is no stylesheet in a Node test.
 const STYLE = /\.(css|scss|sass|less)$/;
 
@@ -33,10 +38,17 @@ export async function resolve(specifier, context, next) {
 }
 
 export async function load(url, context, next) {
-  if (!JSX.test(new URL(url).pathname)) return next(url, context);
+  const pathname = new URL(url).pathname;
+  const isJsx = JSX.test(pathname) && !VENDOR.test(pathname);
+  const isApp = APP_SOURCE.test(pathname) && !VENDOR.test(pathname);
+  if (!isJsx && !isApp) return next(url, context);
 
   const filename = fileURLToPath(url);
-  const source = fs.readFileSync(filename, 'utf8');
+  let source = fs.readFileSync(filename, 'utf8');
+  source = source.replaceAll('import.meta.env', 'globalThis.__VITE_ENV__');
+
+  if (!isJsx) return { format: 'module', source, shortCircuit: true };
+
   const out = transformSync(filename, source, { jsx: { runtime: 'automatic' } });
   if (out.errors?.length) {
     throw new Error(`JSX transform failed for ${filename}:\n${out.errors.map(String).join('\n')}`);

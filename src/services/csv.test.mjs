@@ -136,3 +136,107 @@ test('hours accept decimals and units, and never go negative', () => {
   assert.equal(normalizeHours('abc'), 0);
   assert.equal(normalizeHours('-2'), 0);
 });
+
+// ─── import preview (T-0010) ────────────────────────────────────────────────
+
+import { buildImportPreview, importTaskKey, summarizeImport } from './csv.js';
+
+const PROJECTS = [
+  { id: 'p1', name: 'SBLAF rollout', workspaceId: 'ws1', phases: [{ id: 'ph1', name: 'Discovery' }] },
+  { id: 'p2', name: 'Website revamp', workspaceId: 'ws1', phases: [] },
+];
+const TASKS = [
+  { id: 't1', title: 'Kick-off', projectId: 'p1' },
+  { id: 't2', title: 'Kick-off', projectId: 'p2' },
+];
+
+const previewOf = (csv) => {
+  const read = readActivityCsv(csv);
+  assert.equal(read.ok, true, read.error);
+  return buildImportPreview({ body: read.body, map: read.map, projects: PROJECTS, tasks: TASKS });
+};
+
+test('a row matches the project and phase named in the file', () => {
+  const [row] = previewOf('Project,Phase,Task,Date\nSBLAF rollout,Discovery,Kick-off,2026-09-20');
+  assert.equal(row.project.id, 'p1');
+  assert.equal(row.phase.id, 'ph1');
+  assert.equal(row.valid, true);
+});
+
+test('project and phase matching ignores case', () => {
+  const [row] = previewOf('Project,Phase,Task,Date\nsblaf ROLLOUT,discovery,Kick-off,2026-09-20');
+  assert.equal(row.project.id, 'p1');
+  assert.equal(row.phase.id, 'ph1');
+});
+
+test('the same task title in two projects resolves to the right one', () => {
+  const [a] = previewOf('Project,Task,Date\nSBLAF rollout,Kick-off,2026-09-20');
+  const [b] = previewOf('Project,Task,Date\nWebsite revamp,Kick-off,2026-09-20');
+  assert.equal(a.existingTask.id, 't1');
+  assert.equal(b.existingTask.id, 't2');
+});
+
+test('an unknown task will be created, not silently attached to a similar one', () => {
+  const [row] = previewOf('Project,Task,Date\nSBLAF rollout,Brand new task,2026-09-20');
+  assert.equal(row.existingTask, null);
+  assert.equal(row.valid, true);
+});
+
+test('an unknown project leaves the row unassigned rather than guessing', () => {
+  const [row] = previewOf('Project,Task,Date\nNot a project,Kick-off,2026-09-20');
+  assert.equal(row.project, null);
+  assert.equal(row.projectName, 'Not a project');
+});
+
+test('a row with no task name is rejected with a reason a person can act on', () => {
+  const rows = previewOf('Project,Task,Date\nSBLAF rollout,,2026-09-20\nSBLAF rollout,Kick-off,2026-09-20');
+  assert.equal(rows[0].valid, false);
+  assert.match(rows[0].reason, /no task name/i);
+  assert.equal(rows[1].valid, true);
+});
+
+test('cell values are normalised on the way into the preview', () => {
+  const [row] = previewOf(
+    'Project,Task,Date,Hours,Completion,Output link,Bottlenecks,Requested by\n'
+    + 'SBLAF rollout,Kick-off,5/19/2026,2.5 hrs,Done,https://drive.google.com/x|https://e.com/y,Waiting on legal, Ace ',
+  );
+  assert.equal(row.date, '2026-05-19');
+  assert.equal(row.hours, 2.5);
+  assert.equal(row.completion, 'completed');
+  assert.equal(row.attachments.length, 2);
+  assert.equal(row.bottleneck, 'Waiting on legal');
+  assert.equal(row.requestedBy, 'Ace');
+});
+
+test('rows for the same new task share one key, so it is created once', () => {
+  const rows = previewOf(
+    'Project,Task,Date\nSBLAF rollout,Brand new,2026-09-20\nSBLAF rollout,brand NEW,2026-09-21',
+  );
+  assert.equal(importTaskKey(rows[0]), importTaskKey(rows[1]));
+});
+
+test('the same title in different projects does NOT share a key', () => {
+  const rows = previewOf(
+    'Project,Task,Date\nSBLAF rollout,Brand new,2026-09-20\nWebsite revamp,Brand new,2026-09-21',
+  );
+  assert.notEqual(importTaskKey(rows[0]), importTaskKey(rows[1]));
+});
+
+test('the summary says exactly what the import will do', () => {
+  const rows = previewOf(
+    'Project,Task,Date,Hours\n'
+    + 'SBLAF rollout,Kick-off,2026-09-20,2\n'
+    + 'SBLAF rollout,Brand new,2026-09-20,1.5\n'
+    + 'SBLAF rollout,,2026-09-20,9',
+  );
+  assert.deepEqual(summarizeImport(rows), {
+    rows: 3, willImport: 2, willSkip: 1,
+    newTasks: 1, existingTasks: 1, totalHours: 3.5,
+  });
+});
+
+test('an empty preview summarises to zeroes rather than NaN', () => {
+  assert.deepEqual(summarizeImport([]), {
+    rows: 0, willImport: 0, willSkip: 0, newTasks: 0, existingTasks: 0, totalHours: 0,
+  });
+});

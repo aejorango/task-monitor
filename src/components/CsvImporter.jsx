@@ -4,103 +4,14 @@
 import { useState, useMemo } from 'react';
 import { useAuth, useProjects, useTasks } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
-import { addTask, addActivity, todayLocal } from '../services/firebase';
-
-// Minimal RFC-4180-ish CSV parser. Handles quoted cells, escaped quotes, and
-// commas/newlines inside quotes. Returns array of rows (each row is an array).
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let cell = '';
-  let i = 0;
-  let inQuotes = false;
-  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  while (i < text.length) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i += 2; continue; }
-      if (ch === '"') { inQuotes = false; i++; continue; }
-      cell += ch; i++; continue;
-    }
-    if (ch === '"') { inQuotes = true; i++; continue; }
-    if (ch === ',') { row.push(cell); cell = ''; i++; continue; }
-    if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; i++; continue; }
-    cell += ch; i++;
-  }
-  if (cell !== '' || row.length > 0) { row.push(cell); rows.push(row); }
-  // Drop trailing all-empty row from a stray newline at EOF.
-  while (rows.length && rows[rows.length - 1].every((c) => c === '')) rows.pop();
-  return rows;
-}
-
-// Find a header column index by any of the supplied candidate names (case-insensitive).
-function findCol(headers, candidates) {
-  const lower = headers.map((h) => h.trim().toLowerCase());
-  for (const c of candidates) {
-    const idx = lower.indexOf(c.toLowerCase());
-    if (idx !== -1) return idx;
-  }
-  return -1;
-}
-
-// Map the column layout used by Export CSV (and any close variant).
-function buildColumnMap(headers) {
-  return {
-    project:     findCol(headers, ['Project']),
-    phase:       findCol(headers, ['Phase']),
-    task:        findCol(headers, ['Task', 'Task title', 'Task name']),
-    comment:     findCol(headers, ['Activity details', 'Comment', 'Details', 'Description']),
-    date:        findCol(headers, ['Date']),
-    completion:  findCol(headers, ['Completion', 'Completion status', 'Status']),
-    output:      findCol(headers, ['Output link', 'Output', 'Attachments', 'Links']),
-    bottleneck:  findCol(headers, ['Bottlenecks', 'Bottleneck', 'Remarks', 'Notes']),
-    requestedBy: findCol(headers, ['Requested by', 'RequestedBy', 'Requester']),
-    hours:       findCol(headers, ['Hours', 'Hours spent', 'HoursSpent', 'Duration']),
-  };
-}
-
-// Normalize completion status string into the 4 canonical values.
-function normalizeCompletion(raw) {
-  const s = String(raw || '').toLowerCase().trim();
-  if (!s) return 'in-progress';
-  if (/(complete|done|finish)/.test(s)) return 'completed';
-  if (/(block|stuck|hold)/.test(s))     return 'blocked';
-  if (/(not.start|todo|to.?do|pending)/.test(s)) return 'not-started';
-  return 'in-progress';
-}
-
-// Normalize "Output link" cell into attachments array. Accepts pipe-separated
-// URLs (our export format) or whitespace-separated URLs.
-function parseAttachments(raw) {
-  if (!raw) return [];
-  const urls = String(raw)
-    .split(/[|\n]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return urls.map((u) => ({
-    name: u,
-    url:  u,
-    type: u.includes('drive.google') ? 'drive' : 'external',
-  }));
-}
-
-// Normalize date to YYYY-MM-DD if possible. Accepts ISO date strings,
-// short formats like "Mar 5", "2026-05-19", "5/19/2026", etc.
-function normalizeDate(raw) {
-  const s = String(raw || '').trim();
-  if (!s) return todayLocal();
-  // ISO already
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  // Try Date() — will accept "5/19/2026", "Mar 5", "2026/05/19", etc.
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-  return todayLocal();
-}
+import { addTask, addActivity } from '../services/firebase';
+// Parsing, column matching and row resolution live in services/csv.js so they
+// can be unit-tested — an importer that quietly mis-matches rows duplicates a
+// person's whole activity log. This file is the screen around them.
+import {
+  buildImportPreview, importTaskKey, readActivityCsv, summarizeImport,
+} from '../services/csv';
+import { friendlyError } from '../services/access';
 
 export default function CsvImporter({ onClose }) {
   const { userId } = useAuth();
@@ -120,79 +31,24 @@ export default function CsvImporter({ onClose }) {
     setParseError(null);
     setRows(null);
     try {
-      const text = await file.text();
-      const all = parseCsv(text);
-      if (all.length === 0) throw new Error('CSV appears to be empty.');
-      const headers = all[0];
-      const body = all.slice(1);
-      const map = buildColumnMap(headers);
-      // Must at least have a task and a date column to make sense
-      if (map.task === -1 || map.date === -1) {
-        throw new Error(`Missing required columns. Need at least "Task" and "Date". Found: ${headers.join(', ')}`);
-      }
-      setColMap(map);
-      setRows(body);
+      const read = readActivityCsv(await file.text());
+      if (!read.ok) { setParseError(read.error); return; }
+      setColMap(read.map);
+      setRows(read.body);
     } catch (err) {
       console.error(err);
-      setParseError(err.message || String(err));
+      setParseError(friendlyError(err, 'We could not read that file. Make sure it is a .csv saved from a spreadsheet.'));
     }
   };
 
-  // Resolve each row's project (by name) and task (by title). Tracks new tasks
-  // that will need to be created. Returns the preview list.
-  const preview = useMemo(() => {
-    if (!rows || !colMap) return [];
-    const projectByName = {};
-    projects.forEach((p) => { projectByName[p.name.toLowerCase()] = p; });
+  // Resolve each row against the real projects and tasks. See services/csv.js.
+  const preview = useMemo(
+    () => (rows && colMap ? buildImportPreview({ body: rows, map: colMap, projects, tasks }) : []),
+    [rows, colMap, projects, tasks],
+  );
+  const summary = useMemo(() => summarizeImport(preview), [preview]);
 
-    return rows.map((row, idx) => {
-      const get = (col) => col === -1 ? '' : (row[col] || '').trim();
-
-      const projectName = get(colMap.project);
-      const phaseName   = get(colMap.phase);
-      const taskTitle   = get(colMap.task);
-      const comment     = get(colMap.comment);
-      const date        = normalizeDate(get(colMap.date));
-      const completion  = normalizeCompletion(get(colMap.completion));
-      const attachments = parseAttachments(get(colMap.output));
-      const bottleneck  = get(colMap.bottleneck);
-      const requestedBy = get(colMap.requestedBy);
-      const hours       = Number(get(colMap.hours)) || 0;
-
-      const project = projectName ? projectByName[projectName.toLowerCase()] : null;
-      const phase   = project && phaseName
-        ? project.phases?.find((p) => p.name.toLowerCase() === phaseName.toLowerCase())
-        : null;
-      // Match task by title within the project (case-insensitive)
-      const existingTask = tasks.find((t) =>
-        t.title.toLowerCase() === taskTitle.toLowerCase() &&
-        (project ? t.projectId === project.id : true)
-      );
-
-      return {
-        idx,
-        valid: !!taskTitle,
-        projectName,
-        project,
-        phaseName,
-        phase,
-        taskTitle,
-        existingTask,
-        comment,
-        date,
-        completion,
-        attachments,
-        bottleneck,
-        requestedBy,
-        hours,
-      };
-    });
-  }, [rows, colMap, projects, tasks]);
-
-  const validRows  = preview.filter((r) => r.valid);
-  const invalidRows = preview.filter((r) => !r.valid);
-  const newTasksToCreate = new Set();
-  validRows.forEach((r) => { if (!r.existingTask) newTasksToCreate.add(r.taskTitle.toLowerCase() + '|' + (r.project?.id || '')); });
+  const validRows = preview.filter((r) => r.valid);
 
   const handleImport = async () => {
     setImporting(true);
@@ -209,7 +65,7 @@ export default function CsvImporter({ onClose }) {
         try {
           let task = row.existingTask;
           if (!task) {
-            const key = row.taskTitle.toLowerCase() + '|' + (row.project?.id || '');
+            const key = importTaskKey(row);
             if (createdTaskByKey[key]) {
               task = createdTaskByKey[key];
             } else {
@@ -294,12 +150,26 @@ export default function CsvImporter({ onClose }) {
         {rows && !done && (
           <>
             <div className="csv-summary">
-              <span className="badge badge-soft-info">{validRows.length} valid rows</span>
-              {invalidRows.length > 0 && (
-                <span className="badge badge-soft-warn">{invalidRows.length} skipped (missing task title)</span>
+              <span className="badge badge-soft-info">
+                {summary.willImport} row{summary.willImport === 1 ? '' : 's'} will be imported
+              </span>
+              {summary.existingTasks > 0 && (
+                <span className="badge badge-soft-muted">
+                  {summary.existingTasks} added to {summary.existingTasks === 1 ? 'a task' : 'tasks'} you already have
+                </span>
               )}
-              {newTasksToCreate.size > 0 && (
-                <span className="badge badge-soft-success">{newTasksToCreate.size} new tasks will be created</span>
+              {summary.newTasks > 0 && (
+                <span className="badge badge-soft-success">
+                  {summary.newTasks} new task{summary.newTasks === 1 ? '' : 's'} will be created
+                </span>
+              )}
+              {summary.totalHours > 0 && (
+                <span className="badge badge-soft-muted">{summary.totalHours}h of work logged</span>
+              )}
+              {summary.willSkip > 0 && (
+                <span className="badge badge-soft-warn">
+                  {summary.willSkip} row{summary.willSkip === 1 ? '' : 's'} skipped — no task name
+                </span>
               )}
             </div>
 

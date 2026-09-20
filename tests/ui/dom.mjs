@@ -7,6 +7,22 @@ import { JSDOM } from 'jsdom';
 
 let dom = null;
 
+// Stand-in for Vite's `import.meta.env`, which tests/ui/jsx-hooks.mjs rewrites
+// every app module to read. The values are deliberately obvious fakes: nothing
+// in a unit test may reach a real Firebase project.
+globalThis.__VITE_ENV__ = {
+  DEV: true,
+  PROD: false,
+  MODE: 'test',
+  BASE_URL: '/',
+  VITE_FIREBASE_API_KEY: 'test-api-key',
+  VITE_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',
+  VITE_FIREBASE_PROJECT_ID: 'task-monitor-test',
+  VITE_FIREBASE_STORAGE_BUCKET: 'test.appspot.com',
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '0',
+  VITE_FIREBASE_APP_ID: 'test-app-id',
+};
+
 /** Install a fresh window/document on globalThis. Call once per test file. */
 export function setupDom() {
   dom = new JSDOM('<!doctype html><html><body></body></html>', {

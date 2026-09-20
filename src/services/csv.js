@@ -157,3 +157,77 @@ export function normalizeHours(raw) {
   if (!Number.isFinite(n) || n < 0) return 0;
   return n;
 }
+
+/**
+ * Resolve each parsed row against the user's real projects and tasks.
+ *
+ * Pure on purpose: this is where an import decides whether a row joins an
+ * existing task or creates a new one, and getting that wrong duplicates a
+ * person's whole activity log. The component renders the result; it does not
+ * compute it.
+ *
+ * @param {{ body: string[][], map: object, projects: object[], tasks: object[] }} input
+ * @returns {object[]} one preview row per input row
+ */
+export function buildImportPreview({ body = [], map = {}, projects = [], tasks = [] }) {
+  const projectByName = new Map(
+    projects.filter((p) => p?.name).map((p) => [p.name.toLowerCase(), p]),
+  );
+
+  return body.map((row, idx) => {
+    const get = (col) => (col === undefined || col === -1 ? '' : String(row[col] ?? '').trim());
+
+    const projectName = get(map.project);
+    const phaseName   = get(map.phase);
+    const taskTitle   = get(map.task);
+
+    const project = projectName ? projectByName.get(projectName.toLowerCase()) || null : null;
+    const phase = project && phaseName
+      ? project.phases?.find((p) => p.name?.toLowerCase() === phaseName.toLowerCase()) || null
+      : null;
+
+    // Match by title, and only inside the named project when one was given —
+    // two projects may legitimately both have a task called "Kick-off".
+    const existingTask = taskTitle
+      ? tasks.find((t) =>
+          (t.title || '').toLowerCase() === taskTitle.toLowerCase()
+          && (project ? t.projectId === project.id : true))
+        || null
+      : null;
+
+    return {
+      idx,
+      valid: !!taskTitle,
+      // Why a row was rejected, in words the person can act on.
+      reason: taskTitle ? null : 'This row has no task name, so there is nothing to log it against.',
+      projectName, project, phaseName, phase,
+      taskTitle, existingTask,
+      comment:     get(map.comment),
+      date:        normalizeDate(get(map.date)),
+      completion:  normalizeCompletion(get(map.completion)),
+      attachments: parseAttachments(get(map.output)),
+      bottleneck:  get(map.bottleneck),
+      requestedBy: get(map.requestedBy),
+      hours:       normalizeHours(get(map.hours)),
+    };
+  });
+}
+
+/** Key used to dedupe tasks created during a single import run. */
+export function importTaskKey(row) {
+  return `${(row.taskTitle || '').toLowerCase()}|${row.project?.id || ''}`;
+}
+
+/** A one-line summary of what an import will do, for the confirm step. */
+export function summarizeImport(preview) {
+  const valid = preview.filter((r) => r.valid);
+  const newTasks = new Set(valid.filter((r) => !r.existingTask).map(importTaskKey));
+  return {
+    rows: preview.length,
+    willImport: valid.length,
+    willSkip: preview.length - valid.length,
+    newTasks: newTasks.size,
+    existingTasks: valid.filter((r) => r.existingTask).length,
+    totalHours: valid.reduce((s, r) => s + r.hours, 0),
+  };
+}
