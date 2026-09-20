@@ -54,3 +54,4 @@ One line per task from the Ideon task sheet.
 - T-0048 — No Word, Excel, PDF or Markdown exports (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0049 — Configurable table views with columns, group and sort (API/data layer) — src/services/tableViews.js, src/services/tableViews.test.mjs, src/services/firebase.js
 - T-0050 — Configurable table views with columns, group and sort (UI) — src/components/TasksTableView.jsx, src/App.jsx, src/components/AppShell.jsx, src/App.css, tests/ui/tasksTable.test.mjs
+- T-0051 — Configurable table views with columns, group and sort (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md

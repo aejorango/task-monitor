@@ -58,6 +58,12 @@ tasks/{taskId}:
   activityCount, totalHoursLogged, attachmentCount, lastActivityAt
   archived, deleted, createdAt, updatedAt
 
+savedViews/{viewId}:                                               ← v12
+  userId, workspaceId, name, icon
+  view, projectFilter, tagFilter, statusFilter   ← the filters
+  columns: [columnId, ...], groupBy, sortBy, sortDir  ← the TABLE (tasks-table)
+  deleted, createdAt, updatedAt
+
 templates/{templateId}:                                            ← v5
   userId, name, description
   kind: 'task' | 'project'
@@ -89,8 +95,12 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 3. **Gantt** — Timeline. Plan bars are draggable (resize + move). SVG dependency arrows. Rows grouped by project, sorted by earliest start.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 9. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
-6. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
-7. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
+6. **Task table** — every task as a configurable report: pick the columns and their
+   order, group by project / phase / status / priority / assignee, sort by any column,
+   then save the whole arrangement as a saved view or export it. Logic lives in the pure
+   `services/tableViews.js`; the saved view stores `{ columns, groupBy, sortBy, sortDir }`.
+7. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
+8. **Settings** — Per-device prefs: theme override, default project, week start. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
 
 ## v5 Cross-cutting features
 

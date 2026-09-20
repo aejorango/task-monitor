@@ -62,6 +62,7 @@ that gate is enforced in the security rules, not just on screen.
 | --- | --- |
 | Dashboard | Today's work, what's overdue, what moved |
 | Board | Kanban with drag-and-drop, swim-lanes by phase, tag filters, quick-add |
+| Task table | Every task as a report: pick the columns, group, sort, save the arrangement |
 | Activity Log | Every logged entry, sortable, with bulk actions and export |
 | Gantt | Timeline with draggable plan bars and dependency arrows |
 | Calendar | Month grid; drag a task to another day to reschedule it |
@@ -197,6 +198,7 @@ Anywhere there is something worth keeping, there is an **Export ▾** button:
 | --- | --- | --- |
 | Review | A status report: hours by project, completed, overdue, blockers raised | .docx .pdf .md .html .txt |
 | Board / Gantt | The task list you are looking at, filters applied | .xlsx .csv .pdf |
+| Task table | Exactly the table you built — your columns, your grouping | .xlsx .csv .pdf |
 | Minutes | Attendees, notes, decisions, the action table | .docx .pdf .md .html .txt |
 | Goals | Initiatives, KPIs, change agenda, deliverables with progress | .pdf .docx .md .html |
 | Activity Log | Every logged entry | .csv |
@@ -320,6 +322,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/access.test.mjs` | Who may share a project; plain-language error text |
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
+| `src/services/tableViews.test.mjs` | Columns, grouping and sorting for the task table |
 | `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
 | `src/services/taskExport.test.mjs` | A task list as a document |
 | `src/services/minutesExport.test.mjs` | Minutes as a document |
