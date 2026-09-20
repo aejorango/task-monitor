@@ -332,6 +332,8 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/approvalCopy.test.mjs` | What a not-yet-approved account is told |
 | `src/services/invites.test.mjs` | Inviting by email: validation, claiming, member labels |
 | `tests/ui/exporters.test.mjs` | The real .xlsx, .docx and .pdf bytes are valid files |
+| `tests/ui/noNativeDialogs.test.mjs` | No alert/confirm/prompt; every confirm labels its action |
+| `tests/ui/dialog.test.mjs` | Focus trap, Escape, focus restore, aria-modal |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |

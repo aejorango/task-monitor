@@ -213,6 +213,18 @@ components/ExportButton.jsx← "Export ▾" — the menu, the spinner, the filen
 - A document with a `sheets: [...]` array gets proper worksheets in Excel;
   without one, the first `table` block is used.
 
+## Telling the user something
+
+```
+components/Toast.jsx   ← useToast(): a message, optionally with Undo
+components/Dialog.jsx  ← useDialog(): await ask.confirm(…) / ask.prompt(…)
+                         plus the Modal shell (role=dialog, focus trap, Escape)
+services/access.js     ← friendlyError(err, fallback): one plain sentence
+```
+
+Both providers are mounted once, in `App.jsx`. A component calls the hook; a
+module-level helper cannot, so it returns a result and the component speaks.
+
 ## Conventions
 
 - **Dates as YYYY-MM-DD strings** in user's local timezone (Asia/Manila). Helper: `todayLocal()` — defined in `services/recurrence.js`, re-exported from firebase.js.
@@ -371,6 +383,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Hardcoding colors instead of using CSS variables — breaks dark mode
 - ❌ Promising something the app cannot do — an approval email above all. There is no backend and no SMTP (see Out of Scope), so `services/approvalCopy.js` says "no email is sent, the page lets you in the moment someone approves" instead. `tests/ui/approvalScreens.test.mjs` fails the build if any screen promises one.
 - ❌ Calling the session "anonymous". Anonymous auth was removed; use `sessionLine(profile, auth.currentUser)`.
+- ❌ `alert()`, `confirm()` or `prompt()`. They block the page, cannot be themed, and give a screen-reader user no title and no focus management. Use `useToast()` (`toast.success/error/info`, with `{ undo }` where something can be taken back) and `useDialog()` (`await ask.confirm({ title, message, confirmLabel, danger })` / `ask.prompt(...)`). `tests/ui/noNativeDialogs.test.mjs` fails the build otherwise.
+- ❌ A confirm button that says "OK". Say what will happen — Delete, Remove, Revoke — and pass `danger: true` when it destroys something.
 - ❌ Showing a repo filename, a config key or "check the console" to a user. Error copy goes through `friendlyError(err, '<plain sentence>')` in `services/access.js`; `tests/ui/copy.test.mjs` fails the build otherwise.
 - ❌ Drag-and-drop: if a card click triggers a drag, wrap inner buttons with `onPointerDown={(e) => e.stopPropagation()}` and `onClick={(e) => e.stopPropagation()}` so dnd-kit doesn't capture the gesture
 - ❌ Editing an activity's hoursSpent or attachments with `updateActivity` directly — that won't sync the parent task's denormalized counters. Use `editActivity(oldActivity, updates)` instead.
