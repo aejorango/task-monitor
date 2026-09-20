@@ -2139,6 +2139,85 @@ export function subscribeToPresence(taskId, workspaceId, callback) {
   }, listenerError('presence', () => callback([])));
 }
 
+// ─── AUTOMATIONS ────────────────────────────────────────────────────────────
+// "When this happens, do that." Authored as dropdowns in Settings; run by the
+// onTaskAutomations function. The vocabularies live in functions/src/automations.js
+// so the editor and the runner can never disagree about what a rule means.
+
+const automationsRef = collection(db, 'automations');
+
+export function subscribeToAutomations(workspaceId, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(automationsRef, where('workspaceId', '==', workspaceId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((r) => !r.deleted)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+  }, listenerError('automations', () => callback([])));
+}
+
+export async function addAutomation(userId, rule) {
+  if (!rule.workspaceId) throw new Error('addAutomation requires a workspaceId');
+  return addDoc(automationsRef, {
+    userId,
+    workspaceId: rule.workspaceId,
+    name: String(rule.name || '').trim(),
+    trigger: rule.trigger,
+    conditions: rule.conditions || [],
+    action: rule.action,
+    actionValue: rule.actionValue ?? '',
+    enabled: rule.enabled !== false,
+    deleted: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateAutomation(ruleId, updates) {
+  return updateDoc(doc(db, 'automations', ruleId), { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function softDeleteAutomation(ruleId) {
+  return updateDoc(doc(db, 'automations', ruleId), { deleted: true, updatedAt: serverTimestamp() });
+}
+
+/** What the rules have actually done, newest first. Read-only. */
+export function subscribeToAutomationRuns(workspaceId, callback, { max = 50 } = {}) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'automationRuns'),
+    where('workspaceId', '==', workspaceId),
+    orderBy('at', 'desc'),
+    limit(max),
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }, listenerError('automationRuns', () => callback([])));
+}
+
+/**
+ * The notices raised for the signed-in person — "Tell someone" writes these.
+ * Bounded at the server; the composite index is in firestore.indexes.json.
+ */
+export function subscribeToMyNotifications(userId, callback, { max = 20 } = {}) {
+  if (!userId) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    orderBy('at', 'desc'),
+    limit(max),
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }, listenerError('notifications', () => callback([])));
+}
+
+/** Dismiss one notice. `read` is the only field a browser may change. */
+export async function markNotificationRead(noticeId) {
+  return updateDoc(doc(db, 'notifications', noticeId), { read: true });
+}
+
 // ─── WEBHOOKS ───────────────────────────────────────────────────────────────
 //
 // Delivery happens in `functions/webhooks.js`: a Firestore trigger signs the

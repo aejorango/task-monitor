@@ -1,0 +1,22 @@
+
+/**
+ * The notices raised for the signed-in person — "Tell someone" writes these.
+ * Bounded at the server; the composite index is in firestore.indexes.json.
+ */
+export function subscribeToMyNotifications(userId, callback, { max = 20 } = {}) {
+  if (!userId) { callback([]); return () => {}; }
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    orderBy('at', 'desc'),
+    limit(max),
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }, listenerError('notifications', () => callback([])));
+}
+
+/** Dismiss one notice. `read` is the only field a browser may change. */
+export async function markNotificationRead(noticeId) {
+  return updateDoc(doc(db, 'notifications', noticeId), { read: true });
+}

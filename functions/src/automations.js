@@ -150,9 +150,12 @@ export function describeRule(rule, { nameFor = (id) => id } = {}) {
     .map((c) => {
       const field = CONDITION_FIELDS.find((f) => f.value === c.field)?.label || c.field;
       const op = OPERATORS.find((o) => o.value === c.operator);
-      return op?.noValue
-        ? `its ${field.toLowerCase()} ${operatorLabel(c.operator)}`
-        : `its ${field.toLowerCase()} ${operatorLabel(c.operator)} “${nameFor(c.value) || c.value}”`;
+      if (op?.noValue) return `its ${field.toLowerCase()} ${operatorLabel(c.operator)}`;
+      // Half-filled: say so rather than showing a pair of empty quotes.
+      if (!String(c.value ?? '').trim()) {
+        return `its ${field.toLowerCase()} is not chosen yet`;
+      }
+      return `its ${field.toLowerCase()} ${operatorLabel(c.operator)} “${nameFor(c.value) || c.value}”`;
     });
 
   const action = actionLabel(rule.action).toLowerCase();

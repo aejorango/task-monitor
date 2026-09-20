@@ -170,6 +170,12 @@ test('a value-less operator does not print an empty quote', () => {
   assert.doesNotMatch(describeRule(r), /“”/);
 });
 
+test('a half-finished condition reads as unfinished, not as an empty quote', () => {
+  const r = rule({ conditions: [{ field: 'project', operator: 'is', value: '' }], action: 'notify', actionValue: 'u2' });
+  assert.match(describeRule(r), /its project is not chosen yet/);
+  assert.doesNotMatch(describeRule(r), /“”/);
+});
+
 test('every refusal to save says what to do about it', () => {
   for (const [broken, expect] of [
     [{ name: '' }, /Give this rule a name/],

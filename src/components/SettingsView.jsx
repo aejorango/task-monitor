@@ -6,7 +6,7 @@ import {
   useProjects, useTasks, useAllActivities, useAuth, useWebhooks,
   useGoals, useMinutes, useTemplates,
 } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { setActiveWorkspaceId, useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
   addWorkspaceMember,
   inviteToWorkspaceByEmail,
@@ -56,6 +56,7 @@ import {
 import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 import KnowledgeSection from './KnowledgeSection';
+import AutomationsSection from './AutomationsSection';
 import { sessionLine, SETTINGS_SUBTITLE } from '../services/approvalCopy';
 import { memberLabel, memberSubLabel, validateInvite } from '../services/invites';
 import { useModalDialog } from '../hooks/useModalDialog';
@@ -86,6 +87,12 @@ export default function SettingsView() {
   const displayName = currentUser?.displayName || currentUser?.email || 'Signed out';
   const photoURL = currentUser?.photoURL;
   const isSuperadmin = profile?.role === 'superadmin' && profile?.status === 'approved';
+  // Automations act on everybody's work in the workspace, so authoring one is
+  // an admin's job.
+  const settingsWorkspaceId = useActiveWorkspaceId();
+  const activeWorkspace = workspaces.find((w) => w.id === settingsWorkspaceId);
+  const myWorkspaceRole = activeWorkspace?.acl?.[userId];
+  const isWorkspaceOwnerOrAdmin = myWorkspaceRole === 'owner' || myWorkspaceRole === 'admin';
   const [activeId, setActiveId] = useState('workspaces');
   const scrollTo = (id) => {
     setActiveId(id);
@@ -112,6 +119,7 @@ export default function SettingsView() {
     ]),
     ...(isSuperadmin ? [{ id: 'ai-fallback', label: 'AI — superadmin fallback' }] : []),
     { id: 'webhooks', label: 'Webhooks' },
+    { id: 'automations', label: 'Automations' },
     { id: 'about',    label: 'About' },
   ];
 
@@ -487,6 +495,8 @@ export default function SettingsView() {
       ) : (
         <WebhooksSection userId={userId} />
       )}
+
+      <AutomationsSection userId={userId} isAdmin={isWorkspaceOwnerOrAdmin} />
 
       <section id="settings-about" className="review-section review-section-plain htu-section">
         <h2 className="review-h2">About</h2>
@@ -916,6 +926,10 @@ function WebhooksSection({ userId }) {
         Send an automatic message to another tool — Slack, Make, Zapier — when
         something changes here. Each message is signed with your secret so the
         other tool can check it really came from you.
+      </p>
+      <p className="muted small">
+        To make this app do something itself — tell a person, assign a task, open
+        a follow-up — use <strong>Automations</strong>, below.
       </p>
 
       {hooks.length === 0 ? (
