@@ -15,6 +15,9 @@ import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, auth } from '../services/firebase';
 import { suggestNextTask } from '../services/anthropic';
 import { topThemes } from '../services/askAi';
+import { buildDigest } from '../services/askAiCore';
+import { buildStatusReport, statusReportFileBase } from '../services/statusReport';
+import ExportButton from './ExportButton';
 import { useAiStatus } from '../hooks/useAiStatus';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
@@ -92,6 +95,21 @@ export default function DashboardView({ projectFilter, navigate }) {
   const { workspaces, loading: wsLoading } = useWorkspaces();
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
   const { available: aiAvailable } = useAiStatus();
+
+  // The one document a manager asks for. Built on demand from the same digest
+  // the Ask AI page computes, so the report and the app can never disagree.
+  const buildStatusReportDoc = () => {
+    const digest = buildDigest({
+      tasks, projects, activities, workspaces,
+      memberProfiles: activeWorkspace?.memberProfiles || {},
+      activeWorkspaceId,
+    });
+    return buildStatusReport(digest, {
+      workspaceName: activeWorkspace?.name,
+      periodLabel: new Date().toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric' }),
+      narrative: aiOutput?.trim() || null,
+    });
+  };
 
   const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
@@ -360,6 +378,14 @@ export default function DashboardView({ projectFilter, navigate }) {
                 disabled={!filtered.length}
                 title={actionQueue[0] ? `Log time on "${actionQueue[0].task.title}"` : 'Log time on a task'}
               >Log time</button>
+              <ExportButton
+                build={buildStatusReportDoc}
+                baseName={statusReportFileBase(activeWorkspace?.name)}
+                kind="document"
+                label="Status report"
+                className="db-btn db-btn-ghost"
+                title="A PDF or Word report of where every project stands, what is overdue and what is blocked"
+              />
             </div>
           </div>
 

@@ -66,3 +66,4 @@ One line per task from the Ideon task sheet.
 - T-0060 — Process template gallery — src/templates/gallery.js, src/templates/gallery.test.mjs, src/components/TemplateGallery.jsx, src/components/ProjectsView.jsx, src/App.css, package.json, tests/ui/templateGallery.test.mjs
 - T-0061 — Undo toast and Trash view — src/components/Toast.jsx, src/App.jsx, src/App.css, src/components/TaskEditor.jsx, src/components/ProjectsView.jsx, src/components/MinutesView.jsx, tests/ui/toast.test.mjs
 - T-0062 — Command palette with create and navigate actions — src/services/commandPalette.js, src/services/commandPalette.test.mjs, src/components/AppShell.jsx, tests/ui/commandPalette.test.mjs
+- T-0063 — Portfolio status report as PDF — src/services/statusReport.js, src/services/statusReport.test.mjs, src/components/DashboardView.jsx, tests/ui/statusReport.test.mjs
