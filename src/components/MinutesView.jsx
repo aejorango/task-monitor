@@ -9,6 +9,7 @@ import { addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid
 import Icon from './Icon';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
+import { friendlyError } from '../services/access';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -237,7 +238,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
       await patchItems(items.map((x) => (x.id === it.id ? { ...x, taskId: ref.id } : x)));
     } catch (err) {
       console.error(err);
-      alert('Could not create task. Check console.');
+      alert(friendlyError(err, 'Could not create task. Please try again.'));
     } finally {
       setBusyId(null);
     }
@@ -253,7 +254,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
       await patchItems(items.map((x) => (x.id === it.id ? { ...x, taskId: null } : x)));
     } catch (err) {
       console.error(err);
-      alert('Could not delete task. Check console.');
+      alert(friendlyError(err, 'Could not delete task. Please try again.'));
     } finally {
       setBusyId(null);
     }
@@ -460,7 +461,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save minutes. Check console.');
+      alert(friendlyError(err, 'Could not save minutes. Please try again.'));
       setSaving(false);
     }
   };
@@ -470,7 +471,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
     if (!confirm(`Delete minutes "${minute.title}"?`)) return;
     setSaving(true);
     try { await softDeleteMinute(minute.id); onClose(); }
-    catch (err) { console.error(err); alert('Could not delete. Check console.'); setSaving(false); }
+    catch (err) { console.error(err); alert(friendlyError(err, 'Could not delete. Please try again.')); setSaving(false); }
   };
 
   return (

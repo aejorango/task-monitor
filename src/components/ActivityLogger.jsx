@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { addActivity, todayLocal } from '../services/firebase';
 import FileUpload from './FileUpload';
+import { friendlyError } from '../services/access';
 
 const COMPLETION_OPTIONS = [
   { value: 'not-started', label: 'Not started' },
@@ -56,7 +57,7 @@ export default function ActivityLogger({ task, userId, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save activity. Check console.');
+      alert(friendlyError(err, 'Could not save activity. Please try again.'));
       setSaving(false);
     }
   };

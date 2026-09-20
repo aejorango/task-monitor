@@ -10,6 +10,7 @@ import {
   markConversationRead, renameConversation,
   addConversationMembers, removeConversationMember,
 } from '../services/firebase';
+import { friendlyError } from '../services/access';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function relTime(ts) {
@@ -226,7 +227,7 @@ function ChatThread({ conversation, me, activeWs, onBack }) {
     } catch (err) {
       console.error('send failed', err);
       setDraft(text); // restore on failure
-      alert('Could not send. Check console.');
+      alert(friendlyError(err, 'Could not send. Please try again.'));
     } finally {
       setSending(false);
     }
@@ -385,7 +386,7 @@ function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
       onCreated(id);
     } catch (err) {
       console.error(err);
-      alert('Could not start the conversation. Check console.');
+      alert(friendlyError(err, 'Could not start the conversation. Please try again.'));
       setBusy(false);
     }
   };
@@ -479,7 +480,7 @@ function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
       setAdding(new Set());
     } catch (err) {
       console.error(err);
-      alert('Could not add members. Check console.');
+      alert(friendlyError(err, 'Could not add members. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -496,7 +497,7 @@ function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
       if (isMe) { onLeft(); return; }
     } catch (err) {
       console.error(err);
-      alert('Could not remove member. Check console.');
+      alert(friendlyError(err, 'Could not remove member. Please try again.'));
     } finally {
       setBusy(false);
     }

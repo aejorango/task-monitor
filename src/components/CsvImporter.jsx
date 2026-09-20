@@ -24,7 +24,7 @@ export default function CsvImporter({ onClose }) {
   const [colMap, setColMap] = useState(null);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [done, setDone] = useState(null);          // { imported, skipped } once done
+  const [done, setDone] = useState(null);          // { imported, failures } once done
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -54,7 +54,7 @@ export default function CsvImporter({ onClose }) {
     setImporting(true);
     setProgress(0);
     let imported = 0;
-    let skipped = 0;
+    const failures = [];
     // Cache for tasks created during this import so multiple activities
     // for the same new task can share a single task doc.
     const createdTaskByKey = {};
@@ -106,13 +106,20 @@ export default function CsvImporter({ onClose }) {
           imported++;
         } catch (err) {
           console.error('Row failed:', row, err);
-          skipped++;
+          // Keep the reason with the row. Telling a person "see console" is
+          // telling them nothing — they need to know WHICH row and WHY so they
+          // can fix the file and import again.
+          failures.push({
+            line: row.idx + 2,   // +1 for the header, +1 for 1-based counting
+            task: row.taskTitle,
+            reason: friendlyError(err, 'Could not save this row.'),
+          });
         }
         setProgress(Math.round(((i + 1) / validRows.length) * 100));
       }
     } finally {
       setImporting(false);
-      setDone({ imported, skipped });
+      setDone({ imported, failures });
     }
   };
 
@@ -234,8 +241,28 @@ export default function CsvImporter({ onClose }) {
         {done && (
           <div className="empty-state" style={{ padding: '40px 20px' }}>
             <div className="empty-state-icon" style={{ background: 'var(--c-success-bg)', color: 'var(--c-success)' }}>✓</div>
-            <p><strong>{done.imported}</strong> activities imported.</p>
-            {done.skipped > 0 && <p className="muted small">{done.skipped} rows failed — see console for details.</p>}
+            <p><strong>{done.imported}</strong> activit{done.imported === 1 ? 'y' : 'ies'} imported.</p>
+            {done.failures.length > 0 && (
+              <div style={{ textAlign: 'left', maxWidth: 560, margin: '12px auto 0' }}>
+                <p className="muted small">
+                  {done.failures.length} row{done.failures.length === 1 ? '' : 's'} could not be
+                  saved. Fix {done.failures.length === 1 ? 'it' : 'them'} in your spreadsheet and
+                  import again — the rows above were saved and will not be duplicated.
+                </p>
+                <ul className="dep-list">
+                  {done.failures.slice(0, 10).map((f) => (
+                    <li key={f.line} className="dep-item">
+                      <span className="badge badge-soft-warn">Line {f.line}</span>
+                      <span className="dep-title">{f.task || '(no task name)'}</span>
+                      <span className="muted small">{f.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+                {done.failures.length > 10 && (
+                  <p className="muted small">…and {done.failures.length - 10} more.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

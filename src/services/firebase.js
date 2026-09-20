@@ -1894,8 +1894,10 @@ export function subscribeToPresence(taskId, workspaceId, callback) {
 }
 
 // ─── WEBHOOKS ───────────────────────────────────────────────────────────────
-// Stored config only — actually firing the HTTP POST requires a Cloud
-// Function listening on Firestore changes (see FEATURE_ROADMAP.md → Tier 4).
+// Stored config only — nothing here fires an HTTP request. Delivery needs a
+// process that can watch Firestore and POST, which this app (a static
+// frontend) does not have. The Settings panel says so in plain words rather
+// than promising an integration that never happens.
 
 export async function addWebhook(userId, hook) {
   if (!hook.workspaceId) throw new Error('addWebhook requires hook.workspaceId');

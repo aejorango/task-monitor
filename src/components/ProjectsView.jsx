@@ -1086,7 +1086,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save project. Check console.');
+      alert(friendlyError(err, 'Could not save project. Please try again.'));
       setSaving(false);
     }
   };
@@ -1121,7 +1121,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
       alert(`Saved template "${tplName.trim()}".`);
     } catch (err) {
       console.error(err);
-      alert('Could not save template. Check console.');
+      alert(friendlyError(err, 'Could not save template. Please try again.'));
     }
   };
 
@@ -1672,7 +1672,7 @@ function SegmentManager({ projects, onClose }) {
       setEditingSegment(null);
     } catch (err) {
       console.error(err);
-      alert('Could not rename segment. Check console.');
+      alert(friendlyError(err, 'Could not rename segment. Please try again.'));
     } finally {
       setSavingSegment(null);
     }
@@ -1696,7 +1696,7 @@ function SegmentManager({ projects, onClose }) {
       }
     } catch (err) {
       console.error(err);
-      alert('Could not delete segment. Check console.');
+      alert(friendlyError(err, 'Could not delete segment. Please try again.'));
     } finally {
       setSavingSegment(null);
     }
@@ -1715,7 +1715,7 @@ function SegmentManager({ projects, onClose }) {
       setNewSegmentName('');
     } catch (err) {
       console.error(err);
-      alert('Could not create segment. Check console.');
+      alert(friendlyError(err, 'Could not create segment. Please try again.'));
     } finally {
       setSavingSegment(null);
     }

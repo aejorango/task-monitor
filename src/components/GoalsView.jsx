@@ -9,6 +9,7 @@ import { useGoals, useAllWorkspaceProjects, useAllWorkspaceTasks, useAuth } from
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addGoal, updateGoal, softDeleteGoal, archiveGoal, uid } from '../services/firebase';
 import WbsModal from './WbsModal';
+import { friendlyError } from '../services/access';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -328,7 +329,7 @@ function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save goal. Check console.');
+      alert(friendlyError(err, 'Could not save goal. Please try again.'));
       setSaving(false);
     }
   };
@@ -338,7 +339,7 @@ function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose
     if (!confirm(`Delete goal "${goal.code ? goal.code + ': ' : ''}${goal.title}"?`)) return;
     setSaving(true);
     try { await softDeleteGoal(goal.id); onClose(); }
-    catch (err) { console.error(err); alert('Could not delete. Check console.'); setSaving(false); }
+    catch (err) { console.error(err); alert(friendlyError(err, 'Could not delete. Please try again.')); setSaving(false); }
   };
 
   return (

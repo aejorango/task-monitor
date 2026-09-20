@@ -33,6 +33,7 @@ import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import AddToNotebookButton from './AddToNotebookButton';
+import { friendlyError } from '../services/access';
 
 // ── Small formatters ────────────────────────────────────────────────────────
 function daysBetween(fromYmd, toYmd) {
@@ -241,7 +242,7 @@ export default function TaskEditor({ task, projects, onClose }) {
       setSubtasks(subtasks.filter((x) => x.id !== s.id));
     } catch (err) {
       console.error(err);
-      alert('Could not promote subtask. Check console.');
+      alert(friendlyError(err, 'Could not promote subtask. Please try again.'));
     }
   };
   const moveSubtask = (idx, dir) => {
@@ -312,7 +313,7 @@ export default function TaskEditor({ task, projects, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save task. Check console.');
+      alert(friendlyError(err, 'Could not save task. Please try again.'));
       setSaving(false);
     }
   };
@@ -342,7 +343,7 @@ export default function TaskEditor({ task, projects, onClose }) {
       alert(`Saved template "${name.trim()}".`);
     } catch (err) {
       console.error(err);
-      alert('Could not save template. Check console.');
+      alert(friendlyError(err, 'Could not save template. Please try again.'));
     }
   };
 
@@ -910,7 +911,7 @@ function LogComposer({ userId, task }) {
       setHours('');
     } catch (err) {
       console.error(err);
-      alert('Could not log the activity. Check console.');
+      alert(friendlyError(err, 'Could not log the activity. Please try again.'));
     } finally {
       setPosting(false);
     }
@@ -1144,7 +1145,7 @@ function CommentsThread({ task, userId }) {
       setBody('');
     } catch (err) {
       console.error(err);
-      alert('Could not post comment. Check console.');
+      alert(friendlyError(err, 'Could not post comment. Please try again.'));
     } finally {
       setPosting(false);
     }

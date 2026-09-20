@@ -11,6 +11,7 @@ import AiHelper from './AiHelper';
 import TaskDoneCelebration from './TaskDoneCelebration';
 import DueAlertBell from './DueAlertBell';
 import TutorialGuide from './TutorialGuide';
+import { friendlyError } from '../services/access';
 
 const VIEWS = [
   { id: 'ask-ai',         label: 'Ask AI',           icon: 'sparkles' },
@@ -307,7 +308,7 @@ function SaveViewButton({ route, userId }) {
       });
     } catch (err) {
       console.error(err);
-      alert('Could not save view. Check console.');
+      alert(friendlyError(err, 'Could not save view. Please try again.'));
     }
   };
   return (

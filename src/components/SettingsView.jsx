@@ -50,6 +50,7 @@ import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 import KnowledgeSection from './KnowledgeSection';
 import { downloadFile } from '../services/download';
+import { friendlyError } from '../services/access';
 
 export default function SettingsView() {
   const { settings, update, reset } = useSettings();
@@ -861,9 +862,13 @@ function WebhooksSection({ userId }) {
     <section id="settings-webhooks" className="review-section htu-section">
       <h2 className="review-h2">Webhooks</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        POST a JSON payload to a URL when something changes. The HTTP delivery
-        requires a Cloud Function (see <strong>FEATURE_ROADMAP.md</strong> → Tier 4);
-        the storage + UI here are ready.
+        Send an automatic message to another tool — Slack, Make, Zapier — when
+        something changes here.
+      </p>
+      <p className="muted small">
+        <span className="badge badge-soft-warn">Not sending yet</span>{' '}
+        You can set webhooks up now, but nothing is delivered until sending is
+        switched on. Anything you save here is kept and will start working then.
       </p>
 
       {hooks.length === 0 ? (
@@ -927,7 +932,7 @@ function WebhookEditor({ hook, userId, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save webhook. Check console.');
+      alert(friendlyError(err, 'Could not save webhook. Please try again.'));
       setBusy(false);
     }
   };

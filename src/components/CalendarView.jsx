@@ -11,6 +11,7 @@ import { updateTask } from '../services/firebase';
 import TaskEditor from './TaskEditor';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskQuickAdd from './TaskQuickAdd';
+import { friendlyError } from '../services/access';
 
 function parseISO(str) {
   if (!str) return null;
@@ -113,7 +114,7 @@ export default function CalendarView({ projectFilter }) {
     try { await updateTask(task.id, updates); }
     catch (err) {
       console.error('Could not reschedule task:', err);
-      alert('Could not reschedule task. Check console.');
+      alert(friendlyError(err, 'Could not reschedule task. Please try again.'));
     }
   };
 

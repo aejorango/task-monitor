@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addTask, todayLocal } from '../services/firebase';
+import { friendlyError } from '../services/access';
 
 export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
   const { userId } = useAuth();
@@ -40,7 +41,7 @@ export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Could not save task. Check console.');
+      alert(friendlyError(err, 'Could not save task. Please try again.'));
       setSaving(false);
     }
   };

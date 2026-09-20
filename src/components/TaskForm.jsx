@@ -7,6 +7,7 @@ import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { parseQuickAdd } from '../services/nlpQuickAdd';
 import { pickDefaultProjectId } from '../services/preferences';
 import { useSettings } from '../hooks/useSettings';
+import { friendlyError } from '../services/access';
 
 export default function TaskForm({ projects = [], projectFilter = 'all' }) {
   const { userId, ready } = useAuth();
@@ -108,7 +109,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
       setRecurrence(null);
     } catch (err) {
       console.error('Failed to add task:', err);
-      alert('Could not save task. Check console.');
+      alert(friendlyError(err, 'Could not save task. Please try again.'));
     } finally {
       setSubmitting(false);
     }

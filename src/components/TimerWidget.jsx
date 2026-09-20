@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTimer, formatElapsed } from '../hooks/useTimer';
 import { useAuth, useTasks } from '../hooks/useTasks';
 import { addActivity, todayLocal } from '../services/firebase';
+import { friendlyError } from '../services/access';
 
 export default function TimerWidget() {
   const { running, state, elapsedMs, elapsedHours, stop } = useTimer();
@@ -45,7 +46,7 @@ export default function TimerWidget() {
       });
     } catch (err) {
       console.error('Failed to log tracked time:', err);
-      alert('Could not log tracked time. Check console.');
+      alert(friendlyError(err, 'Could not log tracked time. Please try again.'));
     } finally {
       setStopping(false);
     }

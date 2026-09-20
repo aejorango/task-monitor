@@ -10,6 +10,7 @@ import { todayLocal, updateTask } from '../services/firebase';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import TaskQuickAdd from './TaskQuickAdd';
+import { friendlyError } from '../services/access';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -544,7 +545,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
           });
         } catch (err) {
           console.error('Could not save plan dates:', err);
-          alert('Could not save plan dates. Check console.');
+          alert(friendlyError(err, 'Could not save plan dates. Please try again.'));
         }
       }
     };
