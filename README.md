@@ -189,6 +189,22 @@ The bridge runs a program on your machine, so two things are locked down:
 The model name is also argv, so it is picked from a fixed list rather than
 typed (`ALLOWED_CLI_MODELS` in `bridge/ai.mjs`).
 
+## Getting work out of the app
+
+Anywhere there is something worth keeping, there is an **Export ▾** button:
+
+| Page | What comes out | Formats |
+| --- | --- | --- |
+| Review | A status report: hours by project, completed, overdue, blockers raised | .docx .pdf .md .html .txt |
+| Board / Gantt | The task list you are looking at, filters applied | .xlsx .csv .pdf |
+| Minutes | Attendees, notes, decisions, the action table | .docx .pdf .md .html .txt |
+| Goals | Initiatives, KPIs, change agenda, deliverables with progress | .pdf .docx .md .html |
+| Activity Log | Every logged entry | .csv |
+| Settings → Your data | Everything, for a backup | .json |
+
+Every filename is `<name>-YYYY-MM-DD.<ext>` in your own timezone. The Excel and
+PDF libraries load only when you actually export something.
+
 ## Webhooks
 
 **Settings → Webhooks** posts a small JSON body to a URL you choose when
@@ -304,11 +320,15 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/access.test.mjs` | Who may share a project; plain-language error text |
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
+| `src/services/exporters.test.mjs` | The document model → Markdown, HTML, text, sheets |
+| `src/services/taskExport.test.mjs` | A task list as a document |
+| `src/services/minutesExport.test.mjs` | Minutes as a document |
 | `src/services/firestoreQueries.test.mjs` | Queries are bounded server-side and have their indexes |
 | `src/services/sharedSubscription.test.mjs` | One Firestore listener per query, however many callers |
 | `src/services/knowledgeCopy.test.mjs` | Operator runbook vs. what everyone else is told |
 | `src/services/approvalCopy.test.mjs` | What a not-yet-approved account is told |
 | `src/services/invites.test.mjs` | Inviting by email: validation, claiming, member labels |
+| `tests/ui/exporters.test.mjs` | The real .xlsx, .docx and .pdf bytes are valid files |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |

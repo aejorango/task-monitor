@@ -176,6 +176,33 @@ and `generateClaudePromptFull`.
 - `npm test` runs `bridge/ai.test.mjs` (`node --test`). Never spawn the CLI in
   a unit test.
 
+## Exports — getting work out of the app
+
+One module builds them all: `src/services/exporters.js`. Content is described
+once as a list of blocks (`heading`, `paragraph`, `bullets`, `table`,
+`keyValues`) and rendered to **.xlsx · .docx · .pdf · .md · .html · .txt · .csv**.
+
+```
+services/exporters.js      ← the document model + all seven writers
+services/taskExport.js     ← a task list as a document (Board, Gantt, Projects)
+services/minutesExport.js  ← one set of minutes
+components/ExportButton.jsx← "Export ▾" — the menu, the spinner, the filename
+```
+
+- **The libraries are dynamic imports.** `exceljs` (908 kB), `jspdf` (390 kB)
+  and `docx` (394 kB) are code-split and never in the eager bundle; a user who
+  never exports never downloads them. Keep it that way — a top-level import of
+  any of them lands on every page load.
+- **Every file goes through `downloadFile()`**, so every name is
+  `<name>-YYYY-MM-DD.<ext>` in the user's own day.
+- **`build()` runs only when a format is picked**, so a page never prepares an
+  export nobody asked for.
+- **Only `exportError()` messages reach the user.** Anything else that escapes
+  an export is a library's internal complaint; `ExportButton` shows a generic
+  sentence instead.
+- A document with a `sheets: [...]` array gets proper worksheets in Excel;
+  without one, the first `table` block is used.
+
 ## Conventions
 
 - **Dates as YYYY-MM-DD strings** in user's local timezone (Asia/Manila). Helper: `todayLocal()` — defined in `services/recurrence.js`, re-exported from firebase.js.
@@ -324,6 +351,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 ## Common Pitfalls
 
 - ❌ Storing dates as JS `Date` objects in Firestore — use string `YYYY-MM-DD` for date-only fields
+- ❌ Importing `exceljs` / `jspdf` / `docx` at the top of a module — they are megabytes, and `await import()` inside the writer keeps them out of the eager bundle.
 - ❌ Naming a download with `new Date().toISOString().slice(0,10)` — that is the UTC day. Use `downloadFile(base, ext, content)` from `services/download.js`.
 - ❌ Reading the activities collection just for a count — use the denormalized counter
 - ❌ `query(ref, where(...))` then `.sort().slice()` in the callback — the whole collection was already downloaded. Put `orderBy` and `limit` in the query and add the composite index to `firestore.indexes.json`.
