@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { useTasks } from './useTasks';
 import { useSettings } from './useSettings';
 import { todayLocal } from '../services/firebase';
-import { buildAlertQueue, loadAlertState, DEFAULT_DUE_ALERT_SETTINGS } from '../services/dueAlerts';
+import {
+  buildAlertQueue, loadAlertState, pruneShownKeys, DEFAULT_DUE_ALERT_SETTINGS,
+} from '../services/dueAlerts';
 
 const LAST_CHECK_KEY = 'task-monitor.notif.lastCheck.v1';
 const SHOWN_KEY      = 'task-monitor.notif.shown.v1';
@@ -39,9 +41,15 @@ export function registerServiceWorker() {
     });
 }
 
-function loadShown() {
-  try { return new Set(JSON.parse(localStorage.getItem(SHOWN_KEY) || '[]')); }
-  catch { return new Set(); }
+// The set of `<taskId>|<dueDate>` we have already notified about. Pruned on
+// every read: keys older than the retention window can never match a live task
+// again, and an unpruned set was re-scanned on every five-minute tick forever.
+function loadShown(today) {
+  try {
+    return pruneShownKeys(JSON.parse(localStorage.getItem(SHOWN_KEY) || '[]'), { today });
+  } catch {
+    return new Set();
+  }
 }
 function saveShown(set) {
   try { localStorage.setItem(SHOWN_KEY, JSON.stringify([...set])); } catch {}
@@ -91,17 +99,17 @@ export function useOverdueScan() {
       // alert modal, so the two never disagree about what is "due".
       const { snoozes, skips } = loadAlertState(userId, { today });
       const due = buildAlertQueue(tasks, { today, leadDays: prefs.leadDays, snoozes, skips });
-      if (due.length === 0) return;
-      const shown = loadShown();
-      let added = false;
+      // loadShown prunes as it reads, and the pruned set is written back on
+      // every scan — including a scan with nothing due. Saving only when
+      // something was added is how the set grew forever in the first place.
+      const shown = loadShown(today);
       for (const t of due) {
         const key = `${t.id}|${t.plan.endDate}`;
         if (shown.has(key)) continue;
         shown.add(key);
-        added = true;
         try { await fireOverdueNotification(t, today); } catch (e) { console.error(e); }
       }
-      if (added) saveShown(shown);
+      saveShown(shown);
       try { localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString()); } catch {}
     };
 

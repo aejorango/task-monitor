@@ -28,3 +28,4 @@ One line per task from the Ideon task sheet.
 - T-0022 — Docs are stale and there is no root README (UI) — src/components/SettingsView.jsx, src/components/CsvImporter.jsx, 12 other components, src/services/firebase.js, tests/ui/copy.test.mjs
 - T-0023 — Docs are stale and there is no root README (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md
 - T-0024 — Local run needs two commands and hidden Firebase config — package.json, scripts/start.mjs, src/main.jsx, src/components/SetupRequiredView.jsx, src/services/firebaseConfig.js, src/services/firebaseConfig.test.mjs, src/App.css, README.md, CLAUDE.md, tests/ui/SetupRequiredView.test.mjs
+- T-0025 — Overdue notification memory grows forever — src/services/dueAlerts.js, src/services/dueAlerts.test.mjs, src/hooks/useNotifications.js

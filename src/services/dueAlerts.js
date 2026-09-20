@@ -160,6 +160,44 @@ export function saveAlertState(userId, { snoozes = {}, skips = [] } = {}, { stor
   } catch { return false; }
 }
 
+// ─── Browser-notification "already shown" set ───────────────────────────────
+// useOverdueScan remembers which `<taskId>|<dueDate>` it has already notified
+// about, so a task is announced once rather than every five minutes. That set
+// used to grow forever and be re-scanned on every tick; keys older than the
+// retention window can never match a live task again, so drop them.
+
+export const SHOWN_RETENTION_DAYS = 30;
+
+/** YYYY-MM-DD, `days` before `today`. */
+export function daysBeforeISO(today, days) {
+  const d = new Date(`${today}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Drop keys whose due date is more than `retentionDays` old, plus anything
+ * malformed. A key with a FUTURE date is kept — a task due next week that was
+ * announced early must not be announced twice.
+ *
+ * @param {Iterable<string>} keys  `<taskId>|<YYYY-MM-DD>`
+ */
+export function pruneShownKeys(keys, { today, retentionDays = SHOWN_RETENTION_DAYS } = {}) {
+  const cutoff = today ? daysBeforeISO(today, retentionDays) : null;
+  const out = new Set();
+  for (const key of keys || []) {
+    if (typeof key !== 'string') continue;
+    const sep = key.lastIndexOf('|');
+    if (sep <= 0) continue;                    // no id, or no date
+    const date = key.slice(sep + 1);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if (cutoff && date < cutoff) continue;
+    out.add(key);
+  }
+  return out;
+}
+
 // "Close all" on the modal pauses every alert for the rest of the day on this
 // device. Stored as the date it was set, so it lifts itself tomorrow.
 export const MUTE_KEY_PREFIX = 'task-monitor.dueAlerts.mutedOn.v1.';

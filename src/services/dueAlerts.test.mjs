@@ -146,3 +146,64 @@ test('close-all mute applies to the day it was set and lifts tomorrow', () => {
   assert.equal(loadMutedOn('u1', { store }), null);
   assert.equal(setMutedOn('u1', TODAY, { store: null }), false);
 });
+
+// ─── T-0025 / IMP-009: the notification "already shown" set must not grow ───
+
+import { daysBeforeISO, pruneShownKeys, SHOWN_RETENTION_DAYS } from './dueAlerts.js';
+
+test('daysBeforeISO walks back across month and year boundaries', () => {
+  assert.equal(daysBeforeISO('2026-03-01', 1), '2026-02-28');
+  assert.equal(daysBeforeISO('2026-01-01', 1), '2025-12-31');
+  assert.equal(daysBeforeISO('2026-09-20', 30), '2026-08-21');
+  assert.equal(daysBeforeISO('not-a-date', 30), null);
+});
+
+test('keys older than the retention window are dropped', () => {
+  const today = '2026-09-20';
+  const old = `t1|${daysBeforeISO(today, SHOWN_RETENTION_DAYS + 1)}`;
+  const recent = `t2|${daysBeforeISO(today, 5)}`;
+  const kept = pruneShownKeys([old, recent], { today });
+  assert.deepEqual([...kept], [recent]);
+});
+
+test('a key exactly on the boundary is kept', () => {
+  const today = '2026-09-20';
+  const edge = `t1|${daysBeforeISO(today, SHOWN_RETENTION_DAYS)}`;
+  assert.ok(pruneShownKeys([edge], { today }).has(edge));
+});
+
+test('a future due date is kept — a task announced early must not repeat', () => {
+  const key = 't1|2099-01-01';
+  assert.ok(pruneShownKeys([key], { today: '2026-09-20' }).has(key));
+});
+
+test('malformed keys are discarded rather than carried forever', () => {
+  const kept = pruneShownKeys(
+    ['no-separator', '|2026-09-19', 't|not-a-date', '', null, 42, 't1|2026-09-19'],
+    { today: '2026-09-20' },
+  );
+  assert.deepEqual([...kept], ['t1|2026-09-19']);
+});
+
+test('a task id containing a pipe still parses — the LAST separator wins', () => {
+  const key = 'weird|id|2026-09-19';
+  assert.ok(pruneShownKeys([key], { today: '2026-09-20' }).has(key));
+});
+
+test('ten years of keys collapse to the retention window', () => {
+  const today = '2026-09-20';
+  const keys = [];
+  for (let i = 0; i < 3650; i++) keys.push(`t${i}|${daysBeforeISO(today, i)}`);
+  const kept = pruneShownKeys(keys, { today });
+  assert.equal(kept.size, SHOWN_RETENTION_DAYS + 1, 'today plus the retention window');
+});
+
+test('pruning without a date is a no-op on well-formed keys', () => {
+  const kept = pruneShownKeys(['t1|2000-01-01'], {});
+  assert.equal(kept.size, 1, 'no "today" means we cannot judge age');
+});
+
+test('empty and missing input produce an empty set, not a crash', () => {
+  assert.equal(pruneShownKeys([], { today: '2026-09-20' }).size, 0);
+  assert.equal(pruneShownKeys(undefined, { today: '2026-09-20' }).size, 0);
+});
