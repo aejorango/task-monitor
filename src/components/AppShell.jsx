@@ -15,6 +15,8 @@ import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
 import { buildCommands, commandsFirst, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
+import { useToast } from './Toast';
+import { useDialog } from './Dialog';
 
 const VIEWS = [
   { id: 'ask-ai',         label: 'Ask AI',           icon: 'sparkles' },
@@ -295,13 +297,15 @@ function SidebarNavGroup({ item, route, navigate }) {
 // ─── Save current view ────────────────────────────────────
 
 function SaveViewButton({ route, userId }) {
+  const toast = useToast();
+  const ask = useDialog();
   const workspaceId = useActiveWorkspaceId();
   const hasFilter = route.projectFilter !== 'all' || route.tagFilter || route.statusFilter;
   if (!userId || !hasFilter) return null;
   // Already loaded as a saved view → hide
   if (route.savedViewId) return null;
   const save = async () => {
-    const name = prompt('Save this filter as…', '');
+    const name = await ask.prompt({ title: 'Save this filter as…', defaultValue: '' });
     if (!name) return;
     try {
       await addSavedView(userId, {
@@ -314,7 +318,7 @@ function SaveViewButton({ route, userId }) {
       });
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save view. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save view. Please try again.'));
     }
   };
   return (
@@ -327,6 +331,7 @@ function SaveViewButton({ route, userId }) {
 // ─── Sidebar: saved views ─────────────────────────────────
 
 function SidebarSavedViews({ route, navigate }) {
+  const ask = useDialog();
   const { views } = useSavedViews();
   if (views.length === 0) return null;
   return (
@@ -355,14 +360,14 @@ function SidebarSavedViews({ route, navigate }) {
               className="saved-view-delete"
               role="button"
               tabIndex={0}
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                if (confirm(`Remove saved view "${v.name}"?`)) softDeleteSavedView(v.id);
+                if (await ask.confirm({ title: `Remove saved view "${v.name}"?`, confirmLabel: 'Remove', danger: true })) softDeleteSavedView(v.id);
               }}
-              onKeyDown={(e) => {
+              onKeyDown={async (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.stopPropagation();
-                  if (confirm(`Remove saved view "${v.name}"?`)) softDeleteSavedView(v.id);
+                  if (await ask.confirm({ title: `Remove saved view "${v.name}"?`, confirmLabel: 'Remove', danger: true })) softDeleteSavedView(v.id);
                 }
               }}
               title="Remove saved view"

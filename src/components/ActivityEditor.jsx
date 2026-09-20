@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { editActivity } from '../services/firebase';
 import FileUpload from './FileUpload';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 const COMPLETION_OPTIONS = [
   { value: 'not-started', label: 'Not started' },
@@ -13,6 +14,7 @@ const COMPLETION_OPTIONS = [
 ];
 
 export default function ActivityEditor({ activity, onClose }) {
+  const toast = useToast();
   const [date, setDate]           = useState(activity.date || '');
   const [comment, setComment]     = useState(activity.comment || '');
   const [hours, setHours]         = useState(activity.hoursSpent ?? '');
@@ -54,7 +56,7 @@ export default function ActivityEditor({ activity, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save activity. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save activity. Please try again.'));
       setSaving(false);
     }
   };

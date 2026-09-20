@@ -6,6 +6,7 @@ import { generateTaskDrafts } from '../services/anthropic';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { useAuth } from '../hooks/useTasks';
 import { addTask } from '../services/firebase';
+import { useToast } from './Toast';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -70,6 +71,7 @@ function scheduleDrafts(tasks, planStart, planEnd) {
 }
 
 export default function AiTaskGenerator({ project, onClose }) {
+  const toast = useToast();
   const { userId } = useAuth();
   const { available: aiAvailable } = useAiStatus();
   const [count, setCount] = useState(8);
@@ -121,11 +123,11 @@ export default function AiTaskGenerator({ project, onClose }) {
   const createAccepted = async () => {
     const toCreate = drafts.filter((d) => accepted[d.id] === true);
     if (toCreate.length === 0) {
-      alert('Mark at least one draft as Accept first.');
+      toast.error('Mark at least one draft as Accept first.');
       return;
     }
     if (dateRangeInvalid) {
-      alert('End date must be on or after the start date.');
+      toast.error('End date must be on or after the start date.');
       return;
     }
     setCreating(true);
@@ -156,7 +158,7 @@ export default function AiTaskGenerator({ project, onClose }) {
       setDone({ created });
     } catch (err) {
       console.error(err);
-      alert(`Failed after creating ${created} task(s): ${err.message || err}`);
+      toast.success(`Failed after creating ${created} task(s): ${err.message || err}`);
     } finally {
       setCreating(false);
     }

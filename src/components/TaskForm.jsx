@@ -8,8 +8,10 @@ import { parseQuickAdd } from '../services/nlpQuickAdd';
 import { pickDefaultProjectId } from '../services/preferences';
 import { useSettings } from '../hooks/useSettings';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 export default function TaskForm({ projects = [], projectFilter = 'all', seed = null }) {
+  const toast = useToast();
   const { userId, ready } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const { templates } = useTemplates();
@@ -118,7 +120,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all', seed = 
       setRecurrence(null);
     } catch (err) {
       console.error('Failed to add task:', err);
-      alert(friendlyError(err, 'Could not save task. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save task. Please try again.'));
     } finally {
       setSubmitting(false);
     }

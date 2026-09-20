@@ -14,6 +14,7 @@ import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
+import { useToast } from './Toast';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -512,6 +513,7 @@ export default function GanttView({ projectFilter }) {
 // ─── Individual row with draggable plan bar ────────────────────────────────
 
 function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, rowWidth, today, onClick }) {
+  const toast = useToast();
   const planStart = parseDate(task.plan?.startDate);
   const planEnd   = parseDate(task.plan?.endDate);
   const actStart  = parseDate(task.actual?.startDate);
@@ -570,7 +572,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
           });
         } catch (err) {
           console.error('Could not save plan dates:', err);
-          alert(friendlyError(err, 'Could not save plan dates. Please try again.'));
+          toast.error(friendlyError(err, 'Could not save plan dates. Please try again.'));
         }
       }
     };

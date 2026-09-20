@@ -11,8 +11,10 @@ import { useActivities, useProjects } from '../hooks/useTasks';
 import { todayLocal, setTaskStatus } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import ActivityLogger from './ActivityLogger';
+import { useToast } from './Toast';
 
 export default function TaskActivitiesModal({ task, onClose, onEditTask, userId }) {
+  const toast = useToast();
   const { activities, loading } = useActivities(task.id);
   const { byId: projectById } = useProjects();
   const [editingActivity, setEditingActivity] = useState(null);
@@ -33,7 +35,7 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
     if (next === task.status) return;
     setStatusBusy(true);
     try { await setTaskStatus(task, next); }
-    catch (err) { console.error(err); alert('Could not change status.'); }
+    catch (err) { console.error(err); toast.error('Could not change status.'); }
     finally { setStatusBusy(false); }
   };
 

@@ -10,11 +10,15 @@ import {
   uploadFile,
   deleteUpload,
 } from '../services/firebase';
+import { useToast } from './Toast';
+import { useDialog } from './Dialog';
 
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 const ICONS  = ['◆', '◉', '◈', '▲', '★', '☀', '✦', '✿', '⌘', '⚡', '☂', '✈'];
 
 export default function WorkspaceEditor({ workspace, onClose }) {
+  const toast = useToast();
+  const ask = useDialog();
   const { userId } = useAuth();
   const isNew = !workspace;
   const [name, setName]           = useState(workspace?.name || '');
@@ -107,7 +111,7 @@ export default function WorkspaceEditor({ workspace, onClose }) {
   };
 
   const save = async () => {
-    if (!name.trim()) { alert('Workspace name is required.'); return; }
+    if (!name.trim()) { toast.error('Workspace name is required.'); return; }
     setSaving(true);
     try {
       const payload = {
@@ -130,16 +134,16 @@ export default function WorkspaceEditor({ workspace, onClose }) {
       }
     } catch (err) {
       console.error(err);
-      alert('Could not save workspace. ' + (err?.message || ''));
+      toast.error('Could not save workspace. ' + (err?.message || ''));
       setSaving(false);
     }
   };
 
   const remove = async () => {
-    if (!confirm(`Delete workspace "${workspace.name}"? Projects and tasks inside it become inaccessible. This is a soft delete; an admin can recover via Firestore.`)) return;
+    if (!await ask.confirm({ title: `Delete workspace "${workspace.name}"? Projects and tasks inside it become inaccessible. This is a soft delete; an admin can recover via Firestore.`, confirmLabel: 'Delete', danger: true })) return;
     setSaving(true);
     try { await softDeleteWorkspace(workspace.id); onClose(); }
-    catch (err) { console.error(err); alert('Could not delete workspace.'); setSaving(false); }
+    catch (err) { console.error(err); toast.error('Could not delete workspace.'); setSaving(false); }
   };
 
   return (

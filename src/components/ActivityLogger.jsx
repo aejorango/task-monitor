@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { addActivity, todayLocal } from '../services/firebase';
 import FileUpload from './FileUpload';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 const COMPLETION_OPTIONS = [
   { value: 'not-started', label: 'Not started' },
@@ -13,6 +14,7 @@ const COMPLETION_OPTIONS = [
 ];
 
 export default function ActivityLogger({ task, userId, onClose }) {
+  const toast = useToast();
   const [date, setDate]           = useState(todayLocal());
   const [comment, setComment]     = useState('');
   const [hours, setHours]         = useState('');
@@ -40,7 +42,7 @@ export default function ActivityLogger({ task, userId, onClose }) {
 
   const handleSave = async () => {
     if (!comment.trim() && !hours && attachments.length === 0 && !bottleneck.trim()) {
-      alert('Add at least one of: comment, hours, attachment, or bottleneck note.');
+      toast.error('Add at least one of: comment, hours, attachment, or bottleneck note.');
       return;
     }
     setSaving(true);
@@ -57,7 +59,7 @@ export default function ActivityLogger({ task, userId, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save activity. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save activity. Please try again.'));
       setSaving(false);
     }
   };

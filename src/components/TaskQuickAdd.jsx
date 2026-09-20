@@ -7,8 +7,10 @@ import { useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addTask, todayLocal } from '../services/firebase';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
+  const toast = useToast();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [title, setTitle]     = useState('');
@@ -41,7 +43,7 @@ export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save task. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save task. Please try again.'));
       setSaving(false);
     }
   };

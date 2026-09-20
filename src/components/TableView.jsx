@@ -11,6 +11,7 @@ import ActivityEditor from './ActivityEditor';
 import CsvImporter from './CsvImporter';
 import ImportWizard from './ImportWizard';
 import { downloadFile } from '../services/download';
+import { useDialog } from './Dialog';
 
 const COLUMNS = [
   { key: 'project',     label: 'Project' },
@@ -33,6 +34,7 @@ const COMPLETION_OPTIONS = [
 ];
 
 export default function TableView({ projectFilter }) {
+  const ask = useDialog();
   const { activities, loading, loadMore, hasMore, loadingMore } = useAllActivities();
   const { byId: projectById } = useProjects();
   const { tasks } = useTasks();
@@ -101,7 +103,7 @@ export default function TableView({ projectFilter }) {
   const selectedRows = sorted.filter((r) => selected.has(r.id));
 
   const bulkDelete = async () => {
-    if (!confirm(`Delete ${selectedRows.length} activity entr${selectedRows.length === 1 ? 'y' : 'ies'}?`)) return;
+    if (!await ask.confirm({ title: `Delete ${selectedRows.length} activity entr${selectedRows.length === 1 ? 'y' : 'ies'}?`, confirmLabel: 'Delete', danger: true })) return;
     await bulkDeleteActivities(selectedRows);
     setSelected(new Set());
   };
@@ -234,7 +236,7 @@ export default function TableView({ projectFilter }) {
                       <button
                         className="btn btn-sm btn-ghost"
                         title="Delete entry"
-                        onClick={() => { if (confirm('Delete this activity entry?')) deleteActivity(r); }}
+                        onClick={async () => { if (await ask.confirm({ title: 'Delete this activity entry?', confirmLabel: 'Delete', danger: true })) deleteActivity(r); }}
                       >✕</button>
                     </td>
                   </tr>

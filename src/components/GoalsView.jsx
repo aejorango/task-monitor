@@ -13,6 +13,8 @@ import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildGoalsDocument } from '../services/exporters';
 import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useToast } from './Toast';
+import { useDialog } from './Dialog';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -270,6 +272,8 @@ function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs }) {
 // ─── Editor modal ───────────────────────────────────────────────────────────
 
 function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose }) {
+  const toast = useToast();
+  const ask = useDialog();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [form, setForm] = useState(() =>
@@ -341,17 +345,17 @@ function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save goal. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save goal. Please try again.'));
       setSaving(false);
     }
   };
 
   const remove = async () => {
     if (!goal) return;
-    if (!confirm(`Delete goal "${goal.code ? goal.code + ': ' : ''}${goal.title}"?`)) return;
+    if (!await ask.confirm({ title: `Delete goal "${goal.code ? goal.code + ': ' : ''}${goal.title}"?`, confirmLabel: 'Delete', danger: true })) return;
     setSaving(true);
     try { await softDeleteGoal(goal.id); onClose(); }
-    catch (err) { console.error(err); alert(friendlyError(err, 'Could not delete. Please try again.')); setSaving(false); }
+    catch (err) { console.error(err); toast.error(friendlyError(err, 'Could not delete. Please try again.')); setSaving(false); }
   };
 
   return (

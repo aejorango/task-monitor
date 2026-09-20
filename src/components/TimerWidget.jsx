@@ -5,8 +5,10 @@ import { useTimer, formatElapsed } from '../hooks/useTimer';
 import { useAuth, useTasks } from '../hooks/useTasks';
 import { addActivity, todayLocal } from '../services/firebase';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 export default function TimerWidget() {
+  const toast = useToast();
   const { running, state, elapsedMs, elapsedHours, stop } = useTimer();
   const { tasks } = useTasks();
   const { userId } = useAuth();
@@ -46,7 +48,7 @@ export default function TimerWidget() {
       });
     } catch (err) {
       console.error('Failed to log tracked time:', err);
-      alert(friendlyError(err, 'Could not log tracked time. Please try again.'));
+      toast.error(friendlyError(err, 'Could not log tracked time. Please try again.'));
     } finally {
       setStopping(false);
     }

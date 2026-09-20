@@ -9,8 +9,10 @@ import {
 } from '../services/anthropic';
 import { useAiStatus } from '../hooks/useAiStatus';
 import Markdown from './Markdown';
+import { useToast } from './Toast';
 
 export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) {
+  const toast = useToast();
   const { available: aiAvailable } = useAiStatus();
   const [busy, setBusy]               = useState(null); // 'subtasks' | 'prompt' | null
   const [subtaskDrafts, setSubtaskDrafts] = useState(null);
@@ -82,7 +84,7 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
       setTimeout(() => setCopyOk(false), 1500);
     } catch (err) {
       console.error(err);
-      alert('Could not copy. Select the text manually and copy.');
+      toast.error('Could not copy. Select the text manually and copy.');
     }
   };
 

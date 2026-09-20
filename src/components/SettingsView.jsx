@@ -58,11 +58,15 @@ import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../servi
 import KnowledgeSection from './KnowledgeSection';
 import { sessionLine, SETTINGS_SUBTITLE } from '../services/approvalCopy';
 import { memberLabel, memberSubLabel, validateInvite } from '../services/invites';
+import { useToast } from './Toast';
+import { useDialog } from './Dialog';
 import { versionLine } from '../services/appVersion';
 import { downloadFile } from '../services/download';
 import { friendlyError } from '../services/access';
 
 export default function SettingsView() {
+  const toast = useToast();
+  const ask = useDialog();
   const { settings, update, reset } = useSettings();
   const { projects } = useProjects();
   const { tasks } = useTasks();
@@ -117,7 +121,7 @@ export default function SettingsView() {
   }, []);
 
   const handleSignOut = async () => {
-    if (!confirm('Sign out of Task Monitor?')) return;
+    if (!await ask.confirm({ title: 'Sign out of Task Monitor?', confirmLabel: 'Yes' })) return;
     await signOutUser();
   };
 
@@ -127,7 +131,7 @@ export default function SettingsView() {
   // (a common macOS Chrome scenario).
   const handleTestNotification = async () => {
     const log = [];
-    const tellUser = (msg) => alert(msg + '\n\n— Diagnostic trail —\n' + log.join('\n'));
+    const tellUser = (msg) => toast.error(msg + '\n\n— Diagnostic trail —\n' + log.join('\n'));
 
     if (typeof Notification === 'undefined') {
       tellUser('This browser does not support the Notifications API.');
@@ -411,8 +415,8 @@ export default function SettingsView() {
             >Backup everything (.json)</button>
             <button
               className="btn"
-              onClick={() => {
-                if (confirm('Reset all settings to defaults? (This does not delete your data.)')) reset();
+              onClick={async () => {
+                if (await ask.confirm({ title: 'Reset all settings to defaults?', message: 'Your projects, tasks and activity are not touched — only the preferences on this device.', confirmLabel: 'Reset' })) reset();
               }}
             >Reset settings</button>
           </div>
@@ -457,7 +461,7 @@ export default function SettingsView() {
                   onClick={() => {
                     setAnthropicKey(anthroKey.trim());
                     setAnthropicModel(anthroModel.trim() || 'claude-sonnet-4-5-20250929');
-                    alert(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
+                    toast.success(anthroKey.trim() ? 'API key saved.' : 'API key cleared.');
                   }}
                 >Save</button>
               </div>
@@ -885,6 +889,7 @@ const EVENT_OPTIONS = [
 ];
 
 function WebhooksSection({ userId }) {
+  const ask = useDialog();
   const { hooks } = useWebhooks();
   const workspaceId = useActiveWorkspaceId();
   const [editing, setEditing] = useState(null);
@@ -937,8 +942,8 @@ function WebhooksSection({ userId }) {
                 )}
               </span>
               <button className="btn btn-sm btn-ghost" onClick={() => setEditing(h)}>Edit</button>
-              <button className="btn btn-sm btn-ghost link-danger" onClick={() => {
-                if (confirm('Delete this webhook?')) softDeleteWebhook(h.id);
+              <button className="btn btn-sm btn-ghost link-danger" onClick={async () => {
+                if (await ask.confirm({ title: 'Delete this webhook?', confirmLabel: 'Delete', danger: true })) softDeleteWebhook(h.id);
               }}>✕</button>
             </li>
           ))}
@@ -1001,6 +1006,7 @@ function WebhooksSection({ userId }) {
 }
 
 function WebhookEditor({ hook, userId, onClose }) {
+  const toast = useToast();
   const workspaceId = useActiveWorkspaceId();
   const isNew = !hook;
   const [name, setName]   = useState(hook?.name || '');
@@ -1015,7 +1021,7 @@ function WebhookEditor({ hook, userId, onClose }) {
   };
 
   const save = async () => {
-    if (!url.trim()) { alert('URL is required.'); return; }
+    if (!url.trim()) { toast.error('URL is required.'); return; }
     setBusy(true);
     try {
       if (isNew) await addWebhook(userId, { workspaceId, name, url, secret, events, enabled });
@@ -1023,7 +1029,7 @@ function WebhookEditor({ hook, userId, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save webhook. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save webhook. Please try again.'));
       setBusy(false);
     }
   };
@@ -1150,6 +1156,8 @@ function WorkspacesSection({ currentUser, isSuperadmin = false }) {
 }
 
 function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = false, onClose }) {
+  const toast = useToast();
+  const ask = useDialog();
   const [newEmail, setNewEmail] = useState('');
   const [newUid, setNewUid] = useState('');
   const [newRole, setNewRole] = useState('editor');
@@ -1198,22 +1206,22 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
     if (!newUid.trim()) return;
     setBusy(true);
     try { await addWorkspaceMember(workspace, newUid.trim(), newRole); setNewUid(''); }
-    catch (err) { console.error(err); alert(friendlyError(err, 'Could not add that member.')); }
+    catch (err) { console.error(err); toast.error(friendlyError(err, 'Could not add that member.')); }
     finally { setBusy(false); }
   };
   const remove = async (uid) => {
     const prof = profOf(uid);
     const who = prof?.displayName || prof?.email || uid;
-    if (!confirm(`Remove member ${who}?`)) return;
+    if (!await ask.confirm({ title: `Remove member ${who}?`, confirmLabel: 'Remove', danger: true })) return;
     setBusy(true);
     try { await removeWorkspaceMember(workspace, uid); }
-    catch (err) { console.error(err); alert('Could not remove member: ' + (err.message || '')); }
+    catch (err) { console.error(err); toast.error('Could not remove member: ' + (err.message || '')); }
     finally { setBusy(false); }
   };
   const changeRole = async (uid, role) => {
     setBusy(true);
     try { await updateWorkspaceMemberRole(workspace, uid, role); }
-    catch (err) { console.error(err); alert('Could not change role: ' + (err.message || '')); }
+    catch (err) { console.error(err); toast.error('Could not change role: ' + (err.message || '')); }
     finally { setBusy(false); }
   };
 
@@ -1383,6 +1391,8 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
 // ─── User Management (superadmin only) ──────────────────────────────────────
 
 function UserManagementSection({ currentUid }) {
+  const toast = useToast();
+  const ask = useDialog();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');  // 'pending' | 'approved' | 'rejected' | 'all'
@@ -1394,7 +1404,7 @@ function UserManagementSection({ currentUid }) {
   const handleAssignCompany = async (uid, companyId) => {
     setBusyUid(uid);
     try { await setUserCompany(uid, companyId || null); }
-    catch (err) { alert('Failed to assign company: ' + (err.message || err)); }
+    catch (err) { toast.error(friendlyError(err, 'Failed to assign company.')); }
     finally { setBusyUid(null); }
   };
 
@@ -1417,22 +1427,22 @@ function UserManagementSection({ currentUid }) {
   const handleApprove = async (uid) => {
     setBusyUid(uid);
     try { await approveUser(uid, currentUid); }
-    catch (err) { alert('Failed to approve: ' + (err.message || err)); }
+    catch (err) { toast.error(friendlyError(err, 'Failed to approve.')); }
     finally { setBusyUid(null); }
   };
   const handleReject = async (uid) => {
-    if (!confirm('Reject this user? They will be blocked from accessing the app.')) return;
+    if (!await ask.confirm({ title: 'Reject this user?', message: 'They will be blocked from accessing the app.', confirmLabel: 'Yes' })) return;
     setBusyUid(uid);
     try { await rejectUser(uid, currentUid); }
-    catch (err) { alert('Failed to reject: ' + (err.message || err)); }
+    catch (err) { toast.error(friendlyError(err, 'Failed to reject.')); }
     finally { setBusyUid(null); }
   };
   const handleToggleRole = async (uid, currentRole) => {
     const nextRole = currentRole === 'superadmin' ? 'user' : 'superadmin';
-    if (!confirm(`Change role to "${nextRole}"?`)) return;
+    if (!await ask.confirm({ title: `Change role to "${nextRole}"?`, confirmLabel: 'Yes' })) return;
     setBusyUid(uid);
     try { await setUserRole(uid, nextRole); }
-    catch (err) { alert('Failed to change role: ' + (err.message || err)); }
+    catch (err) { toast.error(friendlyError(err, 'Failed to change role.')); }
     finally { setBusyUid(null); }
   };
 
@@ -1595,6 +1605,7 @@ function UserManagementSection({ currentUid }) {
 // Save commits to Firestore. Soft-delete (archives) on Delete.
 
 function CompaniesManagementSection() {
+  const toast = useToast();
   const { companies, loading } = useAllCompanies(true);
   const { userId } = useAuth();
   const [creatingName, setCreatingName] = useState('');
@@ -1623,7 +1634,7 @@ function CompaniesManagementSection() {
       await addCompany(userId, { name });
       setCreatingName('');
     } catch (err) {
-      alert('Failed to create company: ' + (err.message || err));
+      toast.error(friendlyError(err, 'Failed to create company.'));
     } finally {
       setBusy(false);
     }
@@ -1692,6 +1703,8 @@ const COMPANY_MODEL_CHOICES = [
 ];
 
 function CompanyRow({ company }) {
+  const toast = useToast();
+  const ask = useDialog();
   const [name, setName]     = useState(company.name || '');
   // The key is NOT on the company document any more — it lives in a secret
   // only a superadmin can read. This box starts blank and means "replace the
@@ -1725,7 +1738,7 @@ function CompanyRow({ company }) {
     aiEnabled !== (company.aiEnabled !== false);
 
   const save = async () => {
-    if (!name.trim()) { alert('Company name cannot be empty.'); return; }
+    if (!name.trim()) { toast.error('Company name cannot be empty.'); return; }
     setBusy(true);
     try {
       await updateCompany(company.id, {
@@ -1739,17 +1752,17 @@ function CompanyRow({ company }) {
       setSavedAt(Date.now());
       setTimeout(() => setSavedAt(null), 2500);
     } catch (err) {
-      alert('Failed to save: ' + (err.message || err));
+      toast.error(friendlyError(err, 'Failed to save.'));
     } finally {
       setBusy(false);
     }
   };
 
   const remove = async () => {
-    if (!confirm(`Delete company "${company.name}"? Users assigned to it will fall back to unassigned. This is a soft delete.`)) return;
+    if (!await ask.confirm({ title: `Delete company "${company.name}"? Users assigned to it will fall back to unassigned. This is a soft delete.`, confirmLabel: 'Delete', danger: true })) return;
     setBusy(true);
     try { await softDeleteCompany(company.id); }
-    catch (err) { alert('Failed to delete: ' + (err.message || err)); }
+    catch (err) { toast.error(friendlyError(err, 'Failed to delete.')); }
     finally { setBusy(false); }
   };
 
@@ -1758,7 +1771,7 @@ function CompanyRow({ company }) {
   // then confirm, this is a switch you throw.
   const toggleAi = async () => {
     const next = !aiEnabled;
-    if (!next && !confirm(`Turn AI off for "${company.name}"? Its members lose every AI feature until you turn it back on.`)) return;
+    if (!next && !await ask.confirm({ title: `Turn AI off for "${company.name}"? Its members lose every AI feature until you turn it back on.`, confirmLabel: 'Yes' })) return;
     setAiEnabled(next);
     setBusy(true);
     try {
@@ -1767,7 +1780,7 @@ function CompanyRow({ company }) {
       setTimeout(() => setSavedAt(null), 2500);
     } catch (err) {
       setAiEnabled(!next);   // roll back the optimistic flip
-      alert('Failed to change AI access: ' + (err.message || err));
+      toast.error(friendlyError(err, 'Failed to change AI access.'));
     } finally {
       setBusy(false);
     }

@@ -36,6 +36,7 @@ import { useToast } from './Toast';
 import { downloadFile } from '../services/download';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
+import { useDialog } from './Dialog';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -507,6 +508,8 @@ function ProjectActivityLogModal({ project, onClose }) {
 }
 
 function ProjectSharing({ project, bare = false }) {
+  const toast = useToast();
+  const ask = useDialog();
   // Sharing is an admin control. The rules refuse an invite from anyone who
   // cannot administer the project, so showing the generator to everyone would
   // just hand most people a button that fails. Mirror the rule instead.
@@ -554,16 +557,16 @@ function ProjectSharing({ project, bare = false }) {
   };
 
   const removeMember = async (memberUid) => {
-    if (memberUid === ownerId) { alert('Cannot remove the project owner.'); return; }
-    if (!confirm('Remove this member from the project?')) return;
+    if (memberUid === ownerId) { toast.error('Cannot remove the project owner.'); return; }
+    if (!await ask.confirm({ title: 'Remove this member from the project?', confirmLabel: 'Remove', danger: true })) return;
     try { await setProjectMember(project.id, memberUid, null); }
-    catch (err) { console.error(err); alert(err.message); }
+    catch (err) { console.error(err); toast.error(friendlyError(err)); }
   };
 
   const changeRole = async (memberUid, nextRole) => {
     if (memberUid === ownerId) return;
     try { await setProjectMember(project.id, memberUid, nextRole); }
-    catch (err) { console.error(err); alert(err.message); }
+    catch (err) { console.error(err); toast.error(friendlyError(err)); }
   };
 
   const createLink = async () => {
@@ -641,9 +644,9 @@ function ProjectSharing({ project, bare = false }) {
   };
 
   const handleRevoke = async (inviteId) => {
-    if (!confirm('Revoke this invite link? Anyone who hasn\'t claimed it yet will be unable to join.')) return;
+    if (!await ask.confirm({ title: 'Revoke this invite link?', message: 'Anyone who hasn\'t claimed it yet will be unable to join.', confirmLabel: 'Revoke', danger: true })) return;
     try { await revokeInvite(inviteId); }
-    catch (err) { console.error(err); alert(err.message); }
+    catch (err) { console.error(err); toast.error(friendlyError(err)); }
   };
 
   const liveInvites = canShare ? invites.filter((inv) => !inv.revoked) : [];
@@ -859,9 +862,10 @@ function CustomFieldsEditor({ fields, onChange, bare = false }) {
 }
 
 function TemplateCard({ template, onUse, note }) {
-  const handleDelete = (e) => {
+  const ask = useDialog();
+  const handleDelete = async (e) => {
     e.stopPropagation();
-    if (!confirm(`Delete template "${template.name}"?`)) return;
+    if (!await ask.confirm({ title: `Delete template "${template.name}"?`, confirmLabel: 'Delete', danger: true })) return;
     softDeleteTemplate(template.id);
   };
   return (
@@ -921,6 +925,7 @@ const ACT_FILTERS = [
 ];
 
 function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
+  const ask = useDialog();
   const toast = useToast();
   const { projects } = useProjects();
   const { tasks } = useTasks();
@@ -1112,7 +1117,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   };
 
   const save = async () => {
-    if (!name.trim()) { alert('Project name is required.'); return; }
+    if (!name.trim()) { toast.error('Project name is required.'); return; }
     setSaving(true);
     try {
       if (isNew) {
@@ -1123,7 +1128,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save project. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save project. Please try again.'));
       setSaving(false);
     }
   };
@@ -1155,7 +1160,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   };
 
   const saveAsTemplate = async () => {
-    const tplName = prompt('Template name:', name.trim() || 'New project template');
+    const tplName = await ask.prompt({ title: 'Template name:', defaultValue: name.trim() || 'New project template' });
     if (!tplName) return;
     try {
       await addTemplate(userId, {
@@ -1164,10 +1169,10 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
         kind: 'project',
         payload: projectAsTemplatePayload({ name: name.trim(), description: description.trim(), color, phases }),
       });
-      alert(`Saved template "${tplName.trim()}".`);
+      toast.success(`Saved template "${tplName.trim()}".`);
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save template. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save template. Please try again.'));
     }
   };
 
@@ -1698,6 +1703,8 @@ function ProjectAssigneeStrip({ project }) {
 }
 
 function SegmentManager({ projects, onClose }) {
+  const toast = useToast();
+  const ask = useDialog();
   const workspaceId = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
   const workspace = workspaces.find((w) => w.id === workspaceId);
@@ -1722,7 +1729,7 @@ function SegmentManager({ projects, onClose }) {
       return;
     }
     if (wsSegments.some((s) => s.name === editingName.trim() && s.name !== editingSegment)) {
-      alert('A segment with this name already exists.');
+      toast.error('A segment with this name already exists.');
       return;
     }
 
@@ -1735,7 +1742,7 @@ function SegmentManager({ projects, onClose }) {
       setEditingSegment(null);
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not rename segment. Please try again.'));
+      toast.error(friendlyError(err, 'Could not rename segment. Please try again.'));
     } finally {
       setSavingSegment(null);
     }
@@ -1743,11 +1750,11 @@ function SegmentManager({ projects, onClose }) {
 
   const deleteSegment = async (seg) => {
     if (seg === 'Uncategorized') {
-      alert('Cannot delete the Uncategorized segment.');
+      toast.error('Cannot delete the Uncategorized segment.');
       return;
     }
     const count = getSegmentProjects(seg).length;
-    if (!confirm(`Delete segment "${seg}"? Its ${count} project${count === 1 ? '' : 's'} will be moved to Uncategorized.`)) {
+    if (!await ask.confirm({ title: `Delete segment "${seg}"? Its ${count} project${count === 1 ? '' : 's'} will be moved to Uncategorized.`, confirmLabel: 'Delete', danger: true })) {
       return;
     }
 
@@ -1759,7 +1766,7 @@ function SegmentManager({ projects, onClose }) {
       }
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not delete segment. Please try again.'));
+      toast.error(friendlyError(err, 'Could not delete segment. Please try again.'));
     } finally {
       setSavingSegment(null);
     }
@@ -1768,7 +1775,7 @@ function SegmentManager({ projects, onClose }) {
   const addNewSegment = async () => {
     if (!newSegmentName.trim()) return;
     if (wsSegments.some((s) => s.name === newSegmentName.trim())) {
-      alert('A segment with this name already exists.');
+      toast.error('A segment with this name already exists.');
       return;
     }
 
@@ -1778,7 +1785,7 @@ function SegmentManager({ projects, onClose }) {
       setNewSegmentName('');
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not create segment. Please try again.'));
+      toast.error(friendlyError(err, 'Could not create segment. Please try again.'));
     } finally {
       setSavingSegment(null);
     }

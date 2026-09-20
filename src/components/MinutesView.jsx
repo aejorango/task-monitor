@@ -18,6 +18,7 @@ import { buildMinutesDocument, minutesFileBase } from '../services/minutesExport
 import { toMarkdown } from '../services/exporters';
 import { useToast } from './Toast';
 import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useDialog } from './Dialog';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -221,6 +222,8 @@ export default function MinutesView({ projectFilter = 'all' }) {
 }
 
 function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, onEdit }) {
+  const toast = useToast();
+  const ask = useDialog();
   const [copied, setCopied] = useState(false);
 
   // Paste-ready text for Slack, email or a doc — the same document the export
@@ -234,7 +237,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
       setTimeout(() => setCopied(false), 1800);
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not copy. Use Export instead.'));
+      toast.error(friendlyError(err, 'Could not copy. Use Export instead.'));
     }
   };
 
@@ -284,7 +287,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
       await patchItems(items.map((x) => (x.id === it.id ? { ...x, taskId: ref.id } : x)));
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not create task. Please try again.'));
+      toast.error(friendlyError(err, 'Could not create task. Please try again.'));
     } finally {
       setBusyId(null);
     }
@@ -293,14 +296,14 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
   // Soft-delete the linked task and clear the link on the action item.
   const deleteTaskForItem = async (it) => {
     if (!it.taskId || busyId) return;
-    if (!confirm('Delete the task created from this action item?')) return;
+    if (!await ask.confirm({ title: 'Delete the task created from this action item?', confirmLabel: 'Delete', danger: true })) return;
     setBusyId(it.id);
     try {
       await softDeleteTask(it.taskId);
       await patchItems(items.map((x) => (x.id === it.id ? { ...x, taskId: null } : x)));
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not delete task. Please try again.'));
+      toast.error(friendlyError(err, 'Could not delete task. Please try again.'));
     } finally {
       setBusyId(null);
     }
@@ -534,7 +537,7 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save minutes. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save minutes. Please try again.'));
       setSaving(false);
     }
   };

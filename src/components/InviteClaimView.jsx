@@ -11,8 +11,10 @@ import {
   signInWithGoogle,
 } from '../services/firebase';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 export default function InviteClaimView({ inviteId, navigate }) {
+  const toast = useToast();
   const { userId, ready } = useAuth();
   const [invite, setInvite] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -48,7 +50,7 @@ export default function InviteClaimView({ inviteId, navigate }) {
   const handleSignIn = async () => {
     const result = await signInWithGoogle();
     if (!result.ok && result.code !== 'popup-closed') {
-      alert(result.message || 'Sign-in failed.');
+      toast.error(result.message || 'Sign-in failed.');
     }
   };
 

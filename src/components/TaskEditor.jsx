@@ -36,6 +36,7 @@ import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import { useToast } from './Toast';
 import AddToNotebookButton from './AddToNotebookButton';
 import { friendlyError } from '../services/access';
+import { useDialog } from './Dialog';
 
 // ── Small formatters ────────────────────────────────────────────────────────
 function daysBetween(fromYmd, toYmd) {
@@ -75,6 +76,7 @@ const ACT_FILTERS = [
 ];
 
 export default function TaskEditor({ task, projects, onClose }) {
+  const ask = useDialog();
   const toast = useToast();
   const { tasks: allTasks } = useTasks();
   const { userId } = useAuth();
@@ -228,7 +230,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const toggleSubtask = (id) => setSubtasks(subtasks.map((s) => s.id === id ? { ...s, done: !s.done } : s));
   const removeSubtask = (id) => setSubtasks(subtasks.filter((s) => s.id !== id));
   const promoteSubtask = async (s) => {
-    if (!confirm(`Promote "${s.text}" to a full task?\n\nIt will inherit this task's project and phase. The subtask will be removed from this list.`)) return;
+    if (!await ask.confirm({ title: `Promote “${s.text}” to a full task?`, message: 'It inherits this task\u2019s project and phase, and is removed from the checklist.', confirmLabel: 'Promote' })) return;
     try {
       await addTask(userId, {
         workspaceId: task.workspaceId,
@@ -245,7 +247,7 @@ export default function TaskEditor({ task, projects, onClose }) {
       setSubtasks(subtasks.filter((x) => x.id !== s.id));
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not promote subtask. Please try again.'));
+      toast.error(friendlyError(err, 'Could not promote subtask. Please try again.'));
     }
   };
   const moveSubtask = (idx, dir) => {
@@ -316,7 +318,7 @@ export default function TaskEditor({ task, projects, onClose }) {
       onClose();
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save task. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save task. Please try again.'));
       setSaving(false);
     }
   };
@@ -339,7 +341,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   };
 
   const saveAsTemplate = async () => {
-    const name = prompt('Template name:', title.trim() || 'New template');
+    const name = await ask.prompt({ title: 'Template name:', defaultValue: title.trim() || 'New template' });
     if (!name) return;
     try {
       const payload = taskAsTemplatePayload({
@@ -354,10 +356,10 @@ export default function TaskEditor({ task, projects, onClose }) {
         recurrence,
       });
       await addTemplate(userId, { workspaceId: task.workspaceId, name: name.trim(), kind: 'task', payload });
-      alert(`Saved template "${name.trim()}".`);
+      toast.success(`Saved template "${name.trim()}".`);
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not save template. Please try again.'));
+      toast.error(friendlyError(err, 'Could not save template. Please try again.'));
     }
   };
 
@@ -906,6 +908,7 @@ function TreeBar({ pct, color }) {
 // click to log. Goes through addActivity so the task's denormalized counters
 // stay in sync in the same batch.
 function LogComposer({ userId, task }) {
+  const toast = useToast();
   const [comment, setComment] = useState('');
   const [hours, setHours]     = useState('');
   const [posting, setPosting] = useState(false);
@@ -925,7 +928,7 @@ function LogComposer({ userId, task }) {
       setHours('');
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not log the activity. Please try again.'));
+      toast.error(friendlyError(err, 'Could not log the activity. Please try again.'));
     } finally {
       setPosting(false);
     }
@@ -1143,6 +1146,8 @@ function LinksEditor({ links, onChange, candidates }) {
 }
 
 function CommentsThread({ task, userId }) {
+  const toast = useToast();
+  const ask = useDialog();
   const taskId = task.id;
   const { comments, loading } = useTaskComments(taskId);
   const [body, setBody] = useState('');
@@ -1159,7 +1164,7 @@ function CommentsThread({ task, userId }) {
       setBody('');
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not post comment. Please try again.'));
+      toast.error(friendlyError(err, 'Could not post comment. Please try again.'));
     } finally {
       setPosting(false);
     }
@@ -1169,7 +1174,7 @@ function CommentsThread({ task, userId }) {
     const text = editingBody.trim();
     if (!text) { setEditingId(null); return; }
     try { await updateTaskComment(commentId, text); }
-    catch (err) { console.error(err); alert('Could not save edit.'); }
+    catch (err) { console.error(err); toast.error('Could not save edit.'); }
     setEditingId(null);
   };
 
@@ -1195,7 +1200,7 @@ function CommentsThread({ task, userId }) {
                     <>
                       <button className="btn btn-sm btn-ghost" onClick={() => { setEditingId(c.id); setEditingBody(c.body); }}>✎</button>
                       <button className="btn btn-sm btn-ghost link-danger"
-                        onClick={() => { if (confirm('Delete this comment?')) softDeleteTaskComment(c.id); }}>✕</button>
+                        onClick={async () => { if (await ask.confirm({ title: 'Delete this comment?', confirmLabel: 'Delete', danger: true })) softDeleteTaskComment(c.id); }}>✕</button>
                     </>
                   )}
                 </div>

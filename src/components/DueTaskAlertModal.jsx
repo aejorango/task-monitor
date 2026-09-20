@@ -19,6 +19,7 @@ import {
   buildFallbackPrompt, overdueDays, formatClock, snoozeUntil, SNOOZE_PRESETS_MIN,
 } from '../services/dueAlerts';
 import Markdown from './Markdown';
+import { useToast } from './Toast';
 
 const PROMPT_KEY_PREFIX = 'task-monitor.dueAlerts.prompt.v1.';
 // Per-device, like snooze/skip: one person grounding their prompts must not
@@ -56,13 +57,14 @@ function saveGroundPref(on) {
   try { localStorage.setItem(GROUND_KEY, on ? '1' : '0'); } catch { /* private mode */ }
 }
 
+// Returns whether it worked; the caller says so. A module-level helper cannot
+// use a hook, and the toast has to come from the component.
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
     return true;
   } catch (err) {
     console.error(err);
-    alert('Could not copy. Select the text manually and copy.');
     return false;
   }
 }
@@ -350,6 +352,7 @@ const SnoozeButton = forwardRef(function SnoozeButton({ defaultMin, onSnooze }, 
 /* ── GenAI prompt: generate (cached) → edit → copy → run ───────────────── */
 
 function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
+  const toast = useToast();
   const knowledge = useKnowledgeStatus();
   const notebookId = resolveNotebookFor({ project, workspace });
   const canGround = knowledge.available && !!notebookId;
@@ -416,6 +419,7 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
 
   const copy = async () => {
     if (await copyText(promptText)) { setCopyOk(true); setTimeout(() => setCopyOk(false), 1500); }
+    else toast.error('Could not copy. Select the text and copy it yourself.');
   };
 
   // Push the finished deliverable back into the notebook, so the next task in
@@ -560,7 +564,14 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
                   {answer.degraded && (
                     <span className="badge badge-soft-warn" title={answer.reason}>degraded</span>
                   )}
-                  <button className="btn btn-sm" onClick={() => copyText(answer.text)}>⎘ Copy answer</button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      if (!await copyText(answer.text)) {
+                        toast.error('Could not copy. Select the text and copy it yourself.');
+                      }
+                    }}
+                  >⎘ Copy answer</button>
                   {canGround && (
                     <button
                       className="btn btn-sm"

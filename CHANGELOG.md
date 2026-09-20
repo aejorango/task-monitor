@@ -68,3 +68,4 @@ One line per task from the Ideon task sheet.
 - T-0062 — Command palette with create and navigate actions — src/services/commandPalette.js, src/services/commandPalette.test.mjs, src/components/AppShell.jsx, tests/ui/commandPalette.test.mjs
 - T-0063 — Portfolio status report as PDF — src/services/statusReport.js, src/services/statusReport.test.mjs, src/components/DashboardView.jsx, tests/ui/statusReport.test.mjs
 - T-0064 — 95 native alert/prompt/confirm dialogs (API/data layer) — src/components/Dialog.jsx, src/App.jsx, src/App.css, tests/ui/dialog.test.mjs, tests/ui/dom.mjs
+- T-0065 — 95 native alert/prompt/confirm dialogs (UI) — 21 components across src/components/, tests/ui/noNativeDialogs.test.mjs

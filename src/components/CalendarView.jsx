@@ -12,6 +12,7 @@ import TaskEditor from './TaskEditor';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
 
 function parseISO(str) {
   if (!str) return null;
@@ -24,6 +25,7 @@ function iso(d) {
 const DAY = 24 * 60 * 60 * 1000;
 
 export default function CalendarView({ projectFilter }) {
+  const toast = useToast();
   const { tasks, loading } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { settings } = useSettings();
@@ -114,7 +116,7 @@ export default function CalendarView({ projectFilter }) {
     try { await updateTask(task.id, updates); }
     catch (err) {
       console.error('Could not reschedule task:', err);
-      alert(friendlyError(err, 'Could not reschedule task. Please try again.'));
+      toast.error(friendlyError(err, 'Could not reschedule task. Please try again.'));
     }
   };
 

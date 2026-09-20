@@ -28,6 +28,7 @@ import ActivityEditor from './ActivityEditor';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
 import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useDialog } from './Dialog';
 
 const COLUMNS = [
   { id: 'todo',  label: 'To Do' },
@@ -608,6 +609,7 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
 }
 
 function ActivityListInline({ taskId, onEditActivity }) {
+  const ask = useDialog();
   const { activities, loading } = useActivities(taskId);
   if (loading) return <p className="muted small">Loading log…</p>;
   if (activities.length === 0)
@@ -635,7 +637,7 @@ function ActivityListInline({ taskId, onEditActivity }) {
             <button
               className="link-danger"
               title="Delete entry"
-              onClick={() => { if (confirm('Delete this log entry?')) deleteActivity(a); }}
+              onClick={async () => { if (await ask.confirm({ title: 'Delete this log entry?', confirmLabel: 'Delete', danger: true })) deleteActivity(a); }}
             >✕</button>
           </div>
           {a.comment && <p className="activity-comment">{a.comment}</p>}

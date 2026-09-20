@@ -11,6 +11,8 @@ import {
   addConversationMembers, removeConversationMember,
 } from '../services/firebase';
 import { friendlyError } from '../services/access';
+import { useToast } from './Toast';
+import { useDialog } from './Dialog';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function relTime(ts) {
@@ -203,6 +205,7 @@ export default function MessagesView() {
 
 /* ── Thread ──────────────────────────────────────────────── */
 function ChatThread({ conversation, me, activeWs, onBack }) {
+  const toast = useToast();
   const { messages, loading } = useMessages(conversation.id);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -227,7 +230,7 @@ function ChatThread({ conversation, me, activeWs, onBack }) {
     } catch (err) {
       console.error('send failed', err);
       setDraft(text); // restore on failure
-      alert(friendlyError(err, 'Could not send. Please try again.'));
+      toast.error(friendlyError(err, 'Could not send. Please try again.'));
     } finally {
       setSending(false);
     }
@@ -349,6 +352,7 @@ function ChatThread({ conversation, me, activeWs, onBack }) {
 
 /* ── New chat modal ──────────────────────────────────────── */
 function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
+  const toast = useToast();
   const [mode, setMode] = useState('dm'); // 'dm' | 'group'
   const [selected, setSelected] = useState(new Set());
   const [groupName, setGroupName] = useState('');
@@ -386,7 +390,7 @@ function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
       onCreated(id);
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not start the conversation. Please try again.'));
+      toast.error(friendlyError(err, 'Could not start the conversation. Please try again.'));
       setBusy(false);
     }
   };
@@ -448,6 +452,8 @@ function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
 
 /* ── Group members modal (add / remove) ──────────────────── */
 function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
+  const toast = useToast();
+  const ask = useDialog();
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(new Set());
 
@@ -480,7 +486,7 @@ function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
       setAdding(new Set());
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not add members. Please try again.'));
+      toast.error(friendlyError(err, 'Could not add members. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -490,14 +496,14 @@ function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
     const isMe = uid === me?.uid;
     const prof = conversation.memberProfiles?.[uid];
     const who = isMe ? 'yourself' : (prof?.displayName || prof?.email || 'this member');
-    if (!confirm(isMe ? 'Leave this group?' : `Remove ${who} from the group?`)) return;
+    if (!await ask.confirm({ title: isMe ? 'Leave this group?' : `Remove ${who} from the group?`, confirmLabel: 'Remove', danger: true })) return;
     setBusy(true);
     try {
       await removeConversationMember(conversation.id, uid);
       if (isMe) { onLeft(); return; }
     } catch (err) {
       console.error(err);
-      alert(friendlyError(err, 'Could not remove member. Please try again.'));
+      toast.error(friendlyError(err, 'Could not remove member. Please try again.'));
     } finally {
       setBusy(false);
     }
