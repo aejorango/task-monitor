@@ -7,6 +7,7 @@ import { useAiStatus } from '../hooks/useAiStatus';
 import { useAuth } from '../hooks/useTasks';
 import { addTask } from '../services/firebase';
 import { useToast } from './Toast';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -71,6 +72,7 @@ function scheduleDrafts(tasks, planStart, planEnd) {
 }
 
 export default function AiTaskGenerator({ project, onClose }) {
+  const modal = useModalDialog({ onClose: () => { const f = creating ? undefined : onClose; if (typeof f === "function") f(); } });
   const toast = useToast();
   const { userId } = useAuth();
   const { available: aiAvailable } = useAiStatus();
@@ -165,9 +167,9 @@ export default function AiTaskGenerator({ project, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={creating ? undefined : onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
-        <h3 className="modal-title">✨ Generate tasks from description</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal modal-wide" style={{ maxWidth: 760 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>✨ Generate tasks from description</h3>
         <p className="modal-sub">
           Project: <strong>{project.name}</strong>
           {project.description && <> · {project.description.slice(0, 80)}{project.description.length > 80 ? '…' : ''}</>}

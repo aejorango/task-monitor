@@ -37,6 +37,7 @@ import { downloadFile } from '../services/download';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
 import { useDialog } from './Dialog';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -319,6 +320,7 @@ export default function ProjectsView() {
 // Includes CSV download. Read-only — the full Activity Log view (sidebar)
 // retains bulk edit / delete / import.
 function ProjectActivityLogModal({ project, onClose }) {
+  const modal = useModalDialog({ onClose });
   const { activities, loading } = useAllActivities();
   const { tasks } = useTasks();
   const taskById = {};
@@ -399,17 +401,15 @@ function ProjectActivityLogModal({ project, onClose }) {
 
   return (
     <>
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" {...modal.backdropProps}>
       <div
         className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 1100, width: '95vw' }}
-      >
+        style={{ maxWidth: 1100, width: '95vw' }} {...modal.dialogProps}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <span className="proj-icon" style={{ color: project.color }} aria-hidden="true">
             {iconFor(project) === '◆' && !project.icon ? suggestIcon(project.id) : iconFor(project)}
           </span>
-          <h3 className="modal-title" style={{ margin: 0 }}>{project.name} — Activity log</h3>
+          <h3 className="modal-title" style={{ margin: 0 }} id={modal.titleId}>{project.name} — Activity log</h3>
         </div>
         <p className="modal-sub" style={{ marginBottom: 12 }}>
           {rows.length} entr{rows.length === 1 ? 'y' : 'ies'} · {totalHours.toFixed(1)}h total. Click a column to sort.
@@ -925,6 +925,9 @@ const ACT_FILTERS = [
 ];
 
 function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
+  // The project editor is a full-bleed panel with a breadcrumb hero rather
+  // than a heading, so it is labelled directly.
+  const modal2 = useModalDialog({ onClose, title: 'Project editor' });
   const ask = useDialog();
   const toast = useToast();
   const { projects } = useProjects();
@@ -1214,8 +1217,8 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
 
   return (
     <>
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="pe-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" {...modal2.backdropProps}>
+      <div className="pe-modal" {...modal2.dialogProps}>
 
         {/* ── Hero header ── */}
         <header className="pe-hero">
@@ -1703,6 +1706,7 @@ function ProjectAssigneeStrip({ project }) {
 }
 
 function SegmentManager({ projects, onClose }) {
+  const modal3 = useModalDialog({ onClose });
   const toast = useToast();
   const ask = useDialog();
   const workspaceId = useActiveWorkspaceId();
@@ -1792,9 +1796,9 @@ function SegmentManager({ projects, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Manage Segments</h3>
+    <div className="modal-backdrop" {...modal3.backdropProps}>
+      <div className="modal" {...modal3.dialogProps}>
+        <h3 className="modal-title" id={modal3.titleId}>Manage Segments</h3>
         <p className="modal-sub">
           Create, rename, or delete project segments/departments. Move projects between segments by editing them.
         </p>

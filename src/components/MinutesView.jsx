@@ -19,6 +19,7 @@ import { toMarkdown } from '../services/exporters';
 import { useToast } from './Toast';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { useDialog } from './Dialog';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -484,6 +485,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
 }
 
 function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
@@ -560,9 +562,9 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, width: '95vw' }}>
-        <h3 className="modal-title">{minute ? 'Edit minutes' : 'New minutes'}</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 640, width: '95vw' }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>{minute ? 'Edit minutes' : 'New minutes'}</h3>
         <p className="modal-sub">Record what happened and who does what next.</p>
 
         <div className="modal-scroll" style={{ maxHeight: '68vh', overflowY: 'auto', paddingRight: 4 }}>

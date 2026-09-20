@@ -12,8 +12,10 @@ import TaskActivitiesModal from './TaskActivitiesModal';
 import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
 import { downloadFile } from '../services/download';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function WbsModal({ project, tasks: tasksProp, projects: projectsProp, onClose }) {
+  const modal = useModalDialog({ onClose });
   const { tasks: wsTasks } = useTasks();
   const { projects: wsProjects } = useProjects();
   const { userId } = useAuth();
@@ -83,16 +85,14 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" {...modal.backdropProps}>
       <div
         className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 780, width: '95vw' }}
-      >
+        style={{ maxWidth: 780, width: '95vw' }} {...modal.dialogProps}>
         {/* ── Header ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
           <span style={{ width: 14, height: 14, borderRadius: 4, background: project.color, flexShrink: 0, display: 'inline-block' }} />
-          <h3 className="modal-title" style={{ margin: 0 }}>Work Breakdown Structure</h3>
+          <h3 className="modal-title" style={{ margin: 0 }} id={modal.titleId}>Work Breakdown Structure</h3>
         </div>
         <p className="modal-sub">
           {project.name} · {totalTasks} task{totalTasks !== 1 ? 's' : ''} · {doneTasks} done · {pct}% complete

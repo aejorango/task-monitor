@@ -15,6 +15,7 @@ import { buildGoalsDocument } from '../services/exporters';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -272,6 +273,7 @@ function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs }) {
 // ─── Editor modal ───────────────────────────────────────────────────────────
 
 function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const ask = useDialog();
   const { userId } = useAuth();
@@ -359,9 +361,9 @@ function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760, width: '95vw' }}>
-        <h3 className="modal-title">{goal ? 'Edit goal' : 'New goal'}</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 760, width: '95vw' }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>{goal ? 'Edit goal' : 'New goal'}</h3>
         <p className="modal-sub">Build a strategic-plan one-pager.</p>
 
         <div className="modal-scroll" style={{ maxHeight: '68vh', overflowY: 'auto', paddingRight: 4 }}>

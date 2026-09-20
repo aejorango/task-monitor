@@ -12,8 +12,10 @@ import {
   buildImportPreview, importTaskKey, readActivityCsv, summarizeImport,
 } from '../services/csv';
 import { friendlyError } from '../services/access';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function CsvImporter({ onClose }) {
+  const modal = useModalDialog({ onClose: () => { const f = importing ? undefined : onClose; if (typeof f === "function") f(); } });
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const { projects } = useProjects();
@@ -124,9 +126,9 @@ export default function CsvImporter({ onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={importing ? undefined : onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900 }}>
-        <h3 className="modal-title">Import activities from CSV</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal modal-wide" style={{ maxWidth: 900 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>Import activities from CSV</h3>
         <p className="modal-sub">
           Expected columns: <span className="mono small">Project, Phase, Task, Activity details, Date, Completion, Output link, Bottlenecks, Requested by, Hours</span>.
           Round-trip with <strong>Export CSV</strong> works out of the box.

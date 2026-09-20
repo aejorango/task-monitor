@@ -37,6 +37,7 @@ import { useToast } from './Toast';
 import AddToNotebookButton from './AddToNotebookButton';
 import { friendlyError } from '../services/access';
 import { useDialog } from './Dialog';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 // ── Small formatters ────────────────────────────────────────────────────────
 function daysBetween(fromYmd, toYmd) {
@@ -76,6 +77,8 @@ const ACT_FILTERS = [
 ];
 
 export default function TaskEditor({ task, projects, onClose }) {
+  // Same shape as the project editor: a hero breadcrumb, no heading element.
+  const modal = useModalDialog({ onClose, title: 'Task editor' });
   const ask = useDialog();
   const toast = useToast();
   const { tasks: allTasks } = useTasks();
@@ -365,8 +368,8 @@ export default function TaskEditor({ task, projects, onClose }) {
 
   return (
     <>
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="pe-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="pe-modal" {...modal.dialogProps}>
 
         {/* ── Hero header ── */}
         <header className="pe-hero">

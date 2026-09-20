@@ -19,10 +19,12 @@ import {
   parseImportRows, summarizeImportRows,
 } from '../services/csv';
 import { friendlyError } from '../services/access';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const KIND_KEYS = Object.keys(IMPORT_KINDS);
 
 export default function ImportWizard({ onClose, initialKind = 'tasks' }) {
+  const modal = useModalDialog({ onClose: () => { const f = importing ? undefined : onClose; if (typeof f === "function") f(); } });
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const { projects } = useProjects();
@@ -115,9 +117,9 @@ export default function ImportWizard({ onClose, initialKind = 'tasks' }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={importing ? undefined : onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 860 }}>
-        <h3 className="modal-title">Import from a spreadsheet</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal modal-wide" style={{ maxWidth: 860 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>Import from a spreadsheet</h3>
         <p className="modal-sub">
           Save your sheet as a <strong>.csv</strong>, then bring it in here. Nothing is
           added until you confirm on the last step.

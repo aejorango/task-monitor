@@ -12,8 +12,10 @@ import { todayLocal, setTaskStatus } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import ActivityLogger from './ActivityLogger';
 import { useToast } from './Toast';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function TaskActivitiesModal({ task, onClose, onEditTask, userId }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const { activities, loading } = useActivities(task.id);
   const { byId: projectById } = useProjects();
@@ -40,20 +42,13 @@ export default function TaskActivitiesModal({ task, onClose, onEditTask, userId 
   };
 
   return (
-    <div
-      className="modal-backdrop"
-      // Close only when the backdrop itself is clicked — not when a click
-      // bubbles up, and not from a stray trailing event right after opening.
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <div className="modal-backdrop" {...modal.backdropProps}>
       <div
         className="modal modal-wide"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 880 }}
-      >
+        style={{ maxWidth: 880 }} {...modal.dialogProps}>
         <div className="task-activities-head">
           <div>
-            <h3 className="modal-title" style={{ marginBottom: 4 }}>{task.title}</h3>
+            <h3 className="modal-title" style={{ marginBottom: 4 }} id={modal.titleId}>{task.title}</h3>
             <p className="modal-sub">
               {project && (
                 <span className="proj-tag" style={{ marginRight: 6 }}>

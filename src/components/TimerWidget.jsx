@@ -6,8 +6,10 @@ import { useAuth, useTasks } from '../hooks/useTasks';
 import { addActivity, todayLocal } from '../services/firebase';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function TimerWidget() {
+  const modal = useModalDialog({ onClose: () => { const f = () => setConfirmOpen(false); if (typeof f === "function") f(); } });
   const toast = useToast();
   const { running, state, elapsedMs, elapsedHours, stop } = useTimer();
   const { tasks } = useTasks();
@@ -66,9 +68,9 @@ export default function TimerWidget() {
       </div>
 
       {confirmOpen && (
-        <div className="modal-backdrop" onClick={() => setConfirmOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-            <h3 className="modal-title">Stop timer</h3>
+        <div className="modal-backdrop" {...modal.backdropProps}>
+          <div className="modal" style={{ maxWidth: 440 }} {...modal.dialogProps}>
+            <h3 className="modal-title" id={modal.titleId}>Stop timer</h3>
             <p className="modal-sub">
               <strong>{state.taskTitle}</strong> · {formatElapsed(elapsedMs)} ({elapsedHours.toFixed(2)}h)
             </p>

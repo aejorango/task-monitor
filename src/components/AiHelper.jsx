@@ -7,6 +7,7 @@ import { useTasks, useProjects } from '../hooks/useTasks';
 import { suggestTopTasks, generateClaudePrompt } from '../services/anthropic';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { todayLocal } from '../services/firebase';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function AiHelper() {
   const [open, setOpen] = useState(false);
@@ -26,6 +27,7 @@ export default function AiHelper() {
 }
 
 function AiHelperModal({ onClose }) {
+  const modal = useModalDialog({ onClose });
   const { tasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { available: aiAvailable } = useAiStatus();
@@ -69,12 +71,12 @@ function AiHelperModal({ onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 560 }} {...modal.dialogProps}>
         <div className="ai-helper-head">
           <div className="ai-helper-bulb"><BulbIcon size={22} /></div>
           <div>
-            <h3 className="modal-title" style={{ margin: 0 }}>Stuck? Don't know what to do next?</h3>
+            <h3 className="modal-title" style={{ margin: 0 }} id={modal.titleId}>Stuck? Don't know what to do next?</h3>
             <p className="modal-sub" style={{ margin: '2px 0 0' }}>
               Let AI scan your open tasks and tell you the highest-impact things to tackle now.
             </p>

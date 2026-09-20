@@ -13,6 +13,7 @@ import {
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function relTime(ts) {
@@ -352,6 +353,7 @@ function ChatThread({ conversation, me, activeWs, onBack }) {
 
 /* ── New chat modal ──────────────────────────────────────── */
 function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const [mode, setMode] = useState('dm'); // 'dm' | 'group'
   const [selected, setSelected] = useState(new Set());
@@ -398,9 +400,9 @@ function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
   const canCreate = selected.size > 0 && (mode === 'dm' || mode === 'group');
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
-        <h3 className="modal-title">New message</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 460 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>New message</h3>
 
         <div className="chat-mode-toggle">
           <button className={`chip ${mode === 'dm' ? 'active' : ''}`} onClick={() => { setMode('dm'); setSelected(new Set()); }}>Direct</button>
@@ -452,6 +454,7 @@ function NewChatModal({ me, workspaceId, activeWs, onClose, onCreated }) {
 
 /* ── Group members modal (add / remove) ──────────────────── */
 function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
+  const modal2 = useModalDialog({ onClose });
   const toast = useToast();
   const ask = useDialog();
   const [busy, setBusy] = useState(false);
@@ -510,9 +513,9 @@ function ChatMembersModal({ conversation, me, activeWs, onClose, onLeft }) {
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
-        <h3 className="modal-title">{conversation.name || 'Group'} — members</h3>
+    <div className="modal-backdrop" {...modal2.backdropProps}>
+      <div className="modal" style={{ maxWidth: 460 }} {...modal2.dialogProps}>
+        <h3 className="modal-title" id={modal2.titleId}>{conversation.name || 'Group'} — members</h3>
         <p className="modal-sub">{memberUids.length} member{memberUids.length === 1 ? '' : 's'}. Anyone in the group can add or remove people.</p>
 
         <div className="chat-member-list" style={{ marginTop: 8 }}>

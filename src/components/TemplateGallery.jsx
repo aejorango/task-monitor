@@ -11,8 +11,10 @@ import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addProject, addTask, uid } from '../services/firebase';
 import { TEMPLATE_GALLERY, describeTemplate, templateToProject } from '../templates/gallery';
 import { friendlyError } from '../services/access';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function TemplateGallery({ onClose, onCreated }) {
+  const modal = useModalDialog({ onClose: () => { const f = busy ? undefined : onClose; if (typeof f === "function") f(); } });
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [chosen, setChosen] = useState(null);
@@ -45,9 +47,9 @@ export default function TemplateGallery({ onClose, onCreated }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820 }}>
-        <h3 className="modal-title">Start from a template</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal modal-wide" style={{ maxWidth: 820 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>Start from a template</h3>
         <p className="modal-sub">
           Pick the process closest to your work. You get its phases and a starting
           set of tasks — change anything you like afterwards.

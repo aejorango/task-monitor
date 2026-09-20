@@ -8,8 +8,10 @@ import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addTask, todayLocal } from '../services/firebase';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
@@ -49,9 +51,9 @@ export default function TaskQuickAdd({ projects, projectFilter, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-        <h3 className="modal-title">New task</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 480 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>New task</h3>
         <p className="modal-sub">Add a task directly to the timeline.</p>
 
         <div className="field">

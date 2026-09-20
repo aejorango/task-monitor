@@ -5,6 +5,7 @@ import { editActivity } from '../services/firebase';
 import FileUpload from './FileUpload';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const COMPLETION_OPTIONS = [
   { value: 'not-started', label: 'Not started' },
@@ -14,6 +15,7 @@ const COMPLETION_OPTIONS = [
 ];
 
 export default function ActivityEditor({ activity, onClose }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const [date, setDate]           = useState(activity.date || '');
   const [comment, setComment]     = useState(activity.comment || '');
@@ -62,9 +64,9 @@ export default function ActivityEditor({ activity, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Edit activity</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>Edit activity</h3>
         <p className="modal-sub">{activity.taskTitle}</p>
 
         <div className="field-row">

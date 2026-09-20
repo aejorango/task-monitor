@@ -12,11 +12,13 @@ import {
 } from '../services/firebase';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 const ICONS  = ['◆', '◉', '◈', '▲', '★', '☀', '✦', '✿', '⌘', '⚡', '☂', '✈'];
 
 export default function WorkspaceEditor({ workspace, onClose }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const ask = useDialog();
   const { userId } = useAuth();
@@ -147,9 +149,9 @@ export default function WorkspaceEditor({ workspace, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => onClose()}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-        <h3 className="modal-title">{isNew ? 'Create workspace' : 'Edit workspace'}</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 480 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>{isNew ? 'Create workspace' : 'Edit workspace'}</h3>
         <p className="modal-sub">A workspace contains projects, tasks, activities, and templates. Members of the workspace can see and edit everything inside it.</p>
 
         <div className="field-row">

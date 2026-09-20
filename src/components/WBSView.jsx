@@ -13,6 +13,7 @@ import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
 import TaskQuickAdd from './TaskQuickAdd';
 import { downloadFile } from '../services/download';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -758,6 +759,7 @@ function PctCell({ pct, color }) {
 // project Activity Log view.
 
 function ScopedActivityLogModal({ scope, onClose }) {
+  const modal = useModalDialog({ onClose });
   const { activities, loading } = useAllActivities();
   const { tasks, userId } = useTasks();
   const { projects } = useProjects();
@@ -845,11 +847,11 @@ function ScopedActivityLogModal({ scope, onClose }) {
 
   return (
     <>
-      <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 1100, width: '95vw' }}>
+      <div className="modal-backdrop" {...modal.backdropProps}>
+        <div className="modal" style={{ maxWidth: 1100, width: '95vw' }} {...modal.dialogProps}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
             <span className="proj-dot" style={{ background: project.color, width: 14, height: 14 }} />
-            <h3 className="modal-title" style={{ margin: 0 }}>{scopeTitle} — Activity log</h3>
+            <h3 className="modal-title" style={{ margin: 0 }} id={modal.titleId}>{scopeTitle} — Activity log</h3>
           </div>
           <p className="modal-sub" style={{ marginBottom: 12 }}>
             All activities under this {scopeLabel} · {rows.length} entr{rows.length === 1 ? 'y' : 'ies'} · {totalHours.toFixed(1)}h total

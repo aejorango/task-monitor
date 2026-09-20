@@ -58,6 +58,7 @@ import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../servi
 import KnowledgeSection from './KnowledgeSection';
 import { sessionLine, SETTINGS_SUBTITLE } from '../services/approvalCopy';
 import { memberLabel, memberSubLabel, validateInvite } from '../services/invites';
+import { useModalDialog } from '../hooks/useModalDialog';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
 import { versionLine } from '../services/appVersion';
@@ -1006,6 +1007,7 @@ function WebhooksSection({ userId }) {
 }
 
 function WebhookEditor({ hook, userId, onClose }) {
+  const modal = useModalDialog({ onClose });
   const toast = useToast();
   const workspaceId = useActiveWorkspaceId();
   const isNew = !hook;
@@ -1035,9 +1037,9 @@ function WebhookEditor({ hook, userId, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
-        <h3 className="modal-title">{isNew ? 'New webhook' : 'Edit webhook'}</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 540 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>{isNew ? 'New webhook' : 'Edit webhook'}</h3>
         <div className="field">
           <label className="label">Name</label>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Slack #project-updates" />
@@ -1156,6 +1158,7 @@ function WorkspacesSection({ currentUser, isSuperadmin = false }) {
 }
 
 function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = false, onClose }) {
+  const modal2 = useModalDialog({ onClose });
   const toast = useToast();
   const ask = useDialog();
   const [newEmail, setNewEmail] = useState('');
@@ -1226,9 +1229,9 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
-        <h3 className="modal-title">{workspace.name} — members</h3>
+    <div className="modal-backdrop" {...modal2.backdropProps}>
+      <div className="modal" style={{ maxWidth: 540 }} {...modal2.dialogProps}>
+        <h3 className="modal-title" id={modal2.titleId}>{workspace.name} — members</h3>
         <p className="modal-sub">
           Members can see and edit everything in this workspace. Admins can invite
           people, remove them and change their role. Invite someone by their email

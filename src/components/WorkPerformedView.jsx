@@ -8,6 +8,7 @@ import { useAllActivities, useProjects, useAuth, useTasks } from '../hooks/useTa
 import { todayLocal } from '../services/firebase';
 import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
+import { useModalDialog } from '../hooks/useModalDialog';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function friendlyDate(s) {
@@ -383,6 +384,7 @@ export default function WorkPerformedView({ projectFilter }) {
 
 /* ── Pick a task to log against ──────────────────────────── */
 function LogActivityPicker({ tasks, projectById, projectFilter, onPick, onClose }) {
+  const modal = useModalDialog({ onClose });
   const [query, setQuery] = useState('');
   const [taskId, setTaskId] = useState('');
 
@@ -401,9 +403,9 @@ function LogActivityPicker({ tasks, projectById, projectFilter, onPick, onClose 
   const chosen = candidates.find((t) => t.id === taskId) || null;
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
-        <h3 className="modal-title">Log activity</h3>
+    <div className="modal-backdrop" {...modal.backdropProps}>
+      <div className="modal" style={{ maxWidth: 460 }} {...modal.dialogProps}>
+        <h3 className="modal-title" id={modal.titleId}>Log activity</h3>
         <p className="modal-sub">Pick the task you worked on, then record what you did.</p>
 
         <div className="field">
