@@ -32,6 +32,7 @@ import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import NotebookPicker from './NotebookPicker';
 import TemplateGallery from './TemplateGallery';
+import ShareLinksPanel from './ShareLinksPanel';
 import { useToast } from './Toast';
 import { downloadFile } from '../services/download';
 import { useQuickCreate } from '../hooks/useQuickCreate';
@@ -1549,6 +1550,13 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
               <section className="pe-card">
                 <h4 className="pe-sect"><span className="pe-sect-mark">⇄</span>Members &amp; invites</h4>
                 <ProjectSharing project={project} bare />
+              </section>
+            )}
+
+            {!isNew && (
+              <section className="pe-card">
+                <h4 className="pe-sect"><span className="pe-sect-mark">⇱</span>Share with a client</h4>
+                <ShareLinksPanel project={project} tasks={tasks} />
               </section>
             )}
 

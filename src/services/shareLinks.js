@@ -199,6 +199,36 @@ export function buildShareLink({
   };
 }
 
+/**
+ * Bars as percentages of the window the shared tasks themselves cover.
+ *
+ * Here rather than in the page, so the public page pulls in no chart library
+ * and no part of the app's own Gantt — and so the arithmetic is tested.
+ *
+ * @returns {{ start: number, span: number, rows: {task, left, width}[] }}
+ *          `width` is null for a task with no dates at all.
+ */
+export function buildBars(tasks = []) {
+  const day = (s) => (s ? new Date(`${s}T00:00:00`).getTime() : null);
+  const points = tasks
+    .flatMap((t) => [day(t.startDate), day(t.endDate)])
+    .filter((n) => n !== null);
+  const min = points.length ? Math.min(...points) : Date.now();
+  const max = points.length ? Math.max(...points) : Date.now() + 7 * DAY_MS;
+  const span = Math.max(1, Math.round((max - min) / DAY_MS));
+
+  const rows = tasks.map((task) => {
+    const from = day(task.startDate) ?? day(task.endDate);
+    const to = day(task.endDate) ?? day(task.startDate);
+    if (from === null || to === null) return { task, left: 0, width: null };
+    const left = Math.min(98, ((from - min) / DAY_MS / span) * 100);
+    const width = Math.max(2, ((to - from) / DAY_MS / span) * 100);
+    return { task, left, width: Math.min(100 - left, width) };
+  });
+
+  return { start: min, span, rows };
+}
+
 /** What the person publishing it is told they are about to do. */
 export function describeShare(share) {
   const kind = SHARE_KINDS.find((k) => k.value === share?.kind)?.label || 'This project';

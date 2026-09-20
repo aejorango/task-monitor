@@ -285,6 +285,9 @@ src/
 │   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
 │   ├── WorkloadView.jsx     ← Board → Workload: people × weeks, drag to rebalance
+│   ├── ShareLinksPanel.jsx  ← project editor: publish / refresh / turn off a link
+│   ├── SharedViewPage.jsx   ← the public route: fetches one snapshot, no sign-in
+│   ├── SharedSnapshot.jsx   ← renders it (board or timeline), fetches nothing
 │   ├── InboxBell.jsx         ← topbar 📥: unread count, opens InboxPanel
 │   ├── InboxPanel.jsx        ← the list of notices (presentational, harness-friendly)
 │   ├── NotebookPicker.jsx    ← cache-only notebook select (never spawns the CLI)
@@ -459,6 +462,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Writing a second copy of the automation vocabulary in the UI. `AutomationsSection` imports `TRIGGERS` / `CONDITION_FIELDS` / `OPERATORS` / `ACTIONS` / `describeRule` / `validateRule` from `functions/src/automations.js` — the module the runner uses. A parallel list in a component is how a form comes to offer a rule the runner will never run.
 - ❌ Showing an id in an automation. Every value in a rule is a project, a person, a phase or a connection: render it through the section's `nameFor`, and pick it from a dropdown. Nobody types an id.
 - ❌ An action with nowhere to land. "Tell someone" writes a `notifications` doc — if nothing renders those, the action is dead UI. Settings → Automations shows the signed-in person's unread notices.
+- ❌ Putting the shared page behind the auth gate. `#/shared/<token>` renders in App.jsx **before** the `!ready` check — asking a client to sign in is the one thing it must never do. It imports `SharedSnapshot` and `getSharedView` and nothing else from the app.
 - ❌ Making a share link a window instead of a snapshot. `sharedViews/{token}` holds the rows it shows, so a leaked token leaks one project's headline state and never grows into more; opening `tasks` to an unauthenticated reader would have been a hole the size of the workspace. What may leave is the written-down list in `SHARED_TASK_FIELDS` — no people, no hours, no comments, no attachments.
 - ❌ Enforcing a link's expiry in the page. `allow list: if false` plus `shareIsLive()` in `firestore.rules` is what makes a revoked or expired link stop working; a UI check would be bypassed by the SDK in a console.
 - ❌ Reusing `is-over` for two things. On a workload cell it means *over capacity*; the drag-over state is `is-drop-target`. One class for both meant a full week and a hovered week looked identical.

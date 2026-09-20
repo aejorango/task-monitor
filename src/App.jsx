@@ -24,6 +24,7 @@ const TasksTableView    = lazy(() => import('./components/TasksTableView'));
 const TrashView         = lazy(() => import('./components/TrashView'));
 const TimesheetView     = lazy(() => import('./components/TimesheetView'));
 const WorkloadView      = lazy(() => import('./components/WorkloadView'));
+const SharedViewPage    = lazy(() => import('./components/SharedViewPage'));
 const GanttView         = lazy(() => import('./components/GanttView'));
 const CalendarView      = lazy(() => import('./components/CalendarView'));
 const DashboardView     = lazy(() => import('./components/DashboardView'));
@@ -50,7 +51,7 @@ const VIEW_NAMES = {
   analytics: 'Analytics', projects: 'Projects', settings: 'Settings',
   'work-performed': 'Work Performed', timesheet: 'Timesheet', workload: 'Workload',
   'how-to-use': 'How to use',
-  'ask-ai': 'Ask AI', trash: 'Trash', invite: 'invite',
+  'ask-ai': 'Ask AI', trash: 'Trash', invite: 'invite', shared: 'shared page',
 };
 
 function ViewSpinner() {
@@ -95,6 +96,20 @@ export default function App() {
   //   4. Status pending                → PendingApprovalView
   //   5. Status rejected               → PendingApprovalView (rejected state)
   //   6. Status approved               → AppShell
+
+  // A share link (#/shared/<token>) is for somebody who has no account and is
+  // not going to get one. It renders BEFORE the auth gate — before we even wait
+  // for sign-in to settle — because signing in is exactly what it must not ask
+  // for. It reads one world-readable document and nothing else.
+  if (route.view === 'shared') {
+    return (
+      <ErrorBoundary scope="app">
+      <Suspense fallback={<FullPageSpinner label="Opening…" />}>
+        <SharedViewPage token={route.projectFilter} />
+      </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   if (!ready) {
     return <FullPageSpinner label="Signing in…" />;

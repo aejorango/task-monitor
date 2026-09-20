@@ -214,6 +214,28 @@ chips on the board card, can be added as columns in **Reports → Task table**
 as columns to every task export. Two projects with a field of the same name are
 labelled with the project so they can be told apart.
 
+## Sharing a project with a client
+
+**Project editor → Share with a client** publishes a read-only page anyone can
+open without an account: the tasks, where each one stands and when each is due,
+as a **board** or a **timeline**.
+
+- **It is a snapshot, not a window.** The link holds the rows it shows. Nothing
+  in the database opens up, so a leaked link leaks one project's headline state
+  and never grows into more. It shows the project as it was when you published
+  or last **Refresh**ed it.
+- **What it never shows:** comments, attachments, hours, custom fields, tags,
+  who is working on what, or anything from another project.
+- **It can be switched off**, and it expires (7/30/90 days, or not at all —
+  your choice at publish time). Revoked or expired, the link stops working —
+  `firestore.rules` refuses it, so it is not merely hidden.
+- **Publishing is an owner's or admin's decision**, and the app tells you
+  exactly what you are handing out before the link exists.
+
+`sharedViews` is the one world-readable collection in the app: readable only by
+its exact token (never listable), and only while it is live. Deploy the rules
+with `npm run deploy:rules` before the first link will open.
+
 ## Workload
 
 **Board → Workload** is the next six weeks: people down the side, weeks across
@@ -441,6 +463,7 @@ run together.
 | `tests/ui/workload.test.mjs` | The planner grid, the drag, and what a drop writes |
 | `tests/ui/workloadFlow.test.mjs` | Overloaded → dragged → assignedTo and plan.endDate updated |
 | `tests/ui/shareLinksApi.test.mjs` | One world-readable document, by exact token, and nothing else |
+| `tests/ui/shareLinks.test.mjs` | Publishing a link, and the page a client opens |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
@@ -514,6 +537,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/automations.html` | The automation rule editor, with sample projects, people and connections |
 | `/dev/inbox.html` | The inbox panel with sample notices, and the @mention picker |
 | `/dev/workload.html` | The workload grid and its drag-and-drop, against sample people |
+| `/dev/shared.html` | The page a client opens (`?kind=board`, `?kind=dead`) |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 
 ## Working with Claude Code

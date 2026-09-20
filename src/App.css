@@ -10729,3 +10729,120 @@ a:hover { text-decoration: underline; }
   .workload-person, .workload-person-head { min-width: 118px; }
   .workload-cell { min-width: 132px; }
 }
+
+/* ── Share links (ShareLinksPanel.jsx) ────────────────────────────────────── */
+.share-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 12px;
+}
+.share-new .label { margin: 0; }
+.share-item { grid-template-columns: auto 1fr auto auto auto; }
+.share-url {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text-muted);
+}
+
+/* ── The page a client sees (SharedViewPage.jsx) ──────────────────────────── */
+.shared-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+  min-height: 100vh;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+.shared-page-centred {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+}
+.shared-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+.shared-title { font-size: 24px; margin: 2px 0 6px; }
+.shared-asof { text-align: right; line-height: 1.7; }
+.shared-foot {
+  margin-top: 36px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-border);
+  max-width: 62ch;
+}
+
+.shared-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.shared-column {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md, 7px);
+  padding: 12px;
+}
+.shared-column-head { font-size: 13px; margin: 0 0 10px; display: flex; gap: 6px; align-items: baseline; }
+.shared-card-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.shared-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm, 5px);
+  background: var(--c-bg);
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+.shared-card-title { font-size: 13.5px; line-height: 1.4; }
+.shared-card-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.shared-late { color: var(--c-danger, #d2544a); }
+.shared-progress {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--c-border);
+  overflow: hidden;
+}
+.shared-progress-fill { display: block; height: 100%; background: var(--c-accent); }
+
+.shared-bar-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.shared-bar-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+.shared-bar-label { font-size: 13px; }
+.shared-bar-track {
+  position: relative;
+  display: block;
+  height: 18px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+}
+.shared-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 999px;
+  background: var(--c-accent);
+}
+.shared-bar.is-done { background: var(--c-success, #2e9e6b); }
+.shared-bar.is-late { background: var(--c-danger, #d2544a); }
+.shared-bar-none { position: absolute; left: 8px; top: 1px; }
+.shared-bar-when { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .shared-board { grid-template-columns: 1fr; }
+  .shared-bar-row { grid-template-columns: 1fr; gap: 4px; }
+  .shared-asof { text-align: left; }
+}
