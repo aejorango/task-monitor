@@ -1,6 +1,13 @@
 # Task Monitor — Scalable Firestore Schema
 
-This schema is designed so your task tracker can grow from 10 tasks to 10,000+ without hitting Firestore's structural blockers (1 MiB doc limit, expensive reads, slow queries, fragile updates).
+This schema is designed so the tracker can grow from 10 tasks to 10,000+ without hitting Firestore's structural blockers (1 MiB doc limit, expensive reads, slow queries, fragile updates).
+
+> **Scope note.** This document explains the *shape* of the data and why it is
+> that shape. It predates the workspace model and the approval gate, so the rule
+> snippets below are illustrative rather than current. The live, authoritative
+> version of both is **[`firestore.rules`](../firestore.rules)**, and the live
+> collection list is the **Data Model** section of
+> [`CLAUDE.md`](../CLAUDE.md). Every document now also carries `workspaceId`.
 
 ---
 
@@ -229,7 +236,10 @@ service cloud.firestore {
 }
 ```
 
-Pair this with **Anonymous Authentication** in Firebase Auth — one click, no UI needed, gives every browser session a stable `uid` so the rules work.
+> **Out of date.** The app used anonymous auth when this was written. It now
+> uses **Google sign-in with an approval gate**: every account starts at
+> `users/{uid}.status == 'pending'` and a superadmin approves it, which
+> `firestore.rules` enforces on every read and write (`isApproved()`).
 
 ---
 
@@ -238,7 +248,10 @@ Pair this with **Anonymous Authentication** in Firebase Auth — one click, no U
 If you outgrow this and need:
 - **Full-text search on comments** → mirror activities into Algolia or Typesense
 - **Reports/analytics** → schedule a daily Cloud Function that aggregates to a `daily_summaries` collection
-- **Multi-user teams** → add `teamId` field + adjust rules; the schema already supports it via `userId`
-- **File uploads** → Firebase Storage for the bytes, only the URL goes into `attachments[]`
+- ~~**Multi-user teams**~~ → **shipped.** `workspaces/{id}` is the top-level
+  container, with `members[]`, an `acl{}` of owner/admin/editor/viewer, and a
+  `workspaceId` on every document.
+- ~~**File uploads**~~ → **shipped.** `FileUpload.jsx` → `uploadFile()` pushes
+  bytes to Firebase Storage under `storage.rules`; plain URLs still work too.
 
 The schema doesn't have to change for any of these — only the read paths do.

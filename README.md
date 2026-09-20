@@ -1,46 +1,98 @@
 # Task Monitor
 
-A personal task monitoring web app with plan-vs-actual tracking, daily activity logs with attachments, and real-time sync via Firebase Firestore.
+A project-management suite for small teams: Kanban board, table, Gantt, calendar,
+WBS, goals, meeting minutes, weekly review, and an AI assistant that answers from
+your own live data.
 
-Built for a multi-track workflow (BRIDGED / AIM / Personal) but adaptable to any category set.
+Static React frontend, Firebase Firestore behind it, no server of our own.
 
-## Features
+---
 
-- 📋 **Kanban board** with To Do / In Progress / Done columns
-- 📅 **Plan vs Actual dates** with overdue, done-early, and done-late indicators
-- 📝 **Per-day activity log** with comments, hours, and file attachments
-- 🔗 **Attachment links** to Google Drive, Firebase Storage, or any URL
-- 📊 **Atomic counters** for activity count and total hours per task
-- 🔥 **Real-time sync** across all your devices via Firestore
-- 🔒 **Per-user data isolation** via Firebase Anonymous Auth + security rules
-- 📱 **Mobile-responsive** — works on phone, tablet, and desktop
+## Run it locally
 
-## Tech Stack
-
-- **React 18** + **Vite** — fast HMR, clean ES modules
-- **Firebase Firestore** — NoSQL real-time database
-- **Firebase Anonymous Auth** — zero-friction per-device identity
-- **GitHub Pages** — free static hosting
-- **Plain CSS** — no Tailwind, no UI library, fully customisable
-
-## Quick Start
-
-Full step-by-step instructions in **[docs/BUILD-GUIDE.md](docs/BUILD-GUIDE.md)**.
-
-TL;DR:
+You need **Node 20+** and a Firebase project.
 
 ```bash
-# 1. Initialize
-npm create vite@latest task-monitor -- --template react
-cd task-monitor
-npm install firebase
-npm install -D gh-pages
-
-# 2. Drop in the files from this starter into src/ and root/
-# 3. Copy .env.example to .env and fill in your Firebase config
-# 4. Run
-npm run dev
+npm install     # installs everything
+npm run dev     # the app on http://localhost:5173
 ```
+
+The AI features additionally need the local bridge — `npm run bridge` in a
+second terminal. See [AI brain](#ai-brain--the-claude-code-cli) below.
+
+### Firebase config
+
+The app talks to your own Firebase project. Copy the template and fill in the
+six values from **Firebase console → Project settings → Your apps → SDK setup**:
+
+```bash
+cp .env.example .env
+```
+
+```
+VITE_FIREBASE_API_KEY=…
+VITE_FIREBASE_AUTH_DOMAIN=…
+VITE_FIREBASE_PROJECT_ID=…
+VITE_FIREBASE_STORAGE_BUCKET=…
+VITE_FIREBASE_MESSAGING_SENDER_ID=…
+VITE_FIREBASE_APP_ID=…
+```
+
+Then, once per project:
+
+1. **Authentication → Sign-in method → Google** — enable it.
+2. **Firestore Database** — create one (production mode).
+3. **Storage** — create a bucket (only needed for file attachments).
+4. `npm run deploy:rules` — push `firestore.rules` and `storage.rules`.
+
+Start the app and sign in with Google. The first account whose email is in
+`SUPERADMIN_EMAILS` (`src/services/firebase.js`, mirrored in `firestore.rules`)
+is approved automatically and can approve everyone else from
+**Settings → User management**. Everyone else waits on the approval screen —
+that gate is enforced in the security rules, not just on screen.
+
+
+## What's in it
+
+| Page | What it does |
+| --- | --- |
+| Dashboard | Today's work, what's overdue, what moved |
+| Board | Kanban with drag-and-drop, swim-lanes by phase, tag filters, quick-add |
+| Activity Log | Every logged entry, sortable, with bulk actions and export |
+| Gantt | Timeline with draggable plan bars and dependency arrows |
+| Calendar | Month grid; drag a task to another day to reschedule it |
+| WBS | Work breakdown by project → phase → task → subtask |
+| Goals | Objectives with progress rolled up from their tasks |
+| Minutes | Meeting minutes with attendees, decisions and action items |
+| Review | KPIs, hours by project, overdue / completed / blocked lists |
+| Analytics | Trends over time |
+| Ask AI | Ask a question about your own data and get a computed answer |
+| Projects | Projects, phases, custom fields, sharing, templates |
+| Settings | Preferences, workspaces, members, companies, AI, knowledge base, export |
+
+**Workspaces** are the top-level container. Everything — projects, tasks,
+activities, templates, minutes, goals — belongs to exactly one workspace, and
+members of a workspace share its contents. Roles are owner / admin / editor /
+viewer, enforced in `firestore.rules`.
+
+## Tech
+
+- **React 19 + Vite**, plain CSS (no Tailwind, no UI library)
+- **Firebase Firestore + Auth (Google)** — the only backend
+- **Firebase Hosting** — <https://tasks.blueinnovation.ph>
+- **`@dnd-kit`** for drag-and-drop; routing is the URL hash, no router library
+
+## Deploy
+
+```bash
+npm run build         # produces dist/
+npm run deploy        # dist/ → Firebase Hosting
+npm run deploy:rules  # firestore.rules + storage.rules
+npm run deploy:all    # both
+```
+
+Deploys use the Firebase CLI account in `FIREBASE_ACCOUNT` (defaults to the
+project owner). Log in first with `firebase login`.
 
 ## AI brain — the Claude Code CLI
 
@@ -223,57 +275,56 @@ the transform Vite already ships, so there is no second toolchain to configure.
 
 ## Documentation
 
-- **[docs/BUILD-GUIDE.md](docs/BUILD-GUIDE.md)** — Complete 12-phase setup walkthrough from empty GitHub repo to live deployment
-- **[docs/firestore-schema.md](docs/firestore-schema.md)** — Database schema with scalability rationale, index list, and security rules
-- **[CLAUDE.md](CLAUDE.md)** — Project context for Claude Code sessions
-- **[bridge/](bridge/)** — The local AI bridge: `ai.mjs` (provider layer), `notebooklm.mjs` (NotebookLM knowledge base), `server.mjs` (HTTP), `*.test.mjs`
-- **[firestore.rules](firestore.rules)** — Security rules; deploy with `npm run deploy:rules`
-- **[tests/rules/](tests/rules/)** — Firestore emulator tests for those rules (`npm run test:rules`)
+- **[CLAUDE.md](CLAUDE.md)** — architecture, data model, conventions and the
+  gotchas that bite. Read this before changing anything.
+- **[docs/firestore-schema.md](docs/firestore-schema.md)** — the data model and
+  why it is shaped that way.
+- **[firestore.rules](firestore.rules)** — who can read and write what.
+  Deploy with `npm run deploy:rules`; test with `npm run test:rules`.
+- **[bridge/](bridge/)** — the local AI bridge: `ai.mjs` (providers),
+  `notebooklm.mjs` (knowledge base), `server.mjs` (HTTP).
+- **[CHANGELOG.md](CHANGELOG.md)** — what changed, per task.
 
-## Project Structure
+## Project structure
 
 ```
 task-monitor/
 ├── src/
-│   ├── components/
-│   │   ├── TaskForm.jsx        Add new tasks (expandable for plan dates)
-│   │   └── TaskList.jsx        Kanban board + activity logger modal
-│   ├── hooks/
-│   │   └── useTasks.js         useAuth, useTasks, useActivities, useRecentActivities
-│   ├── services/
-│   │   ├── ai.js               THE AI module — provider detection + askAI/askAIJson
-│   │   ├── aiCredentials.js    Which key pays for an API call
-│   │   ├── anthropic.js        AI features, all built on services/ai.js
-│   │   └── firebase.js         Firestore init + all CRUD + subscriptions
-│   ├── App.jsx
-│   └── App.css
-├── bridge/
-│   ├── ai.mjs                  AI provider layer (claude-code / api / mock)
-│   ├── server.mjs              Local HTTP bridge on 127.0.0.1:4319
-│   └── ai.test.mjs             Unit tests (node --test)
-├── docs/
-│   ├── BUILD-GUIDE.md          End-to-end setup instructions
-│   └── firestore-schema.md     Scalable schema design
-├── CLAUDE.md                   Project memory for Claude Code
-├── firestore.rules             Security rules (paste into Firebase Console)
-├── vite.config.js
-├── .env.example                Template — copy to .env and fill in
-└── .gitignore
+│   ├── components/      one file per view or modal
+│   ├── hooks/           Firestore subscriptions as React hooks
+│   ├── services/        all logic worth testing (see "Where logic lives")
+│   ├── App.jsx          routes on the URL hash
+│   └── App.css          the single stylesheet — design tokens + components
+├── bridge/              the local AI bridge (Node, zero dependencies)
+├── tests/
+│   ├── ui/              component tests (jsdom)
+│   └── rules/           firestore.rules tests (Firestore emulator)
+├── dev/                 standalone harnesses — no sign-in needed
+├── firestore.rules      security rules
+├── firebase.json        hosting + emulator config
+└── .env.example         copy to .env and fill in
 ```
+
+### Dev harnesses
+
+Pages that render one piece of the UI on its own, with no Firebase and no
+sign-in — the fastest way to iterate on a component:
+
+| URL (after `npm run dev`) | Shows |
+| --- | --- |
+| `/dev/due-alert.html` | The due-task alert dialog (`?ai=0` forces the offline template, `&nb=1` fakes a notebook) |
+| `/dev/knowledge.html` | Settings → Knowledge base against the live bridge |
+| `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 
 ## Working with Claude Code
 
-This project is designed to be extended via [Claude Code](https://claude.com/code). The `CLAUDE.md` file documents conventions, data model, and gotchas — Claude Code reads this every session.
+`CLAUDE.md` is read every session — conventions, data model, and the mistakes
+that have already been made once.
 
 ```bash
 cd task-monitor
 claude
 ```
-
-Then ask in plain English, e.g.:
-- *"Add a weekly review page showing hours by category"*
-- *"Update TaskList to support editing existing tasks"*
-- *"Add a CSV export of all activities for the last 30 days"*
 
 ## License
 
