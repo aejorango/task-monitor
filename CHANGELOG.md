@@ -73,3 +73,4 @@ One line per task from the Ideon task sheet.
 - T-0067 — Modals lack dialog semantics, focus trap and Esc (API/data layer) — src/hooks/useModalDialog.js, tests/ui/useModalDialog.test.mjs
 - T-0068 — Modals lack dialog semantics, focus trap and Esc (UI) — 21 components across src/components/, tests/ui/modalSemantics.test.mjs
 - T-0069 — Modals lack dialog semantics, focus trap and Esc (tests & docs) — 10 components across src/components/, CLAUDE.md, README.md, tests/ui/modalSemantics.test.mjs
+- T-0070 — Automation rules replacing dead webhooks (API/data layer) — functions/automations.js, functions/index.js, functions/src/automations.js, functions/src/automations.test.mjs, firestore.rules, firestore.indexes.json, tests/rules/automations.rules.test.mjs

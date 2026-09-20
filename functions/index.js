@@ -25,6 +25,10 @@ const db = getFirestore();
 // configuration that nothing ever sent.
 export { onTaskWritten, onActivityWritten } from './webhooks.js';
 
+// Automation rules: "when this happens, do that", authored as dropdowns in
+// Settings → Automations.
+export { onTaskAutomations } from './automations.js';
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 

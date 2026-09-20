@@ -368,6 +368,30 @@ service cloud.firestore {
       allow delete: if isOwner(resource) || isWorkspaceAdmin(resource.data.workspaceId);
     }
 
+    // ─── Automations ───────────────────────────────────────────────────────
+    // "When this happens, do that." Workspace admins author them; the function
+    // that runs them uses admin credentials and bypasses these rules.
+    match /automations/{ruleId} {
+      allow read:   if isWorkspaceMember(resource.data.workspaceId);
+      allow create: if isCreatingOwn() && isWorkspaceAdmin(request.resource.data.workspaceId);
+      allow update, delete: if isWorkspaceAdmin(resource.data.workspaceId);
+    }
+
+    // What the rules actually did. Read-only: the function writes it.
+    match /automationRuns/{runId} {
+      allow read:  if isWorkspaceMember(resource.data.workspaceId);
+      allow write: if false;
+    }
+
+    // In-app notices, including the ones automations raise. A person reads and
+    // dismisses their own; nobody writes one from a browser.
+    match /notifications/{noticeId} {
+      allow read:   if isApproved() && resource.data.userId == request.auth.uid;
+      allow update: if isApproved() && resource.data.userId == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
     // ─── Webhook delivery log (written by the webhook functions) ───────────
     // Admins of the workspace can see what was sent and what came back. Nobody
     // writes it from a browser — the function does, with admin credentials.
