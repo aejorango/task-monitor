@@ -1,6 +1,6 @@
 // src/components/Board.jsx — Kanban with drag-and-drop and optional phase swim-lanes.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -27,6 +27,7 @@ import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
+import { useQuickCreate } from '../hooks/useQuickCreate';
 
 const COLUMNS = [
   { id: 'todo',  label: 'To Do' },
@@ -68,6 +69,13 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     window.addEventListener('task-monitor:open-task', onOpen);
     return () => window.removeEventListener('task-monitor:open-task', onOpen);
   }, [tasks]);
+
+  // ⌘K → "New task": put the typed text into the quick-add box and focus it,
+  // so the natural-language parsing the palette previewed actually happens.
+  const [quickAddSeed, setQuickAddSeed] = useState(null);
+  useQuickCreate('task', useCallback((text) => {
+    setQuickAddSeed({ text, at: Date.now() });
+  }, []));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -231,7 +239,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
         </div>
       )}
 
-      <TaskForm projects={projects} projectFilter={projectFilter} />
+      <TaskForm projects={projects} projectFilter={projectFilter} seed={quickAddSeed} />
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {showProjectSegments ? (

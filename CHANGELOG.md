@@ -58,3 +58,4 @@ One line per task from the Ideon task sheet.
 - T-0052 — Long notebook text sources fail on argv size — bridge/notebooklm.mjs, bridge/notebooklm.test.mjs, CLAUDE.md
 - T-0053 — Minutes cannot be exported or shared — src/components/MinutesView.jsx, src/App.css, tests/ui/minutesShare.test.mjs
 - T-0054 — Task and project export is JSON only — src/components/GanttView.jsx, src/components/SettingsView.jsx, tests/ui/dataExport.test.mjs
+- T-0055 — Quick create exists only for tasks — src/services/commandPalette.js, src/services/commandPalette.test.mjs, src/hooks/useQuickCreate.js, src/components/AppShell.jsx, src/components/Board.jsx, src/components/TaskForm.jsx, src/components/ProjectsView.jsx, src/components/MinutesView.jsx, src/components/GoalsView.jsx, src/App.css, tests/ui/commandPalette.test.mjs

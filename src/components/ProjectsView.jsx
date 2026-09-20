@@ -1,6 +1,6 @@
 // src/components/ProjectsView.jsx — list, create, edit projects + phases.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useProjects, useTasks, useAuth, useTemplates, useAllActivities, useGoals } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
@@ -31,6 +31,7 @@ import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import NotebookPicker from './NotebookPicker';
 import { downloadFile } from '../services/download';
+import { useQuickCreate } from '../hooks/useQuickCreate';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
 
@@ -46,6 +47,9 @@ export default function ProjectsView() {
   const projectTemplates = templates.filter((t) => t.kind === 'project');
   const taskTemplates    = templates.filter((t) => t.kind === 'task');
   const [editing, setEditing] = useState(null);          // project or 'new'
+
+  // ⌘K → "New project": open the editor with what they typed.
+  useQuickCreate('project', useCallback(() => setEditing('new'), []));
   const [createFromTemplate, setCreateFromTemplate] = useState(null);
   const [aiFor, setAiFor] = useState(null);              // project to generate tasks for
   const [activityLogFor, setActivityLogFor] = useState(null); // project for activity log modal

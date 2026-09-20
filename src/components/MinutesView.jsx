@@ -2,7 +2,7 @@
 // each with attendees, notes, decisions and trackable action items. Create /
 // edit / delete via a modal.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useMinutes, useProjects, useAuth, useTasks } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addMinute, updateMinute, softDeleteMinute, addTask, softDeleteTask, uid, todayLocal } from '../services/firebase';
@@ -13,6 +13,7 @@ import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildMinutesDocument, minutesFileBase } from '../services/minutesExport';
 import { toMarkdown } from '../services/exporters';
+import { useQuickCreate } from '../hooks/useQuickCreate';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -55,6 +56,9 @@ export default function MinutesView({ projectFilter = 'all' }) {
   const activeWsId = useActiveWorkspaceId();
   const workspace = workspaces.find((w) => w.id === activeWsId);
   const [editing, setEditing] = useState(null); // minute object or 'new'
+
+  // ⌘K → "New minute": open the editor with what they typed.
+  useQuickCreate('minute', useCallback(() => setEditing('new'), []));
 
   const tasksById = useMemo(() => {
     const m = {};

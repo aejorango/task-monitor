@@ -9,7 +9,7 @@ import { pickDefaultProjectId } from '../services/preferences';
 import { useSettings } from '../hooks/useSettings';
 import { friendlyError } from '../services/access';
 
-export default function TaskForm({ projects = [], projectFilter = 'all' }) {
+export default function TaskForm({ projects = [], projectFilter = 'all', seed = null }) {
   const { userId, ready } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const { templates } = useTemplates();
@@ -56,6 +56,15 @@ export default function TaskForm({ projects = [], projectFilter = 'all' }) {
     projectFilter,
     defaultProject: settings.defaultProject,
   }) || '';
+
+  // ⌘K → "New task" hands the typed text over here. Keyed on the seed object so
+  // asking twice with the same words still refills the box.
+  const [seenSeed, setSeenSeed] = useState(seed);
+  if (seed && seenSeed !== seed) {
+    setSeenSeed(seed);
+    setTitle(seed.text || '');
+    if (seed.text) setExpanded(true);
+  }
 
   const selectedProject = projects.find((p) => p.id === effectiveProjectId);
 

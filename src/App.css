@@ -10218,3 +10218,13 @@ a:hover { text-decoration: underline; }
   }
   .minute-card-actions { display: none; }
 }
+
+/* Icon column for an action row in the ⌘K palette. */
+.search-result-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+  color: var(--c-text-muted);
+}

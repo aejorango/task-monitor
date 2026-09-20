@@ -4,7 +4,7 @@
 // and TARGET DATE (target + status per deliverable). Create / edit / delete via
 // a modal editor.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useGoals, useAllWorkspaceProjects, useAllWorkspaceTasks, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { addGoal, updateGoal, softDeleteGoal, archiveGoal, uid } from '../services/firebase';
@@ -12,6 +12,7 @@ import WbsModal from './WbsModal';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildGoalsDocument } from '../services/exporters';
+import { useQuickCreate } from '../hooks/useQuickCreate';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -50,6 +51,9 @@ export default function GoalsView() {
   const { tasks } = useAllWorkspaceTasks();
   const { workspaces } = useWorkspaces();
   const [editing, setEditing] = useState(null); // goal object or 'new'
+
+  // ⌘K → "New goal": open the editor with what they typed.
+  useQuickCreate('goal', useCallback(() => setEditing('new'), []));
   const [wbsProjectId, setWbsProjectId] = useState(null); // project to show WBS for
 
   const projectById = useMemo(() => {

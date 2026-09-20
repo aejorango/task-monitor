@@ -13,6 +13,8 @@ import DueAlertBell from './DueAlertBell';
 import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
+import { buildCommands, commandsFirst } from '../services/commandPalette';
+import { requestQuickCreate } from '../hooks/useQuickCreate';
 
 const VIEWS = [
   { id: 'ask-ai',         label: 'Ask AI',           icon: 'sparkles' },
@@ -412,6 +414,36 @@ function SidebarUserBlock({ userId, ready, navigate, userProfile }) {
   );
 }
 
+// ─── Command palette rows ──────────────────────────────────
+// "New project", "Log an activity", "Go to Gantt" — the things ⌘K can DO. What
+// to offer is decided by services/commandPalette.js; this only renders it.
+
+function CommandGroup({ commands, offset, highlight, setHighlight, onRun }) {
+  if (!commands.length) return null;
+  return (
+    <>
+      <div className="search-group-label">Actions · {commands.length}</div>
+      {commands.map((c, i) => {
+        const flatIdx = offset + i;
+        return (
+          <button
+            key={c.id}
+            className={`search-result ${highlight === flatIdx ? 'highlight' : ''}`}
+            onMouseEnter={() => setHighlight(flatIdx)}
+            onMouseDown={() => onRun(c)}
+          >
+            <span className="search-result-icon"><Icon name={c.icon} size={15} /></span>
+            <div className="search-result-multi">
+              <div className="search-result-title">{c.label}</div>
+              {c.hint && <div className="muted small">{c.hint}</div>}
+            </div>
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
 // ─── Global search ─────────────────────────────────────────
 
 function GlobalSearch({ projects, navigate }) {
@@ -442,7 +474,7 @@ function GlobalSearch({ projects, navigate }) {
   }, []);
 
   const results = useMemo(() => {
-    if (!q.trim()) return { tasks: [], activities: [], flat: [] };
+    if (!q.trim()) return { tasks: [], activities: [], commands: [], lead: false, flat: [] };
     const needle = q.toLowerCase();
     const taskMatches = tasks
       .filter((t) =>
@@ -458,12 +490,23 @@ function GlobalSearch({ projects, navigate }) {
         a.taskTitle?.toLowerCase().includes(needle)
       )
       .slice(0, 6);
-    // Flat list lets keyboard nav cycle through both groups in display order.
-    const flat = [
-      ...taskMatches.map((t) => ({ kind: 'task', t })),
-      ...activityMatches.map((a) => ({ kind: 'activity', a })),
-    ];
-    return { tasks: taskMatches, activities: activityMatches, flat };
+    // ⌘K is also where things get MADE. "new project X", "log hours", or just
+    // "gantt" — see services/commandPalette.js.
+    const commands = buildCommands(q);
+    // Flat list lets keyboard nav cycle through every group in display order.
+    const lead = commandsFirst(q);
+    const flat = lead
+      ? [
+        ...commands.map((c) => ({ kind: 'command', c })),
+        ...taskMatches.map((t) => ({ kind: 'task', t })),
+        ...activityMatches.map((a) => ({ kind: 'activity', a })),
+      ]
+      : [
+        ...taskMatches.map((t) => ({ kind: 'task', t })),
+        ...activityMatches.map((a) => ({ kind: 'activity', a })),
+        ...commands.map((c) => ({ kind: 'command', c })),
+      ];
+    return { tasks: taskMatches, activities: activityMatches, commands, lead, flat };
   }, [q, tasks, activities]);
 
   // Reset highlight when results change
@@ -484,9 +527,29 @@ function GlobalSearch({ projects, navigate }) {
       window.dispatchEvent(new CustomEvent('task-monitor:open-task', { detail: { taskId: t.id } }));
     }, 50);
   };
+  // Where each "New …" goes. Every one of these lands on the page that owns
+  // that thing, with the create flow already open — the point of the palette is
+  // that you never have to know which page that is.
+  const runCommand = (cmd) => {
+    setQ(''); setOpen(false);
+    inputRef.current?.blur();
+    if (cmd.kind === 'navigate') { navigate({ view: cmd.payload.view }); return; }
+
+    const text = cmd.payload?.text || '';
+    const VIEW_FOR = {
+      task: 'board', project: 'projects', minute: 'minutes',
+      goal: 'goals', activity: 'work-performed',
+    };
+    navigate({ view: VIEW_FOR[cmd.entity] || 'board' });
+    // The destination listens for this and opens its own create flow with the
+    // text already filled in. A delay so the view has mounted first.
+    setTimeout(() => requestQuickCreate(cmd.entity, text), 60);
+  };
+
   const activateResult = (item) => {
     if (!item) return;
-    if (item.kind === 'task') goToTask(item.t);
+    if (item.kind === 'command') runCommand(item.c);
+    else if (item.kind === 'task') goToTask(item.t);
     else {
       const t = tasks.find((x) => x.id === item.a.taskId);
       if (t) goToTask(t);
@@ -536,7 +599,12 @@ function GlobalSearch({ projects, navigate }) {
     );
   };
 
-  const placeholder = workspaceId ? `Search ${tasks.length} task${tasks.length === 1 ? '' : 's'}…  ⌘K` : 'Search…  ⌘K';
+  // With commands leading, every other group shifts down by that many rows.
+  const taskOffset = results.lead ? results.commands.length : 0;
+
+  const placeholder = workspaceId
+    ? `Search or type “new task…”   ⌘K`
+    : 'Search or create…  ⌘K';
 
   return (
     <div className="search-wrap">
@@ -555,16 +623,24 @@ function GlobalSearch({ projects, navigate }) {
         <div className="search-results">
           {results.flat.length === 0 ? renderEmptyState() : (
             <>
+              {results.lead && <CommandGroup
+                commands={results.commands}
+                offset={0}
+                highlight={highlight}
+                setHighlight={setHighlight}
+                onRun={runCommand}
+              />}
               {results.tasks.length > 0 && (
                 <>
                   <div className="search-group-label">Tasks · {results.tasks.length}</div>
                   {results.tasks.map((t, i) => {
                     const proj = projectById[t.projectId];
+                    const flatIdx = taskOffset + i;
                     return (
                       <button
                         key={t.id}
-                        className={`search-result ${highlight === i ? 'highlight' : ''}`}
-                        onMouseEnter={() => setHighlight(i)}
+                        className={`search-result ${highlight === flatIdx ? 'highlight' : ''}`}
+                        onMouseEnter={() => setHighlight(flatIdx)}
                         onMouseDown={() => goToTask(t)}
                       >
                         {proj && <span className="proj-dot" style={{ background: proj.color }} />}
@@ -583,7 +659,7 @@ function GlobalSearch({ projects, navigate }) {
                   <div className="search-group-label">Activities · {results.activities.length}</div>
                   {results.activities.map((a, i) => {
                     const proj = projectById[a.projectId];
-                    const flatIdx = results.tasks.length + i;
+                    const flatIdx = taskOffset + results.tasks.length + i;
                     return (
                       <button
                         key={a.id}
@@ -604,6 +680,13 @@ function GlobalSearch({ projects, navigate }) {
                   })}
                 </>
               )}
+              {!results.lead && <CommandGroup
+                commands={results.commands}
+                offset={taskOffset + results.tasks.length + results.activities.length}
+                highlight={highlight}
+                setHighlight={setHighlight}
+                onRun={runCommand}
+              />}
             </>
           )}
         </div>
