@@ -31,3 +31,4 @@ One line per task from the Ideon task sheet.
 - T-0025 — Overdue notification memory grows forever — src/services/dueAlerts.js, src/services/dueAlerts.test.mjs, src/hooks/useNotifications.js
 - T-0026 — CLI install instructions shown to every user (API/data layer) — src/services/knowledgeCopy.js, src/services/knowledgeCopy.test.mjs
 - T-0027 — CLI install instructions shown to every user (UI) — src/components/KnowledgeSection.jsx, src/components/SettingsView.jsx, tests/ui/KnowledgeSection.test.mjs
+- T-0028 — CLI install instructions shown to every user (tests & docs) — CLAUDE.md, README.md, CHANGELOG.md

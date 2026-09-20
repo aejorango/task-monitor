@@ -310,6 +310,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
 - ❌ Gating the due-alert prompt block on an API key — use `useAiStatus().available`; CLI users have no key. When AI is unavailable the block falls back to `buildFallbackPrompt` and labels it as a template.
 - ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.
+- ❌ Showing a shell command, a bridge URL or a CLI name to anyone but the operator. `KnowledgeSection` takes `isOperator` (approved superadmin only); the wording for both audiences comes from `knowledgeCopy(status, { isOperator })` in `services/knowledgeCopy.js`, tested by `knowledgeCopy.test.mjs` and `tests/ui/KnowledgeSection.test.mjs`.
 - ❌ Spawning `notebooklm` anywhere but `bridge/notebooklm.mjs` — same rule as `claude` in `bridge/ai.mjs`. A component, a hook and `src/services/*` all reach it through `/knowledge/*`.
 - ❌ Passing `ask --new`. It **deletes** the notebook's server-side conversation and the turns are not recoverable. Continue with `-c <conversationId>` instead.
 - ❌ Using `payload.error` as an error message. In this CLI `error` is a **boolean** flag — read `payload.message`, or the user is told the problem is "true". Covered by `bridge/notebooklm.test.mjs`.

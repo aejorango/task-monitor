@@ -177,6 +177,9 @@ Two surfaces use it:
 
 ### Operator setup
 
+Only an approved superadmin sees any of this. Everyone else's Settings page just
+says whether a knowledge base is connected, and that their admin sets it up.
+
 This runs on the machine that runs the bridge, and it is a **one-time** setup:
 
 ```bash
@@ -251,6 +254,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/access.test.mjs` | Who may share a project; plain-language error text |
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
 | `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
+| `src/services/knowledgeCopy.test.mjs` | Operator runbook vs. what everyone else is told |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |
