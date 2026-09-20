@@ -106,3 +106,84 @@ test('every command is a descriptor — nothing here can perform anything', () =
     assert.equal(typeof c.run, 'undefined', 'the component owns the handlers');
   }
 });
+
+// ─── Recents (T-0062 / NEW-009) ─────────────────────────────────────────────
+
+import { MAX_RECENTS, clearRecents, loadRecents, recentCommands, rememberRecent } from './commandPalette.js';
+
+/** A stand-in for localStorage, so these tests touch nothing real. */
+function fakeStore() {
+  const map = new Map();
+  return {
+    getItem: (k) => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => map.set(k, String(v)),
+    removeItem: (k) => map.delete(k),
+    _map: map,
+  };
+}
+
+test('with nothing opened yet there are no recents', () => {
+  const store = fakeStore();
+  assert.deepEqual(loadRecents({ store }), []);
+  assert.deepEqual(recentCommands({ store }), []);
+});
+
+test('opening something records it, most recent first', () => {
+  const store = fakeStore();
+  rememberRecent({ kind: 'task', id: 't1', label: 'Ship it' }, { store });
+  rememberRecent({ kind: 'project', id: 'p1', label: 'Rollout' }, { store });
+  assert.deepEqual(loadRecents({ store }).map((r) => r.label), ['Rollout', 'Ship it']);
+});
+
+test('opening the same thing again moves it to the front, not in twice', () => {
+  const store = fakeStore();
+  rememberRecent({ kind: 'task', id: 't1', label: 'Ship it' }, { store });
+  rememberRecent({ kind: 'task', id: 't2', label: 'Other' }, { store });
+  rememberRecent({ kind: 'task', id: 't1', label: 'Ship it' }, { store });
+  assert.deepEqual(loadRecents({ store }).map((r) => r.id), ['t1', 't2']);
+});
+
+test('the list is bounded', () => {
+  const store = fakeStore();
+  for (let i = 0; i < 20; i += 1) rememberRecent({ kind: 'task', id: `t${i}`, label: `T${i}` }, { store });
+  assert.equal(loadRecents({ store }).length, MAX_RECENTS);
+});
+
+test('an incomplete entry is ignored rather than stored half-formed', () => {
+  const store = fakeStore();
+  rememberRecent({ kind: 'task' }, { store });
+  rememberRecent({ id: 'x', label: 'y' }, { store });
+  rememberRecent(null, { store });
+  assert.deepEqual(loadRecents({ store }), []);
+});
+
+test('corrupt storage yields no recents rather than an exception', () => {
+  const store = fakeStore();
+  store.setItem('task-monitor.palette.recents.v1', 'not json');
+  assert.deepEqual(loadRecents({ store }), []);
+  store.setItem('task-monitor.palette.recents.v1', '{"not":"an array"}');
+  assert.deepEqual(loadRecents({ store }), []);
+});
+
+test('recents become rows the palette can render', () => {
+  const store = fakeStore();
+  rememberRecent({ kind: 'task', id: 't1', label: 'Ship it', projectId: 'p1' }, { store });
+  const [row] = recentCommands({ store });
+  assert.equal(row.kind, 'recent');
+  assert.equal(row.label, 'Ship it');
+  assert.equal(row.hint, 'Task');
+  assert.equal(row.payload.projectId, 'p1');
+  assert.ok(row.id.startsWith('recent:'));
+});
+
+test('clearing forgets them', () => {
+  const store = fakeStore();
+  rememberRecent({ kind: 'task', id: 't1', label: 'x' }, { store });
+  clearRecents({ store });
+  assert.deepEqual(loadRecents({ store }), []);
+});
+
+test('no storage at all is survivable', () => {
+  assert.deepEqual(loadRecents({ store: null }), []);
+  assert.doesNotThrow(() => rememberRecent({ kind: 'task', id: 'x', label: 'y' }, { store: null }));
+});

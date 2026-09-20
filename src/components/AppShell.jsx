@@ -13,7 +13,7 @@ import DueAlertBell from './DueAlertBell';
 import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
-import { buildCommands, commandsFirst } from '../services/commandPalette';
+import { buildCommands, commandsFirst, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 
 const VIEWS = [
@@ -420,11 +420,11 @@ function SidebarUserBlock({ userId, ready, navigate, userProfile }) {
 // "New project", "Log an activity", "Go to Gantt" — the things ⌘K can DO. What
 // to offer is decided by services/commandPalette.js; this only renders it.
 
-function CommandGroup({ commands, offset, highlight, setHighlight, onRun }) {
+function CommandGroup({ commands, offset, highlight, setHighlight, onRun, label = 'Actions' }) {
   if (!commands.length) return null;
   return (
     <>
-      <div className="search-group-label">Actions · {commands.length}</div>
+      <div className="search-group-label">{label} · {commands.length}</div>
       {commands.map((c, i) => {
         const flatIdx = offset + i;
         return (
@@ -476,7 +476,15 @@ function GlobalSearch({ projects, navigate }) {
   }, []);
 
   const results = useMemo(() => {
-    if (!q.trim()) return { tasks: [], activities: [], commands: [], lead: false, flat: [] };
+    // An empty box used to show nothing at all. What somebody nearly always
+    // wants is what they were just looking at.
+    if (!q.trim()) {
+      const recents = recentCommands();
+      return {
+        tasks: [], activities: [], commands: recents, lead: true, recents: true,
+        flat: recents.map((c) => ({ kind: 'command', c })),
+      };
+    }
     const needle = q.toLowerCase();
     const taskMatches = tasks
       .filter((t) =>
@@ -508,13 +516,14 @@ function GlobalSearch({ projects, navigate }) {
         ...activityMatches.map((a) => ({ kind: 'activity', a })),
         ...commands.map((c) => ({ kind: 'command', c })),
       ];
-    return { tasks: taskMatches, activities: activityMatches, commands, lead, flat };
+    return { tasks: taskMatches, activities: activityMatches, commands, lead, recents: false, flat };
   }, [q, tasks, activities]);
 
   // Reset highlight when results change
   useEffect(() => { setHighlight(0); }, [results.flat.length]);
 
   const goToTask = (t) => {
+    rememberRecent({ kind: 'task', id: t.id, label: t.title || 'Task', projectId: t.projectId || null });
     // Navigate to the Board with the task's project filtered, then dispatch a
     // global "open task" event. The Board listens for this and opens the
     // TaskEditor for the matching task. This gives users clear visual feedback
@@ -536,6 +545,19 @@ function GlobalSearch({ projects, navigate }) {
     setQ(''); setOpen(false);
     inputRef.current?.blur();
     if (cmd.kind === 'navigate') { navigate({ view: cmd.payload.view }); return; }
+
+    if (cmd.kind === 'recent') {
+      const { entity, payload } = cmd;
+      if (entity === 'task') {
+        const t = tasks.find((x) => x.id === payload.id);
+        if (t) { goToTask(t); return; }
+      }
+      navigate({
+        view: entity === 'project' ? 'board' : 'board',
+        projectFilter: entity === 'project' ? payload.id : (payload.projectId || 'all'),
+      });
+      return;
+    }
 
     const text = cmd.payload?.text || '';
     const VIEW_FOR = {
@@ -621,11 +643,12 @@ function GlobalSearch({ projects, navigate }) {
         onBlur={() => setTimeout(() => setOpen(false), 200)}
         onKeyDown={onInputKeyDown}
       />
-      {open && q.trim() && (
+      {open && (q.trim() || results.flat.length > 0) && (
         <div className="search-results">
           {results.flat.length === 0 ? renderEmptyState() : (
             <>
               {results.lead && <CommandGroup
+                label={results.recents ? 'Recently opened' : 'Actions'}
                 commands={results.commands}
                 offset={0}
                 highlight={highlight}

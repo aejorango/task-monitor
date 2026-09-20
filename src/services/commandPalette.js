@@ -144,3 +144,61 @@ export function buildCommands(query, opts = {}) {
 export function commandsFirst(query) {
   return !!parseCreateIntent(query) || /^\s*(\/|>)/.test(String(query || ''));
 }
+
+/* ── Recent items (T-0062 / NEW-009) ───────────────────────────────────────
+   An empty ⌘K used to show nothing at all. What a person nearly always wants
+   is the thing they were just looking at, so the palette opens with that. Kept
+   per device — it is a convenience, not shared state. */
+
+const RECENTS_KEY = 'task-monitor.palette.recents.v1';
+export const MAX_RECENTS = 6;
+
+const readRecents = (store) => {
+  try {
+    const raw = store?.getItem(RECENTS_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+};
+
+const storage = (store) => {
+  if (store) return store;
+  try { return typeof localStorage === 'undefined' ? null : localStorage; }
+  catch { return null; }
+};
+
+/** Most recent first, deduped, bounded. */
+export function loadRecents({ store } = {}) {
+  return readRecents(storage(store))
+    .filter((r) => r && r.kind && r.id && r.label)
+    .slice(0, MAX_RECENTS);
+}
+
+/** Record that something was opened. Returns the new list. */
+export function rememberRecent(entry, { store } = {}) {
+  const s = storage(store);
+  if (!s || !entry?.kind || !entry?.id || !entry?.label) return loadRecents({ store: s });
+  const next = [
+    { kind: entry.kind, id: entry.id, label: entry.label, view: entry.view || null, projectId: entry.projectId || null },
+    ...readRecents(s).filter((r) => !(r.kind === entry.kind && r.id === entry.id)),
+  ].slice(0, MAX_RECENTS);
+  try { s.setItem(RECENTS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  return next;
+}
+
+export function clearRecents({ store } = {}) {
+  try { storage(store)?.removeItem(RECENTS_KEY); } catch { /* ignored */ }
+}
+
+/** Recents as palette rows, so an empty query still offers something. */
+export function recentCommands({ store } = {}) {
+  return loadRecents({ store }).map((r) => ({
+    id: `recent:${r.kind}:${r.id}`,
+    kind: 'recent',
+    entity: r.kind,
+    label: r.label,
+    hint: r.kind === 'task' ? 'Task' : r.kind === 'project' ? 'Project' : 'Recently opened',
+    icon: r.kind === 'task' ? 'board' : r.kind === 'project' ? 'projects' : 'clock',
+    payload: r,
+  }));
+}

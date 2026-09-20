@@ -89,3 +89,32 @@ test('a new task arrives in the quick-add box with its text', () => {
   assert.match(form, /if \(seed && seenSeed !== seed\)/);
   assert.match(form, /setTitle\(seed\.text \|\| ''\)/);
 });
+
+// ─── Recents (T-0062 / NEW-009) ─────────────────────────────────────────────
+
+test('an empty palette offers what you were just looking at', () => {
+  const memo = search.slice(search.indexOf('const results = useMemo'), search.indexOf('useEffect(() => { setHighlight(0)'));
+  assert.match(memo, /if \(!q\.trim\(\)\) \{/);
+  assert.match(memo, /recentCommands\(\)/);
+  assert.match(memo, /recents: true/);
+  assert.doesNotMatch(memo, /if \(!q\.trim\(\)\) return \{ tasks: \[\], activities: \[\], commands: \[\], lead: false/,
+    'an empty box used to show nothing at all');
+});
+
+test('opening something records it as recent', () => {
+  assert.match(search, /rememberRecent\(\{ kind: 'task', id: t\.id, label: t\.title/);
+});
+
+test('a recent row reopens the thing it names', () => {
+  const run = search.slice(search.indexOf('const runCommand'), search.indexOf('const activateResult'));
+  assert.match(run, /if \(cmd\.kind === 'recent'\)/);
+  assert.match(run, /tasks\.find\(\(x\) => x\.id === payload\.id\)/);
+});
+
+test('the recents group is labelled as such, not as "Actions"', () => {
+  assert.match(search, /label=\{results\.recents \? 'Recently opened' : 'Actions'\}/);
+});
+
+test('the panel opens for recents even with nothing typed', () => {
+  assert.match(search, /\{open && \(q\.trim\(\) \|\| results\.flat\.length > 0\) && \(/);
+});

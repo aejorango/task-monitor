@@ -65,3 +65,4 @@ One line per task from the Ideon task sheet.
 - T-0059 — Import wizard for tasks and projects — src/services/csv.js, src/services/csv.test.mjs, src/components/ImportWizard.jsx, src/components/TableView.jsx, src/components/TasksTableView.jsx, src/App.css, tests/ui/importWizard.test.mjs
 - T-0060 — Process template gallery — src/templates/gallery.js, src/templates/gallery.test.mjs, src/components/TemplateGallery.jsx, src/components/ProjectsView.jsx, src/App.css, package.json, tests/ui/templateGallery.test.mjs
 - T-0061 — Undo toast and Trash view — src/components/Toast.jsx, src/App.jsx, src/App.css, src/components/TaskEditor.jsx, src/components/ProjectsView.jsx, src/components/MinutesView.jsx, tests/ui/toast.test.mjs
+- T-0062 — Command palette with create and navigate actions — src/services/commandPalette.js, src/services/commandPalette.test.mjs, src/components/AppShell.jsx, tests/ui/commandPalette.test.mjs
