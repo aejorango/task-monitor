@@ -231,6 +231,9 @@ as a **board** or a **timeline**.
   `firestore.rules` refuses it, so it is not merely hidden.
 - **Publishing is an owner's or admin's decision**, and the app tells you
   exactly what you are handing out before the link exists.
+- **The only person named** on the page is whoever shared it ("Shared by …"),
+  so the recipient knows where it came from. Nobody else on the project is
+  named at all.
 
 `sharedViews` is the one world-readable collection in the app: readable only by
 its exact token (never listable), and only while it is live. Deploy the rules
@@ -464,6 +467,7 @@ run together.
 | `tests/ui/workloadFlow.test.mjs` | Overloaded → dragged → assignedTo and plan.endDate updated |
 | `tests/ui/shareLinksApi.test.mjs` | One world-readable document, by exact token, and nothing else |
 | `tests/ui/shareLinks.test.mjs` | Publishing a link, and the page a client opens |
+| `tests/ui/shareFlow.test.mjs` | A link opened signed-out renders read-only — and what it never contains |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
