@@ -418,6 +418,7 @@ run together.
 | `tests/ui/customFields.test.mjs` | A custom field reaches the card, the table and the export |
 | `tests/ui/inboxApi.test.mjs` | Notices are raised where the message is written, and cannot lose it |
 | `tests/ui/inbox.test.mjs` | The topbar inbox, the @ picker, and getting to the task |
+| `tests/ui/inboxFlow.test.mjs` | A mentions B → B's inbox shows it → it opens the task |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
