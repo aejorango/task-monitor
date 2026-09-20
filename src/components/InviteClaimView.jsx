@@ -10,6 +10,7 @@ import {
   claimInvite,
   signInWithGoogle,
 } from '../services/firebase';
+import { friendlyError } from '../services/access';
 
 export default function InviteClaimView({ inviteId, navigate }) {
   const { userId, ready } = useAuth();
@@ -28,14 +29,17 @@ export default function InviteClaimView({ inviteId, navigate }) {
         const inv = await getInvite(inviteId);
         if (cancelled) return;
         if (!inv) {
-          setLoadError('This invite link is invalid or has been deleted.');
+          setLoadError('This invite link is invalid, or it has been deleted by the person who sent it. Ask them for a new link.');
           return;
         }
         setInvite(inv);
       } catch (err) {
         if (cancelled) return;
         console.error(err);
-        setLoadError(err.message || String(err));
+        setLoadError(friendlyError(
+          err,
+          'We could not open this invite. Ask the person who sent it for a new link.',
+        ));
       }
     })();
     return () => { cancelled = true; };
@@ -60,7 +64,7 @@ export default function InviteClaimView({ inviteId, navigate }) {
       }, 1200);
     } catch (err) {
       console.error(err);
-      setClaimError(err.message || String(err));
+      setClaimError(friendlyError(err, 'We could not add you to this project. Ask the person who invited you to send a fresh link.'));
     } finally {
       setClaiming(false);
     }

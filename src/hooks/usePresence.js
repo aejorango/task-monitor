@@ -9,6 +9,8 @@ import {
   auth,
 } from '../services/firebase';
 
+const EMPTY = [];
+
 export function usePresence(taskId, workspaceId) {
   const [others, setOthers] = useState([]);
 
@@ -36,12 +38,15 @@ export function usePresence(taskId, workspaceId) {
 
   // Subscribe to the presence collection for this task.
   useEffect(() => {
-    if (!taskId || !workspaceId) { setOthers([]); return; }
+    if (!taskId || !workspaceId) return undefined;
     const unsub = subscribeToPresence(taskId, workspaceId, setOthers);
     return () => unsub();
   }, [taskId, workspaceId]);
 
-  // Strip ourselves from the list.
+  // Strip ourselves from the list. Presence is workspace-scoped, so without a
+  // workspace there is nothing we are allowed to show — derive that here
+  // rather than clearing state from inside the effect.
   const me = auth.currentUser?.uid;
+  if (!taskId || !workspaceId) return EMPTY;
   return others.filter((p) => p.userId !== me);
 }

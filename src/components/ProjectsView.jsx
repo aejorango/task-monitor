@@ -22,6 +22,7 @@ import {
   deleteSegmentFromWorkspace,
   todayLocal,
 } from '../services/firebase';
+import { canAdministerProject, friendlyError } from '../services/access';
 import AiTaskGenerator from './AiTaskGenerator';
 import { MarkdownEditor } from './Markdown';
 import ActivityEditor from './ActivityEditor';
@@ -482,6 +483,14 @@ function ProjectActivityLogModal({ project, onClose }) {
 }
 
 function ProjectSharing({ project, bare = false }) {
+  // Sharing is an admin control. The rules refuse an invite from anyone who
+  // cannot administer the project, so showing the generator to everyone would
+  // just hand most people a button that fails. Mirror the rule instead.
+  const { userId } = useAuth();
+  const { workspaces } = useWorkspaces();
+  const workspace = workspaces.find((w) => w.id === project.workspaceId) || null;
+  const canShare = canAdministerProject(project, workspace, userId);
+
   const [uidInput, setUidInput] = useState('');
   const [role, setRole]   = useState('viewer');
   const [busy, setBusy]   = useState(false);
@@ -494,12 +503,15 @@ function ProjectSharing({ project, bare = false }) {
   const [generatedLink, setGeneratedLink] = useState(null); // { id, url }
   const [copyOk, setCopyOk] = useState(false);
 
-  // Subscribe to existing invites for this project
+  // Subscribe to existing invites for this project. Listing invites needs
+  // admin rights (they are share secrets), so don't even open the listener
+  // for anyone else — it would only log a permission error.
   const [invites, setInvites] = useState([]);
   useEffect(() => {
+    if (!canShare) return undefined;
     const unsub = subscribeToInvitesForProject(project.id, setInvites);
     return () => unsub();
-  }, [project.id]);
+  }, [project.id, canShare]);
 
   const acl     = project.acl || {};
   const ownerId = project.userId;
@@ -513,7 +525,7 @@ function ProjectSharing({ project, bare = false }) {
       setUidInput('');
     } catch (err) {
       console.error(err);
-      setError(err.message || String(err));
+      setError(friendlyError(err, 'Could not add that person to the project.'));
     } finally { setBusy(false); }
   };
 
@@ -548,7 +560,7 @@ function ProjectSharing({ project, bare = false }) {
       setGeneratedLink({ id: ref.id, url });
     } catch (err) {
       console.error(err);
-      setError(err.message || String(err));
+      setError(friendlyError(err, 'Could not create the invite link.'));
     } finally {
       setCreatingInvite(false);
     }
@@ -610,11 +622,29 @@ function ProjectSharing({ project, bare = false }) {
     catch (err) { console.error(err); alert(err.message); }
   };
 
-  const liveInvites = invites.filter((inv) => !inv.revoked);
+  const liveInvites = canShare ? invites.filter((inv) => !inv.revoked) : [];
 
   // `bare` drops the divider + heading so the project editor can drop this
   // straight into its own titled card.
   const wrapStyle = bare ? undefined : { borderTop: '1px solid var(--c-border)', paddingTop: 12, marginTop: 12 };
+
+  // Read-only view for people who are on the project but cannot manage it.
+  if (!canShare) {
+    return (
+      <div className="field" style={wrapStyle}>
+        {!bare && <label className="label">Sharing</label>}
+        <p className="muted small" style={{ marginTop: 0 }}>
+          <strong>{members.length}</strong> member{members.length === 1 ? '' : 's'} on this project.
+        </p>
+        <p className="muted small">
+          Only a project admin, the person who created this project, or a workspace
+          owner or admin can invite people or change who has access. Ask one of them
+          if someone needs to be added.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="field" style={wrapStyle}>
       {!bare && <label className="label">Sharing</label>}
