@@ -10,6 +10,7 @@ import Icon from './Icon';
 import AiHelper from './AiHelper';
 import TaskDoneCelebration from './TaskDoneCelebration';
 import DueAlertBell from './DueAlertBell';
+import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
 
@@ -393,14 +394,18 @@ function SidebarUserBlock({ userId, ready, navigate, userProfile }) {
     <button
       className="sidebar-user-block"
       onClick={() => navigate({ view: 'settings' })}
-      title={email || displayName}
+      title={`${email || displayName} · Task Monitor ${versionLine()}`}
     >
       {photoURL
         ? <img src={photoURL} alt="" className="sidebar-user-avatar" />
         : <div className="sidebar-user-avatar fallback">{(displayName || '?')[0].toUpperCase()}</div>}
       <div className="sidebar-user-text">
         <div className="sidebar-user-name">{displayName}</div>
-        <div className="sidebar-user-sub">{isSuperadmin ? 'Superadmin' : 'Signed in'}</div>
+        <div className="sidebar-user-sub">
+          {isSuperadmin ? 'Superadmin' : 'Signed in'}
+          {' · '}
+          <span className="sidebar-version">{versionLine().split(' · ')[0]}</span>
+        </div>
       </div>
     </button>
   );

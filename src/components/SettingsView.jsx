@@ -50,6 +50,7 @@ import { useAiStatus } from '../hooks/useAiStatus';
 import { DEFAULT_DUE_ALERT_SETTINGS, saveAlertState, setMutedOn } from '../services/dueAlerts';
 import KnowledgeSection from './KnowledgeSection';
 import { sessionLine, SETTINGS_SUBTITLE } from '../services/approvalCopy';
+import { versionLine } from '../services/appVersion';
 import { downloadFile } from '../services/download';
 import { friendlyError } from '../services/access';
 
@@ -94,7 +95,7 @@ export default function SettingsView() {
     ]),
     ...(isSuperadmin ? [{ id: 'ai-fallback', label: 'AI — superadmin fallback' }] : []),
     { id: 'webhooks', label: 'Webhooks' },
-    { id: 'about',    label: 'About this device' },
+    { id: 'about',    label: 'About' },
   ];
 
   // Keep permission state fresh
@@ -468,10 +469,17 @@ export default function SettingsView() {
       )}
 
       <section id="settings-about" className="review-section review-section-plain htu-section">
-        <h2 className="review-h2">About this device</h2>
+        <h2 className="review-h2">About</h2>
         <p className="muted small">
-          Your data is stored in Firebase Firestore (project <span className="mono">task-monitor-cbaf2</span>)
-          and synced to your Google account, so it appears on every device you sign in from.
+          <strong>Task Monitor {versionLine()}</strong>
+        </p>
+        <p className="muted small">
+          Your work is stored in Firebase Firestore and synced to your Google
+          account, so it appears on every device you sign in from.
+        </p>
+        <p className="muted small">
+          Reporting a problem? Include the version above — it tells us exactly
+          which build you are on.
         </p>
       </section>
 

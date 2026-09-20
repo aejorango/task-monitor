@@ -95,8 +95,16 @@ npm run deploy:rules  # firestore.rules + storage.rules
 npm run deploy:all    # both
 ```
 
-Deploys use the Firebase CLI account in `FIREBASE_ACCOUNT` (defaults to the
-project owner). Log in first with `firebase login`.
+Log in first with `firebase login`. By default the deploy uses whichever
+account the CLI is logged in as; set `FIREBASE_ACCOUNT` to pick a specific one:
+
+```bash
+FIREBASE_ACCOUNT=you@example.com npm run deploy
+```
+
+The running version is shown in **Settings → About** and in the sidebar footer —
+quote it in a bug report. It comes from `package.json` at build time, so it
+cannot drift from what was shipped.
 
 ## AI brain — the Claude Code CLI
 

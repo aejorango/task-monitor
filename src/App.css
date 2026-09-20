@@ -10031,3 +10031,10 @@ a:hover { text-decoration: underline; }
   .setup-card { padding: 28px 22px; }
   .setup-title { font-size: 20px; }
 }
+
+/* Version badge in the sidebar footer — small enough to ignore, present enough
+   to quote in a bug report. */
+.sidebar-version {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
