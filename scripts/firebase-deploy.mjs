@@ -18,10 +18,11 @@ import process from 'node:process';
 const TARGETS = {
   hosting:   ['hosting'],
   rules:     ['firestore:rules', 'storage:rules'],
+  indexes:   ['firestore:indexes'],
   // The AI proxy. Needs the Blaze plan: a function that calls Anthropic makes
   // an outbound request, which Spark does not allow.
   functions: ['functions'],
-  all:       ['hosting', 'firestore:rules', 'storage:rules', 'functions'],
+  all:       ['hosting', 'firestore:rules', 'firestore:indexes', 'storage:rules', 'functions'],
 };
 
 const target = process.argv[2] || 'hosting';

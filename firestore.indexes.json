@@ -1,0 +1,88 @@
+{
+  "//": [
+    "Composite indexes. Firestore auto-indexes single fields; anything that",
+    "combines an equality filter with an orderBy, or two range/order fields,",
+    "needs an entry here. Deploy with: npm run deploy:indexes",
+    "",
+    "Without these, the app read whole collections and sorted client-side —",
+    "fine at 500 activities, ruinous at 50,000."
+  ],
+  "indexes": [
+    {
+      "//": "Activity Log, Work Performed, Dashboard: newest entries in a workspace.",
+      "collectionGroup": "activities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "One task's activity, newest first — the task editor's right column.",
+      "collectionGroup": "activities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "taskId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "Per-project activity: the project log and its CSV export.",
+      "collectionGroup": "activities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "projectId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "Board columns: live tasks in a workspace by status.",
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "deleted", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "Calendar and Gantt: live tasks in a workspace by due date.",
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "deleted", "order": "ASCENDING" },
+        { "fieldPath": "plan.endDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "Recurrence: finding the siblings of a recurring task.",
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "recurrenceParentId", "order": "ASCENDING" },
+        { "fieldPath": "deleted", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "AI usage, newest first, for the company's admin.",
+      "collectionGroup": "aiUsage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "A member's own AI usage.",
+      "collectionGroup": "aiUsage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

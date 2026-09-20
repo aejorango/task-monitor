@@ -18,7 +18,8 @@
     "deploy:pages": "gh-pages -d dist",
     "deploy:rules": "node scripts/firebase-deploy.mjs rules",
     "deploy:all": "node scripts/firebase-deploy.mjs all",
-    "deploy:functions": "node scripts/firebase-deploy.mjs functions"
+    "deploy:functions": "node scripts/firebase-deploy.mjs functions",
+    "deploy:indexes": "node scripts/firebase-deploy.mjs indexes"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

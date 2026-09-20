@@ -28,6 +28,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   serverTimestamp,
   writeBatch,
@@ -1282,28 +1283,70 @@ export function subscribeToActivities(taskId, callback) {
 // Cross-task activities in a workspace — single where, sort + cap client-side.
 // 500 cap matches the previous server-side limit; for workspaces with more
 // than 500 activities we'd switch to paginated fetches.
-export function subscribeToAllActivities(workspaceId, callback) {
+// How many activities a live listener holds at once. Enough for every view in
+// the app; small enough that a workspace with 50,000 entries does not download
+// all of them to show the last week. Older entries are reached by paging
+// (loadMoreActivities) rather than by widening the listener.
+export const ACTIVITY_PAGE_SIZE = 200;
+
+/**
+ * Newest activities in a workspace. Ordered and limited BY FIRESTORE, not by
+ * the client — this used to fetch the whole collection and sort it in the
+ * browser on every snapshot.
+ *
+ * Needs the (workspaceId ASC, date DESC) composite index — see
+ * firestore.indexes.json.
+ *
+ * @param {number} [pageSize]  how many to keep live
+ */
+export function subscribeToAllActivities(workspaceId, callback, { pageSize = ACTIVITY_PAGE_SIZE } = {}) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(activitiesRef, where('workspaceId', '==', workspaceId));
+  const q = query(
+    activitiesRef,
+    where('workspaceId', '==', workspaceId),
+    orderBy('date', 'desc'),
+    limit(pageSize),
+  );
   return onSnapshot(q, (snap) => {
-    const data = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-      .slice(0, 500);
-    callback(data);
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, listenerError('allActivities', () => callback([])));
 }
 
-export function subscribeToRecentActivities(workspaceId, sinceDate, callback) {
+/**
+ * One page of older activities, for "Load more". A one-shot read, not a
+ * listener: history does not change, and a second live listener per page would
+ * put the app right back where it started.
+ *
+ * @param {string} workspaceId
+ * @param {string|null} beforeDate  the `date` of the oldest row on screen
+ * @returns {Promise<{ activities: object[], hasMore: boolean }>}
+ */
+export async function loadMoreActivities(workspaceId, beforeDate, { pageSize = ACTIVITY_PAGE_SIZE } = {}) {
+  if (!workspaceId || !beforeDate) return { activities: [], hasMore: false };
+  const snap = await getDocs(query(
+    activitiesRef,
+    where('workspaceId', '==', workspaceId),
+    orderBy('date', 'desc'),
+    startAfter(beforeDate),
+    limit(pageSize + 1),          // one extra tells us whether more exist
+  ));
+  const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return { activities: rows.slice(0, pageSize), hasMore: rows.length > pageSize };
+}
+
+/**
+ * Activities since a date — the Dashboard's 30-day window and the Review page.
+ * The date bound is applied by Firestore, so a workspace with years of history
+ * costs the same as one with a month of it.
+ */
+export function subscribeToRecentActivities(workspaceId, sinceDate, callback, { pageSize = ACTIVITY_PAGE_SIZE } = {}) {
   if (!workspaceId) { callback([]); return () => {}; }
-  const q = query(activitiesRef, where('workspaceId', '==', workspaceId));
-  return onSnapshot(q, (snap) => {
-    const data = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((a) => !sinceDate || (a.date || '') >= sinceDate)
-      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-      .slice(0, 200);
-    callback(data);
+  const constraints = [where('workspaceId', '==', workspaceId)];
+  if (sinceDate) constraints.push(where('date', '>=', sinceDate));
+  constraints.push(orderBy('date', 'desc'), limit(pageSize));
+
+  return onSnapshot(query(activitiesRef, ...constraints), (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, listenerError('recentActivities', () => callback([])));
 }
 
