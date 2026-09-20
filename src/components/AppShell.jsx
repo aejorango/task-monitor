@@ -33,6 +33,7 @@ const VIEWS = [
   { id: 'review',         label: 'Review',           icon: 'review' },
   { id: 'artifacts',      label: 'Artifacts',        icon: 'artifacts' },
   { id: 'analytics',      label: 'Analytics',        icon: 'analytics' },
+  { id: 'trash',          label: 'Trash',            icon: 'trash' },
   { id: 'how-to-use',     label: 'How to Use',       icon: 'help' },
   { id: 'settings',       label: 'Settings',         icon: 'settings' },
 ];

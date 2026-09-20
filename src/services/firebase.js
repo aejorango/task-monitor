@@ -1216,6 +1216,64 @@ export async function softDeleteTask(taskId) {
   return await updateTask(taskId, { deleted: true });
 }
 
+// ─── TRASH ──────────────────────────────────────────────────────────────────
+// Every delete in this app is a soft delete: the document stays, with
+// `deleted: true`. The dialogs have always said so — but nothing listed what
+// had been deleted, so "can be restored" meant "ask someone with the Firestore
+// console open". These read that flag back.
+
+/** Everything deleted in a workspace, newest first. One listener per kind. */
+export function subscribeToDeleted(workspaceId, kind, callback) {
+  if (!workspaceId) { callback([]); return () => {}; }
+  const refs = { tasks: tasksRef, projects: projectsRef, minutes: minutesRef, goals: goalsRef };
+  const ref = refs[kind];
+  if (!ref) { callback([]); return () => {}; }
+
+  // `deleted == true` is a single equality filter, so no composite index is
+  // needed; the sort is over a handful of documents.
+  const q = query(ref, where('workspaceId', '==', workspaceId), where('deleted', '==', true));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0)));
+  }, listenerError(`deleted:${kind}`, () => callback([])));
+}
+
+const TRASH_COLLECTION = {
+  task: 'tasks', project: 'projects', minute: 'minutes', goal: 'goals',
+};
+
+/** Put something back. The inverse of every softDelete* in this file. */
+export async function restoreDeleted(kind, id) {
+  const collectionName = TRASH_COLLECTION[kind];
+  if (!collectionName) throw new Error(`Cannot restore a ${kind}.`);
+  return updateDoc(doc(db, collectionName, id), {
+    deleted: false,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Remove something for good.
+ *
+ * The ONE place in the app that hard-deletes, and only from Trash, only on an
+ * explicit confirmation. Tasks are excluded on purpose: activities reference
+ * them by id, and a hard-deleted task would leave an activity log pointing at
+ * nothing. A task in Trash stays there.
+ */
+export const CAN_DELETE_FOREVER = ['project', 'minute', 'goal'];
+
+export async function deleteForever(kind, id) {
+  if (!CAN_DELETE_FOREVER.includes(kind)) {
+    throw new Error(
+      kind === 'task'
+        ? 'A task cannot be removed for good — the activity log refers to it. It stays in Trash.'
+        : `Cannot permanently remove a ${kind}.`,
+    );
+  }
+  return deleteDoc(doc(db, TRASH_COLLECTION[kind], id));
+}
+
 export function subscribeToTasks(workspaceId, callback) {
   if (!workspaceId) { callback([]); return () => {}; }
   // We only filter by workspaceId on the server. `deleted`/`archived` filtering
