@@ -74,6 +74,12 @@ that gate is enforced in the security rules, not just on screen.
 | Projects | Projects, phases, custom fields, sharing, templates |
 | Settings | Preferences, workspaces, members, companies, AI, knowledge base, export |
 
+**Adding people.** A workspace admin invites by **email address** — no Firebase
+UID ever changes hands. The invitation waits on the workspace; the person joins
+automatically the next time they sign in with that address, at exactly the role
+offered. No email is sent (there is no backend to send one), so tell them it is
+waiting.
+
 **Workspaces** are the top-level container. Everything — projects, tasks,
 activities, templates, minutes, goals — belongs to exactly one workspace, and
 members of a workspace share its contents. Roles are owner / admin / editor /
@@ -247,6 +253,8 @@ rules so the two stay in step).
 | List a project's invite links | The same people (invite ids are the secret in the link) |
 | Open an invite by its exact link | Anyone signed in — the link *is* the credential |
 | Accept an invite | Anyone with the link; the claim can only set the claimer's own role, to exactly the role the invite names |
+| Invite someone to a workspace | Workspace owners and admins, by email address |
+| Join a workspace you were invited to | The holder of that email address, at exactly the role offered, once — the invitation is consumed |
 | Read presence (who else is on a task) | Members of that task's workspace |
 | Set your own `companyId` | Nobody — superadmins assign companies |
 
@@ -281,6 +289,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/sharedSubscription.test.mjs` | One Firestore listener per query, however many callers |
 | `src/services/knowledgeCopy.test.mjs` | Operator runbook vs. what everyone else is told |
 | `src/services/approvalCopy.test.mjs` | What a not-yet-approved account is told |
+| `src/services/invites.test.mjs` | Inviting by email: validation, claiming, member labels |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |

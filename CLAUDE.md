@@ -26,7 +26,11 @@ workspaces/{workspaceId}:                ← v10 top-level container
   createdByUserId, name, description, color, icon
   members: [uid, ...]                    ← array-contains query
   acl: { [uid]: 'owner'|'admin'|'editor'|'viewer' }
-  pendingInvites: [{ email, role, token }]
+  memberProfiles: { [uid]: { displayName, email, photoURL } }
+  pendingInvites:      [{ email, role, invitedBy, invitedAt }]  ← the record
+  pendingInviteEmails: [email, ...]      ← flat, so array-contains can find it
+  pendingInviteRoles:  { [email]: role } ← flat, so the security rule can check it
+  lastClaimedInviteEmail: email          ← side channel for isClaimingWorkspaceInvite
   knowledge: { notebookId, notebookTitle, setAt } | null   ← NotebookLM default
   archived, deleted, createdAt, updatedAt
 
@@ -257,7 +261,11 @@ src/
 **Shipped since this list was first written — these are NOT scope violations:**
 
 - **Multi-user workspaces and sharing** — `workspaces/{id}` with `members[]` + `acl{}`,
-  `pendingInvites`, and roles owner / admin / editor / viewer enforced in `firestore.rules`.
+  and roles owner / admin / editor / viewer enforced in `firestore.rules`.
+- **Invite by email** — an admin records an invitation on the workspace; the invited
+  person joins themselves at next sign-in (`claimPendingWorkspaceInvites`), validated by
+  `isClaimingWorkspaceInvite()` in the rules. No backend, no UID ever changes hands.
+  Rules for it live in `services/invites.js`.
 - **Google sign-in** — `signInWithGoogle()` in firebase.js (`linkWithPopup` when anonymous, so
   existing data survives). Anonymous auth is still the default way in, not the only one.
 - **File upload bytes** — `FileUpload.jsx` → `uploadFile()` pushes to Firebase Storage under
@@ -325,6 +333,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Treating `bridge-api` as `claude-code` — it cannot browse or ground, and it is billed per token
 - ❌ Returning a mock or API fallback without setting `degraded` + `reason`
 - ❌ Omitting `--tools ""` when spawning the CLI (that leaves every built-in tool live)
+- ❌ Asking anyone for a Firebase UID. Invite by email (`inviteToWorkspaceByEmail`); show `memberLabel(uid, memberProfiles)`, never the uid. The Account ID box is superadmin-only and behind an Advanced toggle.
+- ❌ Adding an invite field without its flat twin. `pendingInvites` is an array of maps: rules cannot search it, so `pendingInviteEmails` (array-contains) and `pendingInviteRoles` (role lookup) must be written in the same update. `inviteFields()` / `revokeInviteFields()` do all three.
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
 - ❌ Gating the due-alert prompt block on an API key — use `useAiStatus().available`; CLI users have no key. When AI is unavailable the block falls back to `buildFallbackPrompt` and labels it as a template.
 - ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.
