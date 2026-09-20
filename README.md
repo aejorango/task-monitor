@@ -115,8 +115,20 @@ picked automatically in this order:
 | Provider | What it is | Cost |
 | --- | --- | --- |
 | `claude-code` | The local **Claude Code CLI**, reached through the bridge | **$0** — your Pro/Max subscription |
-| `api` | Anthropic Messages API with the company (or superadmin) key | Per token |
+| `bridge-api` | The bridge, running on an `ANTHROPIC_API_KEY` rather than the CLI | Per token |
+| `proxy` | The **aiProxy Cloud Function**, holding the company's key server-side | Per token, billed to the company |
+| `api` | Anthropic Messages API with a superadmin's own device key | Per token |
 | `mock` | Canned offline text, always labelled as placeholder | $0 |
+
+**The company key never reaches a browser.** It lives in
+`companies/{id}/secrets/anthropic`, which only a superadmin can read. A member's
+AI request goes to the `aiProxy` function, which checks that they are approved,
+in a company, and that the company has AI switched on — then calls Anthropic and
+writes a usage record the member cannot forge. Deploy it with:
+
+```bash
+npm run deploy:functions   # needs the Firebase Blaze plan (outbound network)
+```
 
 The app is a static frontend, so the browser can't spawn the CLI itself. A tiny
 zero-dependency Node bridge does it instead, on your own machine:
@@ -253,6 +265,8 @@ Firestore emulator is a JAR; it never touches the real project.
 | `bridge/ai.test.mjs` | Hermetic CLI invocation, denied-tool handling, JSON extraction |
 | `bridge/settings.test.mjs` | What a web page may change on the bridge, and the admin code |
 | `src/services/aiProvider.test.mjs` | Which provider is answering, what it can do, and who pays |
+| `src/services/aiProxy.test.mjs` | The browser never holds a company key |
+| `functions/src/authorize.test.mjs` | Who the AI proxy lets spend the company budget |
 | `bridge/notebooklm.test.mjs` | NotebookLM CLI payload parsing, timeouts, concurrency |
 | `src/services/dueAlerts.test.mjs` | Which task is due for an alert, and in what order |
 | `src/services/recurrence.test.mjs` | Recurring-task date maths and the next instance's payload |

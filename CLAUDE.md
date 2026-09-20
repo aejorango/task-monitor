@@ -101,6 +101,10 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 ## AI provider layer
 
 ```
+functions/index.js    ← aiProxy: holds the COMPANY key server-side. The browser
+                        sends a prompt; the function checks the caller
+                        (approved + company + aiEnabled) and calls Anthropic.
+functions/src/authorize.js ← that check, as a pure tested function
 bridge/ai.mjs         ← the only place that spawns `claude`; also API + mock
 bridge/notebooklm.mjs ← the only place that spawns `notebooklm` (knowledge base)
 bridge/server.mjs     ← localhost HTTP: /health /ai/complete /ai/json /ai/recheck
@@ -133,6 +137,11 @@ answers — with `degraded` + `grounding: null` — never a swallowed question.
 Surfaces: Ask AI ("Ground with my notebook"), the due-task alert prompt block,
 and `generateClaudePromptFull`.
 
+- **A company's API key never reaches a browser.** It lives in
+  `companies/{id}/secrets/anthropic`, readable only by a superadmin and by the
+  `aiProxy` function (admin credentials). The company document carries a
+  `hasApiKey` boolean, not the key. `getEffectiveApiKey()` returns ONLY a
+  superadmin's own device key. Members' AI goes through provider `'proxy'`.
 - **One chokepoint.** New AI features call `askAI` / `askAIJson` (or the
   `callClaude` / `callClaudeJson` wrappers in `anthropic.js`). Never `fetch`
   a model directly, and never spawn the CLI from anywhere but `bridge/ai.mjs`.
@@ -255,7 +264,11 @@ src/
 
 **Still out of scope:**
 
-- A server-side backend of any kind — Firestore is the backend, the app is a static SPA.
+- A general server-side backend — Firestore is still the backend and the app is
+  still a static SPA. The **one** exception is `functions/`, which exists solely
+  so a company's Anthropic key can be held server-side (T-0034 / IMP-001): a
+  shared secret cannot be kept in a browser. Deploying it needs the Blaze plan
+  (`npm run deploy:functions`). Do not grow it into a general API.
 - Server-side rendering.
 - Running the AI bridge anywhere but `127.0.0.1` behind its origin allowlist.
 - Real-time collaborative text editing.
@@ -305,6 +318,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Swim-lanes when projectFilter is "all" — phase IDs differ across projects so the toggle is hidden in that case. The page header chip only shows when a single project is selected.
 - ❌ Calling the Anthropic API directly from a component — go through `askAI`
 - ❌ Gating an AI surface on `getEffectiveApiKey()` — CLI users have no key
+- ❌ Reading `company.anthropicApiKey` in the client. It is not there any more — check `company.hasApiKey`.
 - ❌ Gating an AI surface on `profile.companyId` — a user with no company still has AI when the bridge is up. Use `useAiStatus().available`.
 - ❌ Treating `bridge-api` as `claude-code` — it cannot browse or ground, and it is billed per token
 - ❌ Returning a mock or API fallback without setting `degraded` + `reason`
