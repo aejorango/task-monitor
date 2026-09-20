@@ -155,6 +155,7 @@ and `generateClaudePromptFull`.
 
 - **Dates as YYYY-MM-DD strings** in user's local timezone (Asia/Manila). Helper: `todayLocal()` — defined in `services/recurrence.js`, re-exported from firebase.js.
 - **Logic goes in a pure service, not in a component or in firebase.js.** `services/recurrence.js`, `services/csv.js`, `services/askAiCore.js`, `services/access.js`, `services/dueAlerts.js`, `services/errorMessages.js` and `services/nlpQuickAdd.js` import no Firebase and no network — that is what makes them testable with `node --test`. Components render what those modules return.
+- **Every downloadable file is date-stamped**: `<name>-YYYY-MM-DD.<ext>` from `downloadFile()` in `services/download.js`, using `todayLocal()` — never `new Date().toISOString()`, which is UTC and stamps Manila mornings with yesterday. Nothing outside that module may set `a.download`.
 - **Timestamps** (`createdAt`, `updatedAt`, `loggedAt`, `lastActivityAt`) use `serverTimestamp()`.
 - **Soft delete** via `deleted: false` flag; **archive** via `archived: false`. Never hard-delete tasks because activities reference them.
 - **`userId` on every document** — keeps security rules trivial.
@@ -278,6 +279,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 ## Common Pitfalls
 
 - ❌ Storing dates as JS `Date` objects in Firestore — use string `YYYY-MM-DD` for date-only fields
+- ❌ Naming a download with `new Date().toISOString().slice(0,10)` — that is the UTC day. Use `downloadFile(base, ext, content)` from `services/download.js`.
 - ❌ Reading the activities collection just for a count — use the denormalized counter
 - ❌ Using `arrayUnion` to push activities into a task document — they go in the root `activities` collection
 - ❌ Renaming `userId` — it's referenced by security rules

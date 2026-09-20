@@ -193,6 +193,7 @@ Firestore emulator is a JAR; it never touches the real project.
 | `src/services/askAiCore.test.mjs` | Ask AI: digest facts, intent routing, task search, answers |
 | `src/services/access.test.mjs` | Who may share a project; plain-language error text |
 | `src/services/errorMessages.test.mjs` | What a person is told when a page crashes |
+| `src/services/download.test.mjs` | Date-stamped filenames in the user's own timezone |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules, against the emulator |
 
@@ -204,7 +205,13 @@ Firestore emulator is a JAR; it never touches the real project.
 - `askAiCore.js` — the whole Ask AI analysis engine, with no Firebase import
   (`askAi.js` adds only the parts that write or call a model)
 - `access.js` — the permission checks that mirror `firestore.rules`
-- `dueAlerts.js`, `errorMessages.js`, `nlpQuickAdd.js`
+- `download.js` — the one way a file reaches the user
+- `preferences.js`, `projects.js`, `dueAlerts.js`, `errorMessages.js`, `nlpQuickAdd.js`
+
+**Every downloadable file is date-stamped** — `<name>-YYYY-MM-DD.<ext>`, in the
+user's own timezone, produced by `downloadFile()` in `services/download.js`.
+Nothing else in the app may build a filename or set `a.download`; two tests in
+`tests/ui/download.test.mjs` enforce that.
 
 Components import from those modules and render the result. A new piece of
 logic goes in a service with a test, not in a `.jsx` file.
