@@ -13,7 +13,11 @@ export const PRIORITY_RANK = { urgent: 0, high: 1, medium: 2, low: 3 };
 export const SNOOZE_PRESETS_MIN = [5, 15, 30, 60, 120];
 
 export const DEFAULT_DUE_ALERT_SETTINGS = {
-  enabled: true,
+  // Off by default, on purpose: this is an interrupting modal that also spends
+  // AI budget generating a prompt. It is opt-in — the topbar switch (or
+  // Settings → Due-task alerts) turns it on. Only the in-app modal is gated by
+  // this; the browser-notification scan in useNotifications is not.
+  enabled: false,
   leadDays: 0,          // 0 = due today or overdue; 1 = also tomorrow; ...
   defaultSnoozeMin: 15,
   quietFrom: '',        // 'HH:MM' local; '' = no quiet hours

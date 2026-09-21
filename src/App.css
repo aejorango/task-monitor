@@ -9184,14 +9184,49 @@ a:hover { text-decoration: underline; }
   transition: background 0.12s, border-color 0.12s;
 }
 .topbar-bell:hover { background: var(--c-surface-2); }
-.topbar-bell.is-muted { color: var(--c-text-3); border-style: dashed; }
 .topbar-bell-count {
   position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
   border-radius: var(--r-pill); background: var(--c-danger); color: #fff;
   font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
   border: 2px solid var(--c-surface);
 }
-.topbar-bell.is-muted .topbar-bell-count { background: var(--c-text-3); }
+
+/* Due-task alert switch (topbar). A switch, not a bell: the alert is opt-in,
+   so the control has to show on/off at a glance and be visible while off —
+   it is the only way back on. */
+.due-alert-toggle {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  height: 32px; padding: 0; border: 0; background: none;
+  cursor: pointer; flex-shrink: 0; border-radius: var(--r-pill);
+}
+.due-alert-toggle-track {
+  display: inline-flex; align-items: center;
+  width: 38px; height: 22px; padding: 2px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-3);
+  border: 1px solid var(--c-border);
+  transition: background 0.14s, border-color 0.14s;
+}
+.due-alert-toggle:hover .due-alert-toggle-track { border-color: var(--c-border-strong); }
+.due-alert-toggle-knob {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--c-text-3);
+  transition: transform 0.14s, background 0.14s;
+}
+.due-alert-toggle.is-on .due-alert-toggle-track {
+  background: var(--c-accent); border-color: var(--c-accent);
+}
+.due-alert-toggle.is-on .due-alert-toggle-knob { background: #fff; transform: translateX(16px); }
+/* On, but "close all" silenced it for today — on without being loud. */
+.due-alert-toggle.is-muted .due-alert-toggle-track { border-style: dashed; opacity: 0.65; }
+.due-alert-toggle:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.due-alert-toggle-count {
+  position: absolute; top: -3px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: var(--r-pill); background: var(--c-danger); color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+  border: 2px solid var(--c-surface);
+}
+.due-alert-toggle.is-muted .due-alert-toggle-count { background: var(--c-text-3); }
 
 /* ─── Knowledge base (NotebookLM) ────────────────────────────────────────
    Shared utilities first — used by NotebookPicker, the Settings section and

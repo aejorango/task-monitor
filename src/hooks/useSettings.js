@@ -21,11 +21,28 @@ function merge(base, patch) {
   return next;
 }
 
+// Due-task alerts used to default ON, so every device that ever saved any
+// setting has `dueAlerts.enabled: true` written into it — a stored value the
+// new default can never override. That `true` was inherited, not chosen, so it
+// is cleared once, here. The flag means a later deliberate opt-in is never
+// undone on the next load.
+const DUE_ALERT_OPT_IN_KEY = 'task-monitor.dueAlerts.optIn.v1';
+
+function applyDueAlertOptIn(settings) {
+  try {
+    if (localStorage.getItem(DUE_ALERT_OPT_IN_KEY)) return settings;
+    localStorage.setItem(DUE_ALERT_OPT_IN_KEY, '1');
+    return { ...settings, dueAlerts: { ...settings.dueAlerts, enabled: false } };
+  } catch {
+    return settings;
+  }
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS };
-    return merge(DEFAULTS, JSON.parse(raw));
+    if (!raw) return applyDueAlertOptIn({ ...DEFAULTS });
+    return applyDueAlertOptIn(merge(DEFAULTS, JSON.parse(raw)));
   } catch {
     return { ...DEFAULTS };
   }
@@ -38,6 +55,10 @@ function save(settings) {
 // Module-level state so all hook consumers see updates immediately.
 let current = load();
 const subscribers = new Set();
+
+// The settings as loaded, without subscribing — for callers outside React
+// (and for tests, which need to see what load() resolved to).
+export function readSettings() { return current; }
 
 function setAll(next) {
   current = next;
