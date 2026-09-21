@@ -66,13 +66,26 @@ export function parseCreateIntent(query) {
   return { kind: null, label: null, rest: afterVerb.trim() };
 }
 
-const CREATE_ORDER = ['task', 'project', 'minute', 'goal', 'activity'];
+// The create vocabulary. Every entity here must have a receiver — a
+// useQuickCreate(<entity>) somewhere in src/components — or the command
+// navigates and nothing opens. tests/ui/commandPalette.test.mjs enforces it.
+export const CREATE_ORDER = ['task', 'project', 'minute', 'goal', 'activity'];
 const CREATE_LABEL = {
   task: 'New task', project: 'New project', minute: 'New meeting minutes',
   goal: 'New goal', activity: 'Log an activity',
 };
 const CREATE_ICON = {
   task: 'board', project: 'projects', minute: 'minutes', goal: 'goals', activity: 'clock',
+};
+/**
+ * Where each "New …" command goes before it asks that page to open its create
+ * flow. Here rather than in AppShell because it is part of the same vocabulary:
+ * a fourth list in a component is how "Log an activity" came to navigate to a
+ * page that was not listening (BUG-016).
+ */
+export const CREATE_VIEW = {
+  task: 'board', project: 'projects', minute: 'minutes',
+  goal: 'goals', activity: 'work-performed',
 };
 
 /**

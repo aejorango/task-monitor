@@ -3,12 +3,13 @@
 // Columns: Date stub | Project A | Project B | …
 // Rows:    sticky lane headers → full-width date bars → per-lane activity cells.
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { useAllActivities, useProjects, useAuth, useTasks } from '../hooks/useTasks';
 import { todayLocal } from '../services/firebase';
 import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { useQuickCreate } from '../hooks/useQuickCreate';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function friendlyDate(s) {
@@ -41,6 +42,10 @@ export default function WorkPerformedView({ projectFilter }) {
   const [pickerOpen, setPickerOpen]   = useState(false);   // task-picker modal
   const [loggingTask, setLoggingTask] = useState(null);    // → ActivityLogger
   const [editingActivity, setEditingActivity] = useState(null); // → ActivityEditor
+
+  // ⌘K → "Log an activity" lands on this page and then asks for the task
+  // picker. Without this the command navigated here and nothing opened.
+  useQuickCreate('activity', useCallback(() => setPickerOpen(true), []));
 
   const today = todayLocal();
 

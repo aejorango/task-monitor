@@ -25,13 +25,15 @@ test('keyboard navigation covers the action rows too', () => {
     'without the offset, arrow keys would highlight the wrong row');
 });
 
-test('each "New …" lands on the page that owns that thing', () => {
+test('each "New …" lands on the page that owns that thing', async () => {
+  // Since T-0093 the destinations live beside the vocabulary in
+  // commandPalette.js rather than in a second table inside the component.
+  const { CREATE_VIEW } = await import('../../src/services/commandPalette.js');
+  assert.deepEqual(CREATE_VIEW, {
+    task: 'board', project: 'projects', minute: 'minutes',
+    goal: 'goals', activity: 'work-performed',
+  });
   const run = search.slice(search.indexOf('const runCommand'), search.indexOf('const activateResult'));
-  assert.match(run, /task: 'board'/);
-  assert.match(run, /project: 'projects'/);
-  assert.match(run, /minute: 'minutes'/);
-  assert.match(run, /goal: 'goals'/);
-  assert.match(run, /activity: 'work-performed'/);
   assert.match(run, /requestQuickCreate\(cmd\.entity, text\)/);
 });
 
@@ -117,4 +119,46 @@ test('the recents group is labelled as such, not as "Actions"', () => {
 
 test('the panel opens for recents even with nothing typed', () => {
   assert.match(search, /\{open && \(q\.trim\(\) \|\| results\.flat\.length > 0\) && \(/);
+});
+
+// ─── T-0093 / BUG-016: every "New …" command has somewhere to land ──────────
+//
+// The palette's create vocabulary and the pages' listeners were two separate
+// lists, and nothing failed the build when an entity had no receiver. "Log an
+// activity" navigated to Work Performed and then nothing opened.
+
+test('every entity the palette can create has a receiver', async () => {
+  const { CREATE_ORDER } = await import('../../src/services/commandPalette.js');
+  const dir = path.join(root, 'src', 'components');
+  const sources = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.jsx'))
+    .map((f) => fs.readFileSync(path.join(dir, f), 'utf8'))
+    .join('\n');
+
+  const orphans = CREATE_ORDER.filter((entity) => !sources.includes(`useQuickCreate('${entity}'`));
+  assert.deepEqual(orphans, [],
+    'a command with no useQuickCreate listener navigates somewhere and then does nothing');
+});
+
+test('the Work Performed page listens for the activity command', () => {
+  const view = fs.readFileSync(path.join(root, 'src', 'components', 'WorkPerformedView.jsx'), 'utf8');
+  assert.match(view, /useQuickCreate\('activity', useCallback\(\(\) => setPickerOpen\(true\), \[\]\)\)/);
+});
+
+test('the palette still offers the command, and sends it to the page that listens', async () => {
+  const { buildCommands, CREATE_VIEW } = await import('../../src/services/commandPalette.js');
+  const logIt = buildCommands('log hours').find((c) => c.label === 'Log an activity');
+  assert.ok(logIt, '⌘K → "log hours" must offer it');
+  assert.equal(logIt.entity, 'activity');
+  assert.equal(CREATE_VIEW.activity, 'work-performed', 'and it goes where the listener is');
+});
+
+test('every create command has a destination, named in one place', async () => {
+  const { CREATE_ORDER, CREATE_VIEW } = await import('../../src/services/commandPalette.js');
+  assert.deepEqual(CREATE_ORDER.slice().sort(), Object.keys(CREATE_VIEW).sort(),
+    'an entity with no destination navigates to the board and confuses everybody');
+  const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
+  assert.match(shell, /navigate\(\{ view: CREATE_VIEW\[cmd\.entity\] \|\| 'board' \}\);/);
+  assert.doesNotMatch(shell, /const VIEW_FOR = \{/,
+    'the component must not keep its own copy of the destinations');
 });

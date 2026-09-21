@@ -42,6 +42,12 @@ export function setupDom() {
   globalThis.Node = window.Node;
   globalThis.Event = window.Event;
   globalThis.MouseEvent = window.MouseEvent;
+  // App code builds CustomEvents (the quick-create request, task:done, the
+  // open-task request). Node has its own CustomEvent, and jsdom refuses one
+  // that is not its own — so the window's must win.
+  globalThis.CustomEvent = window.CustomEvent;
+  globalThis.KeyboardEvent = window.KeyboardEvent;
+  globalThis.PointerEvent = window.PointerEvent || window.MouseEvent;
   globalThis.getComputedStyle = window.getComputedStyle;
   globalThis.requestAnimationFrame = (cb) => window.setTimeout(() => cb(Date.now()), 0);
   globalThis.cancelAnimationFrame = (id) => window.clearTimeout(id);

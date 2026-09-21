@@ -15,7 +15,7 @@ import { goToTask as openTask } from '../services/openTask';
 import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
-import { buildCommands, commandsFirst, recentCommands, rememberRecent } from '../services/commandPalette';
+import { buildCommands, commandsFirst, CREATE_VIEW, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
@@ -562,11 +562,9 @@ function GlobalSearch({ projects, navigate }) {
     }
 
     const text = cmd.payload?.text || '';
-    const VIEW_FOR = {
-      task: 'board', project: 'projects', minute: 'minutes',
-      goal: 'goals', activity: 'work-performed',
-    };
-    navigate({ view: VIEW_FOR[cmd.entity] || 'board' });
+    // CREATE_VIEW lives beside CREATE_ORDER, so the command list and its
+    // destinations cannot drift apart.
+    navigate({ view: CREATE_VIEW[cmd.entity] || 'board' });
     // The destination listens for this and opens its own create flow with the
     // text already filled in. A delay so the view has mounted first.
     setTimeout(() => requestQuickCreate(cmd.entity, text), 60);

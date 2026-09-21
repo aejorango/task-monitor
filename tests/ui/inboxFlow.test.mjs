@@ -119,7 +119,9 @@ test('the Board opens the editor for the task that request names', async () => {
     const id = e.detail?.taskId;
     editing = [task].find((t) => t.id === id) || null;
   };
-  const bus = new EventTarget();
+  // The window's own EventTarget, not Node's: an event and the target it is
+  // dispatched on have to come from the same realm, as they do in the app.
+  const bus = new window.EventTarget();
   bus.addEventListener(OPEN_TASK_EVENT, onOpen);
   goToTask(task, () => {}, { delay: 0, target: bus });
   bus.removeEventListener(OPEN_TASK_EVENT, onOpen);

@@ -499,6 +499,7 @@ run together.
 | `tests/ui/ganttMilestone.test.mjs` | A task with only a due date draws, and can be dragged into a range |
 | `src/services/taskStatus.test.mjs` | What a status implies about progress and the actual dates |
 | `tests/ui/importStatus.test.mjs` | A mapped Status column reaches the task, and no offered field is dropped |
+| `tests/ui/quickCreateActivity.test.mjs` | ⌘K → Log an activity actually opens the picker |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
