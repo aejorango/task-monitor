@@ -193,8 +193,11 @@ test('the row no longer refuses to drag a task without both plan dates', () => {
 test('the committed drag goes through the real write by default', () => {
   assert.match(source, /onSavePlan = updateTask,/,
     'the seam exists for the harness; the app still writes for real');
-  assert.match(source, /await onSavePlan\(task\.id, patch\);/);
-  assert.match(source, /const patch = dragPatch\(task, rangeMin,/);
+  // The commit reads the task and the drag from refs since T-0134, so the
+  // listeners need installing only once per gesture — but it is still one
+  // dragPatch handed to onSavePlan.
+  assert.match(source, /await onSavePlan\(current\.id, patch\);/);
+  assert.match(source, /const patch = dragPatch\(current, rangeMin,/);
 });
 
 test('the geometry is the pure module, not a second copy in the component', () => {

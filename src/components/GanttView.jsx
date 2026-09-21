@@ -560,8 +560,27 @@ export function GanttRow({
   const actStart  = parseDate(task.actual?.startDate);
   const actEnd    = parseDate(task.actual?.endDate);
 
-  // Drag state. While dragging, we shadow the real plan dates with local ones.
+  // Drag state, in two halves on purpose (T-0134 / IMP-012).
+  //
+  // `drag` is what the BAR is drawn from, so it has to be state — every
+  // pointermove moves the bar. `dragRef` is the same thing as a mutable value,
+  // and it is what the window listeners read.
+  //
+  // Before this, the listener effect depended on `drag`, and every pointermove
+  // replaced it with a new object: React tore down and re-added both window
+  // listeners dozens of times a second, on the one interaction in the app that
+  // has to hold 60fps — and the write at pointerup came from whichever closure
+  // happened to be installed at that instant, over a possibly stale `task`.
   const [drag, setDrag] = useState(null);  // { mode, startX, origin, startDay, endDay }
+  const dragRef = useRef(null);
+  const setBothDrag = (next) => { dragRef.current = next; setDrag(next); };
+
+  // The task as it is NOW, for the pointerup that commits. Read through a ref
+  // so the listeners never need re-installing when the task changes underneath
+  // a drag (a teammate's edit, a counter bump). Assigned in an effect, not
+  // during render — the same shape useRecurrenceCatchUp uses.
+  const taskRef = useRef(task);
+  useEffect(() => { taskRef.current = task; }, [task]);
 
   const trackRef = useRef(null);
 
@@ -584,18 +603,31 @@ export function GanttRow({
   const isInProgress = task.status === 'doing';
 
   // ── Drag handlers ────────────────────────────────────────────────────────
+  // Keyed on the MODE, not on the drag: the mode is fixed for the whole
+  // gesture, so this runs once when a drag starts and once when it ends. The
+  // handlers read live geometry from `dragRef`.
+  //
+  // The listeners are on `window` rather than the bar, deliberately — a release
+  // outside the bar has to end the drag, or the gesture sticks.
+  const dragMode = drag?.mode || null;
   useEffect(() => {
-    if (!drag) return;
+    if (!dragMode) return undefined;
+
     const onMove = (e) => {
-      const dDays = Math.round((e.clientX - drag.startX) / zoomConf.dayWidth);
-      setDrag({ ...drag, ...dragTo(drag.mode, drag.origin, dDays) });
+      const live = dragRef.current;
+      if (!live) return;
+      const dDays = Math.round((e.clientX - live.startX) / zoomConf.dayWidth);
+      setBothDrag({ ...live, ...dragTo(live.mode, live.origin, dDays) });
     };
     const onUp = async () => {
-      const patch = dragPatch(task, rangeMin, { startDay: drag.startDay, endDay: drag.endDay });
-      setDrag(null);
+      const live = dragRef.current;
+      const current = taskRef.current;
+      setBothDrag(null);
+      if (!live) return;
+      const patch = dragPatch(current, rangeMin, { startDay: live.startDay, endDay: live.endDay });
       if (!patch) return;   // nothing moved — no write
       try {
-        await onSavePlan(task.id, patch);
+        await onSavePlan(current.id, patch);
       } catch (err) {
         console.error('Could not save plan dates:', err);
         toast.error(friendlyError(err, 'Could not save plan dates. Please try again.'));
@@ -607,7 +639,10 @@ export function GanttRow({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup',   onUp);
     };
-  }, [drag, zoomConf.dayWidth, rangeMin, task.id, task.plan?.startDate, task.plan?.endDate, onSavePlan]);
+    // `toast` and `setBothDrag` are stable for the life of the row; adding them
+    // would put this back to re-installing on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragMode, zoomConf.dayWidth, rangeMin, onSavePlan]);
 
   const startDrag = (e, mode) => {
     // A milestone has an origin now — both ends on its one date — which is what
@@ -616,7 +651,7 @@ export function GanttRow({
     if (!origin) return;
     e.preventDefault();
     e.stopPropagation();
-    setDrag({ mode, startX: e.clientX, origin, startDay: origin.startDay, endDay: origin.endDay });
+    setBothDrag({ mode, startX: e.clientX, origin, startDay: origin.startDay, endDay: origin.endDay });
   };
 
   // Clicking the row's label area opens the activities modal. Bar drags are

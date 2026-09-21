@@ -517,6 +517,7 @@ run together.
 | `tests/ui/recurrenceOnSave.test.mjs` | Finishing a recurring task means the same thing whichever button you press |
 | `src/services/ganttGeometry.test.mjs` | Where a plan bar sits, and what a drag on it writes |
 | `tests/ui/ganttMilestone.test.mjs` | A task with only a due date draws, and can be dragged into a range |
+| `tests/ui/ganttDragListeners.test.mjs` | A 200px drag installs its window listeners once, not once per move |
 | `src/services/taskStatus.test.mjs` | What a status implies about progress and the actual dates |
 | `tests/ui/importStatus.test.mjs` | A mapped Status column reaches the task, and no offered field is dropped |
 | `tests/ui/quickCreateActivity.test.mjs` | ⌘K → Log an activity actually opens the picker |
