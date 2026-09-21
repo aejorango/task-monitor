@@ -202,3 +202,22 @@ test('the Account ID is superadmin-only, and behind a disclosure', () => {
   assert.match(block.slice(0, 400), /<details/, 'and it stays out of the way');
   assert.match(block.slice(0, 700), /aria-label="Account ID"/);
 });
+
+// ─── T-0108 / BUG-023: two buttons called Log ───────────────────────────────
+
+test('exactly one control on a board card is called Log', () => {
+  const src = fs.readFileSync(path.join(componentsDir, 'Board.jsx'), 'utf8');
+  const footer = src.slice(src.indexOf('<div className="task-card-actions">'));
+  const end = footer.indexOf('</div>');
+  const labels = [...footer.slice(0, end).matchAll(/>\{?([^<>{}]*Log[^<>{}]*)\}?</g)].map((m) => m[1].trim());
+  assert.deepEqual(labels, ['+ Log'], `saw ${JSON.stringify(labels)}`);
+});
+
+test('the history toggle is named after what it does, and says so', () => {
+  const src = fs.readFileSync(path.join(componentsDir, 'Board.jsx'), 'utf8');
+  assert.match(src, /\{expanded \? 'Hide history' : `History\$\{task\.activityCount \? ` · \$\{task\.activityCount\}` : ''\}`\}/);
+  assert.match(src, /aria-expanded=\{!!expanded\}/, 'a disclosure has to announce its state');
+  assert.match(src, /Show activity history for \$\{task\.title\}/,
+    'a screen-reader user heard "plus Log" and "Log" with nothing to tell them apart');
+  assert.match(src, /aria-label=\{`Log activity on \$\{task\.title\}`\}/);
+});

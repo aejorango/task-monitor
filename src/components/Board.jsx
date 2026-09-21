@@ -599,8 +599,29 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
               title="Start time tracking on this task"
             >▶</button>
           )}
-          <button className="btn btn-sm btn-ghost" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onLog && onLog(); }}>+ Log</button>
-          <button className="btn btn-sm btn-ghost" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onToggleExpand && onToggleExpand(); }}>{expanded ? 'Hide' : 'Log'}</button>
+          {/* Exactly one control on this card is called Log, and it is the one
+              that records work. The toggle beside it used to be called "Log"
+              too — it inherited the word from the feature name rather than from
+              what it does, and flipped to "Hide" only after being pressed. */}
+          <button
+            className="btn btn-sm btn-ghost"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onLog && onLog(); }}
+            aria-label={`Log activity on ${task.title}`}
+            title="Record time or a note against this task"
+          >+ Log</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onToggleExpand && onToggleExpand(); }}
+            aria-expanded={!!expanded}
+            aria-label={expanded
+              ? `Hide activity history for ${task.title}`
+              : `Show activity history for ${task.title}${task.activityCount ? ` (${task.activityCount} entries)` : ''}`}
+            title={expanded ? 'Hide what has been logged against this task' : 'Show what has been logged against this task'}
+          >
+            {expanded ? 'Hide history' : `History${task.activityCount ? ` · ${task.activityCount}` : ''}`}
+          </button>
           <button className="btn btn-sm btn-ghost" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>Edit</button>
         </div>
       </div>
