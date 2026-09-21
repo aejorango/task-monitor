@@ -309,28 +309,15 @@ test('only one picker is open at a time', async () => {
 
 /* ── how the page wires the three together ─────────────────────────────── */
 
-test('the page commits through the batched write path and offers Undo', () => {
+// The sequencing moved into hooks/useBulkTasks.js so it could be driven by a
+// test rather than only read as source — see tests/ui/bulkTasksFlow.test.mjs
+// for the whole acceptance sentence, end to end.
+test('the page does not keep its own copy of the sequencing', () => {
   const src = viewSrc();
-  assert.match(src, /await bulkUpdateTasks\(plan\.writes\)/,
-    'one batched call — not one write per row');
-  assert.match(src, /undo: async \(\) => \{\s*\n\s*await bulkUpdateTasks\(plan\.undo\)/,
-    'Undo replays the values captured before the write');
-  assert.match(src, /clearSelection\(\);\s*\n\s*toast\.success/,
-    'the selection clears once the write lands');
-});
-
-test('the page asks before deleting, and asks the shared question', () => {
-  const src = viewSrc();
-  assert.match(src, /const question = confirmFor\(actionId, chosen\.length\);/,
-    'the confirm text belongs beside the action list, not in the component');
-  assert.match(src, /if \(question && !\(await ask\.confirm\(question\)\)\) return;/);
-});
-
-test('a bulk write that fails part way says how far it got', () => {
-  const src = viewSrc();
-  assert.match(src, /err\?\.committed/,
-    'a run of several batches can stop mid-way — "nothing happened" would be a lie');
-  assert.match(src, /friendlyError\(/, 'and the sentence is a plain one');
+  assert.match(src, /useBulkTasks\(\{ orderedIds, byId, toast, ask, nameFor \}\)/);
+  assert.doesNotMatch(src, /await bulkUpdateTasks\(/,
+    'committing belongs in the hook, which a test can hand a recorder');
+  assert.doesNotMatch(src, /bulkPlan\(/, 'and so does planning');
 });
 
 test('the bar reads its vocabulary from the runner’s module', () => {

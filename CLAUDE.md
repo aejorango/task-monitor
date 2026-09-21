@@ -333,6 +333,7 @@ src/
 │   ├── useDueAlertQueue.js   ← one current due task + snooze / skip / markDone
 │   ├── useInbox.js           ← one notices listener, however many components ask
 │   ├── useRecurrenceCatchUp.js ← makes a due occurrence appear without a tick-off
+│   ├── useBulkTasks.js       ← row selection + running one action over it
 │   ├── useKnowledgeStatus.js ← is the knowledge base usable + which notebooks
 │   ├── useNotifications.js   ← service worker, permission, browser-notification scan
 │   └── useSettings.js        ← localStorage-backed settings + theme application
@@ -491,7 +492,14 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
   Permissions are **not** re-checked in the browser — `firestore.rules` is the
   enforcement point and a batch touching one forbidden task is rejected whole, which
   is the behaviour we want: a partial bulk edit driven by a client-side guess is worse.
-  Guarded by `tests/rules/bulkTasks.rules.test.mjs`.
+  When a multi-batch run stops part way, **how far it got and why it stopped are two
+  separate facts** — passing the count as `friendlyError`'s fallback loses it the
+  moment the error has a message of its own, which a permission failure always does.
+  Guarded by `tests/rules/bulkTasks.rules.test.mjs`. The **sequencing** — ask,
+  plan, commit, clear, toast, offer Undo — is `hooks/useBulkTasks.js`, not the
+  page: `TasksTableView` cannot render without a live workspace, so anything left
+  inside it can only ever be checked by reading the source. It takes an optional
+  `commit` so a test can hand it a recorder.
 - ❌ Adding shift-click range selection to a table without turning off text selection.
   Shift-click is also the browser's "extend the text selection" gesture, so the range
   arrives with half the table highlighted behind it. Rows are `user-select: none` and

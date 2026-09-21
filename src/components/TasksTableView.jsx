@@ -6,14 +6,14 @@
 // priority or owner, sort by any column, then save the whole arrangement as a
 // view you can come back to (and share as a spreadsheet).
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useSavedViews, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
-import { addSavedView, bulkUpdateTasks, updateSavedView, todayLocal } from '../services/firebase';
+import { addSavedView, updateSavedView, todayLocal } from '../services/firebase';
 import {
   BULK_ACTIONS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, TASK_STATUSES,
-  bulkPlan, confirmFor, describeBulk, pruneSelection, selectionAfterClick,
 } from '../services/bulkTasks';
+import { useBulkTasks } from '../hooks/useBulkTasks';
 import { memberLabel } from '../services/invites';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
@@ -104,9 +104,6 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
      services/bulkTasks.js; this component only renders it. */
   const toast = useToast();
   const ask = useDialog();
-  const [selected, setSelected] = useState(() => new Set());
-  const [anchor, setAnchor] = useState(null);
-  const [busy, setBusy] = useState(false);
 
   // The rows in the order they are on screen — what a shift-range is measured
   // along. Grouping and sorting change it, so it is derived from `groups`
@@ -115,78 +112,20 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
     () => groups.flatMap((g) => g.tasks.map((t) => t.id)),
     [groups],
   );
-
-  // A filter or a group change can take a selected row off screen. Acting on a
-  // row nobody can see is the one thing a bulk bar must never do — so the
-  // selection is pruned during RENDER, not in an effect: an effect would let
-  // one frame paint (and one click land) against rows that are already gone.
-  const live = useMemo(() => pruneSelection(selected, orderedIds), [selected, orderedIds]);
-
   const byId = useMemo(() => {
     const map = {};
     for (const t of visible) map[t.id] = t;
     return map;
   }, [visible]);
 
-  const selectedTasks = useMemo(
-    () => orderedIds.filter((id) => live.has(id)).map((id) => byId[id]).filter(Boolean),
-    [orderedIds, live, byId],
+  const nameFor = useCallback(
+    (uid) => memberLabel(uid, memberProfiles, { selfUid: userId }),
+    [memberProfiles, userId],
   );
 
-  const allSelected = orderedIds.length > 0 && orderedIds.every((id) => live.has(id));
-  const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(orderedIds));
-    setAnchor(null);
-  };
-  const clickRow = (id, e) => {
-    const next = selectionAfterClick({
-      selected: live, anchor, orderedIds, id,
-      shiftKey: e.shiftKey, metaKey: e.metaKey || e.ctrlKey,
-    });
-    setSelected(next.selected);
-    setAnchor(next.anchor);
-  };
-  const clearSelection = () => { setSelected(new Set()); setAnchor(null); };
-
-  const nameFor = (uid) => memberLabel(uid, memberProfiles, { selfUid: userId });
-
-  /** Run one bulk action over the current selection, with an Undo. */
-  const runBulk = async (actionId, value) => {
-    const chosen = selectedTasks;
-    if (!chosen.length || busy) return;
-
-    const question = confirmFor(actionId, chosen.length);
-    if (question && !(await ask.confirm(question))) return;
-
-    const plan = bulkPlan(chosen, actionId, value, { today: todayLocal() });
-    if (!plan.changed) {
-      toast.info(`Nothing to change — ${chosen.length === 1 ? 'that task is' : 'those tasks are'} already like that.`);
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await bulkUpdateTasks(plan.writes);
-      clearSelection();
-      toast.success(describeBulk(actionId, value, plan, { nameFor }), {
-        // Undo replays the values captured before the write — see bulkPlan.
-        undo: async () => {
-          await bulkUpdateTasks(plan.undo);
-          toast.info(`Put ${plan.changed === 1 ? 'that task' : `those ${plan.changed} tasks`} back.`);
-        },
-      });
-    } catch (err) {
-      console.error('[bulk] update failed:', err);
-      // A batch is all or nothing, but a run of several batches can stop part
-      // way — say how far it got rather than implying nothing happened.
-      const landed = err?.committed || 0;
-      toast.error(landed
-        ? friendlyError(err, `Only ${landed} of ${plan.changed} could be changed. The rest were left as they were.`)
-        : friendlyError(err, 'Those tasks could not be changed. Please try again.'));
-    } finally {
-      setBusy(false);
-    }
-  };
+  // Selecting rows and acting on them. The sequencing lives in the hook so it
+  // can be driven by a test; this page cannot render without a live workspace.
+  const bulk = useBulkTasks({ orderedIds, byId, toast, ask, nameFor });
 
   const toggleColumn = (id) => {
     setConfig((c) => {
@@ -270,14 +209,14 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
         </div>
       </div>
 
-      {live.size > 0 && (
+      {bulk.selected.size > 0 && (
         <TaskBulkBar
-          count={live.size}
-          busy={busy}
+          count={bulk.selected.size}
+          busy={bulk.busy}
           members={memberUids}
           nameFor={nameFor}
-          onClear={clearSelection}
-          onRun={runBulk}
+          onClear={bulk.clear}
+          onRun={bulk.run}
         />
       )}
 
@@ -380,11 +319,11 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
           header={header}
           config={config}
           ctx={ctx}
-          selected={live}
-          allSelected={allSelected}
+          selected={bulk.selected}
+          allSelected={bulk.allSelected}
           totalRows={orderedIds.length}
-          onToggleAll={toggleAll}
-          onSelectRow={clickRow}
+          onToggleAll={bulk.toggleAll}
+          onSelectRow={bulk.clickRow}
           onOpenTask={setEditing}
           onSort={(id) => setConfig((c) => toggleSort(c, id, ctx))}
         />

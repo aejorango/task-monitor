@@ -62,7 +62,7 @@ that gate is enforced in the security rules, not just on screen.
 | --- | --- |
 | Dashboard | Today's work, what's overdue, what moved |
 | Board | Kanban with drag-and-drop, swim-lanes by phase, tag filters, quick-add |
-| Task table | Every task as a report: pick the columns, group, sort, save the arrangement |
+| Task table | Every task as a report: pick the columns, group, sort, save the arrangement — and change many at once |
 | Activity Log | Every logged entry, sortable, with bulk actions and export |
 | Gantt | Timeline with draggable plan bars and dependency arrows |
 | Calendar | Month grid; drag a task to another day to reschedule it |
@@ -206,6 +206,25 @@ Anywhere there is something worth keeping, there is an **Export ▾** button:
 
 Every filename is `<name>-YYYY-MM-DD.<ext>` in your own timezone. The Excel and
 PDF libraries load only when you actually export something.
+
+**Changing many tasks at once.** In **Reports → Task table**, tick the rows you
+want — click a checkbox, shift-click a row to take everything between it and the
+last one, ⌘/Ctrl-click to add or drop a single row, or use the box in the header
+to take the lot. A bar appears at the top of the table offering:
+
+| Action | What it asks for |
+| --- | --- |
+| Set status | To Do, In Progress or Done — the same three the board uses |
+| Set priority | High, Medium or Low |
+| Assign to | Anyone in the workspace, by name, or Nobody |
+| Set due date | A date, or "Clear the date" |
+| Add tag | A tag name, added to whatever tags each task already has |
+| Delete | Asks first; the tasks go to Trash, where you can put them back |
+
+Whatever you pick is written in one go, and a message says what happened —
+*"7 tasks set to High priority · 3 already matched"* — with an **Undo** that
+puts them back exactly as they were. A plain click on a row still opens the
+task, as it always did.
 
 **Custom fields travel with the task.** A project can define fields of its own
 (Client, Contract value, Go-live) in the project editor. The values show as
@@ -510,6 +529,17 @@ run together.
 | `tests/ui/activityExportUi.test.mjs` | The four pages that could only make a CSV, and the real .xlsx bytes |
 | `tests/ui/activateProps.test.mjs` | A div acting as a button obeys Enter, Space and the rest of the contract |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
+| `src/services/dueChip.test.mjs` | When a board card says a task is due, and how late it already is |
+| `tests/ui/dueChip.test.mjs` | The card itself, at every due state |
+| `src/services/logTime.test.mjs` | Which task "Log time" means, and what its button says |
+| `tests/ui/logTime.test.mjs` | The Dashboard hero opens a form, not a read-only list |
+| `tests/ui/themeDefault.test.mjs` | A new device follows the OS; one that chose Light keeps Light |
+| `tests/ui/recurrenceNote.test.mjs` | The recurrence note describes both paths, and its limit |
+| `src/services/bulkTasks.test.mjs` | What a bulk action writes, what Undo restores, how it is batched |
+| `tests/ui/bulkTasksApi.test.mjs` | The commits themselves: 400s, in series, and a partial failure |
+| `tests/ui/bulkTasksUi.test.mjs` | Select-all, shift-range, ⌘-click, and the bar's plain-language pickers |
+| `tests/ui/bulkTasksFlow.test.mjs` | Ten selected → High → one batch, a toast with Undo, selection cleared |
+| `tests/rules/bulkTasks.rules.test.mjs` | One task you may not write takes the whole batch down |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
 

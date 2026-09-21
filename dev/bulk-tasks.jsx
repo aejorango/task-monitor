@@ -13,11 +13,8 @@
 import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TasksTableGrid, TaskBulkBar } from '../src/components/TasksTableView';
-import {
-  bulkPlan, confirmFor, describeBulk, pruneSelection, selectionAfterClick,
-} from '../src/services/bulkTasks';
+import { useBulkTasks } from '../src/hooks/useBulkTasks';
 import { groupTasks, headerCells, normalizeTableConfig } from '../src/services/tableViews';
-import { todayLocal } from '../src/services/recurrence';
 import '../src/App.css';
 
 const PEOPLE = { 'u-ace': 'Ace Jorango', 'u-mia': 'Mia Santos' };
@@ -53,23 +50,18 @@ const nameFor = (uid) => PEOPLE[uid] || 'Nobody';
 
 function Harness() {
   const [tasks, setTasks] = useState(SAMPLE);
-  const [selected, setSelected] = useState(() => new Set());
-  const [anchor, setAnchor] = useState(null);
   const [log, setLog] = useState([]);
 
   const groups = useMemo(() => groupTasks(tasks, config, ctx), [tasks]);
   const orderedIds = useMemo(() => groups.flatMap((g) => g.tasks.map((t) => t.id)), [groups]);
-  const live = useMemo(() => pruneSelection(selected, orderedIds), [selected, orderedIds]);
-  const allSelected = orderedIds.length > 0 && orderedIds.every((id) => live.has(id));
-  const chosen = orderedIds.filter((id) => live.has(id)).map((id) => tasks.find((t) => t.id === id));
+  const byId = useMemo(() => Object.fromEntries(tasks.map((t) => [t.id, t])), [tasks]);
 
-  // Apply the plan locally instead of committing it, so the table visibly
-  // changes and the sentence the toast would say is printed underneath.
-  const run = (actionId, value) => {
-    const question = confirmFor(actionId, chosen.length);
-    const plan = bulkPlan(chosen, actionId, value, { today: todayLocal() });
+  // The real hook, with the write replaced: the plan is applied locally so the
+  // table visibly changes, and everything else — the confirm, the toast, the
+  // Undo, the clearing — is the app's own.
+  const commit = async (writes) => {
     setTasks((list) => list.map((t) => {
-      const w = plan.writes.find((x) => x.id === t.id);
+      const w = writes.find((x) => x.id === t.id);
       if (!w) return t;
       const next = { ...t, plan: { ...t.plan }, actual: { ...t.actual } };
       for (const [k, v] of Object.entries(w.patch)) {
@@ -78,17 +70,17 @@ function Harness() {
         else next[k] = v;
       }
       return next;
-    }).filter((t) => !t.deleted));
-    setSelected(new Set());
-    setAnchor(null);
-    setLog((l) => [{
-      at: new Date().toLocaleTimeString(),
-      sentence: describeBulk(actionId, value, plan, { nameFor }),
-      writes: plan.writes.length,
-      batches: plan.batches,
-      confirmed: question ? question.title : '—',
-    }, ...l].slice(0, 8));
+    }));
+    return { committed: writes.length, batches: 1 };
   };
+
+  const say = (tone) => (text, o = {}) => setLog((l) => [{
+    at: new Date().toLocaleTimeString(), tone, sentence: text, undo: o.undo || null,
+  }, ...l].slice(0, 8));
+  const toast = { success: say('success'), error: say('error'), info: say('info') };
+  const ask = { confirm: async (q) => window.confirm(`${q.title}\n\n${q.message || ''}`) };
+
+  const bulk = useBulkTasks({ orderedIds, byId, toast, ask, nameFor, commit });
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
@@ -99,14 +91,14 @@ function Harness() {
         Nothing is written; the plan is applied locally and logged below.
       </p>
 
-      {live.size > 0 && (
+      {bulk.selected.size > 0 && (
         <TaskBulkBar
-          count={live.size}
-          busy={false}
+          count={bulk.selected.size}
+          busy={bulk.busy}
           members={Object.keys(PEOPLE)}
           nameFor={nameFor}
-          onClear={() => { setSelected(new Set()); setAnchor(null); }}
-          onRun={run}
+          onClear={bulk.clear}
+          onRun={bulk.run}
         />
       )}
 
@@ -115,34 +107,30 @@ function Harness() {
         header={headerCells(config, ctx)}
         config={config}
         ctx={ctx}
-        selected={live}
-        allSelected={allSelected}
+        selected={bulk.selected}
+        allSelected={bulk.allSelected}
         totalRows={orderedIds.length}
-        onToggleAll={() => { setSelected(allSelected ? new Set() : new Set(orderedIds)); setAnchor(null); }}
-        onSelectRow={(id, e) => {
-          const next = selectionAfterClick({
-            selected: live, anchor, orderedIds, id,
-            shiftKey: e.shiftKey, metaKey: e.metaKey || e.ctrlKey,
-          });
-          setSelected(next.selected);
-          setAnchor(next.anchor);
-        }}
-        onOpenTask={(t) => setLog((l) => [{ at: new Date().toLocaleTimeString(), sentence: `(opened “${t.title}”)`, writes: 0, batches: 0, confirmed: '—' }, ...l].slice(0, 8))}
+        onToggleAll={bulk.toggleAll}
+        onSelectRow={bulk.clickRow}
+        onOpenTask={(t) => toast.info(`(opened “${t.title}”)`)}
         onSort={() => {}}
       />
 
-      <h2 style={{ fontSize: 14, marginTop: 24 }}>What would have been written</h2>
+      <h2 style={{ fontSize: 14, marginTop: 24 }}>What the app said</h2>
       {log.length === 0 ? (
         <p className="muted small">Nothing yet.</p>
       ) : (
         <table className="table">
-          <thead><tr><th>At</th><th>Toast</th><th className="num">Writes</th><th className="num">Batches</th><th>Confirm</th></tr></thead>
+          <thead><tr><th>At</th><th>Tone</th><th>Message</th><th>Undo</th></tr></thead>
           <tbody>
             {log.map((r, i) => (
               <tr key={i}>
-                <td>{r.at}</td><td>{r.sentence}</td>
-                <td className="num">{r.writes}</td><td className="num">{r.batches}</td>
-                <td className="muted small">{r.confirmed}</td>
+                <td>{r.at}</td>
+                <td className="muted small">{r.tone}</td>
+                <td>{r.sentence}</td>
+                <td>{r.undo
+                  ? <button className="btn btn-sm" onClick={() => r.undo()}>Undo</button>
+                  : <span className="muted small">—</span>}</td>
               </tr>
             ))}
           </tbody>
