@@ -506,6 +506,7 @@ run together.
 | `tests/ui/tagFilterViews.test.mjs` | Every page the router filters by a tag actually honours it |
 | `tests/ui/notificationPermission.test.mjs` | The permission badge updates without polling, and unsubscribes |
 | `tests/ui/aiOperatorCopy.test.mjs` | A shell command reaches the operator and nobody else |
+| `src/services/activityExport.test.mjs` | The activity log and the WBS as documents, not just CSV |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
