@@ -8,7 +8,6 @@ import {
   bulkUpdateActivityCompletion,
 } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
-import CsvImporter from './CsvImporter';
 import ImportWizard from './ImportWizard';
 import { downloadFile } from '../services/download';
 import { useDialog } from './Dialog';
@@ -48,7 +47,6 @@ export default function TableView({ projectFilter, initialTagFilter }) {
   const [sortDir, setSortDir] = useState('desc');
   const [selected, setSelected] = useState(new Set());
   const [editing, setEditing]   = useState(null);
-  const [importerOpen, setImporterOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
   // A saved view stores the tag it was filtered by; the router hands it over
@@ -140,9 +138,13 @@ export default function TableView({ projectFilter, initialTagFilter }) {
           <p className="page-subtitle">All logged activities across your tasks and projects. Click a column to sort. Select rows for bulk actions.</p>
         </div>
         <div className="page-actions">
-          <button className="btn" onClick={() => setImporterOpen(true)}>Import CSV</button>
-          <button className="btn" onClick={() => setWizardOpen(true)} title="Import tasks, projects or activities from any spreadsheet">
-            Import from spreadsheet
+          {/* One door. There used to be two — "Import CSV" (the fixed-column
+              importer) beside "Import from spreadsheet" (the wizard) — with
+              nothing to say which to pick, and the wizard covers every case the
+              other did: a file exported from this page auto-maps all ten of its
+              columns with no manual work (BUG-030). */}
+          <button className="btn" onClick={() => setWizardOpen(true)} title="Import tasks, projects or activities from a spreadsheet">
+            Import
           </button>
           <button className="btn" onClick={() => exportCsv(sorted)}>Export all CSV</button>
         </div>
@@ -150,7 +152,6 @@ export default function TableView({ projectFilter, initialTagFilter }) {
 
       <TagFilterBar state={tagState} onChange={setTagFilter} />
 
-      {importerOpen && <CsvImporter onClose={() => setImporterOpen(false)} />}
       {wizardOpen && <ImportWizard initialKind="activities" onClose={() => setWizardOpen(false)} />}
 
       {selected.size > 0 && (

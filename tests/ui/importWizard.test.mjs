@@ -139,3 +139,87 @@ test('both table pages offer it', () => {
     assert.match(src, new RegExp(`initialKind="${kind}"`), file);
   }
 });
+
+// ─── T-0114 / BUG-030: one door, and it covers the old one's cases ──────────
+//
+// The Activity Log header used to carry "Import CSV" (the fixed-column
+// importer) beside "Import from spreadsheet" (this wizard), with nothing to say
+// which to pick. The wizard supersedes the other for every case; these are the
+// promises the retired screen made, now held against this one.
+
+test('the Activity Log has exactly one import control', () => {
+  const src = fs.readFileSync(path.join(root, 'src', 'components', 'TableView.jsx'), 'utf8');
+  const header = src.slice(src.indexOf('<div className="page-actions">'), src.indexOf('</div>', src.indexOf('<div className="page-actions">')));
+  const importButtons = [...header.matchAll(/>\s*([^<>{}]*[Ii]mport[^<>{}]*?)\s*</g)]
+    .map((m) => m[1].trim())
+    .filter(Boolean);
+  assert.deepEqual(importButtons, ['Import'], `saw ${JSON.stringify(importButtons)}`);
+});
+
+test('the retired importer is gone, and nothing still reaches for it', () => {
+  assert.equal(fs.existsSync(path.join(root, 'src', 'components', 'CsvImporter.jsx')), false);
+  const dir = path.join(root, 'src', 'components');
+  const offenders = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.jsx'))
+    .filter((f) => /from '\.\/CsvImporter'/.test(fs.readFileSync(path.join(dir, f), 'utf8')));
+  assert.deepEqual(offenders, []);
+});
+
+test('a file exported from the Activity Log maps itself, with nothing to do by hand', async () => {
+  const { guessMapping, IMPORT_KINDS } = await import('../../src/services/csv.js');
+  // The exact header row exportCsv writes — the old importer's whole reason to exist.
+  const exported = ['Project', 'Phase', 'Task', 'Activity details', 'Date',
+    'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
+  const mapping = guessMapping(exported, 'activities');
+  const unmapped = IMPORT_KINDS.activities.fields.filter((f) => mapping[f.key] === -1).map((f) => f.label);
+  assert.deepEqual(unmapped, [],
+    'the fast path the old importer offered is the wizard’s default behaviour');
+});
+
+test('the export header and the import aliases stay in step', () => {
+  const src = fs.readFileSync(path.join(root, 'src', 'components', 'TableView.jsx'), 'utf8');
+  const line = src.split('\n').find((l) => l.includes("const headers = ['Project'"));
+  assert.ok(line, 'exportCsv’s header row moved');
+  assert.match(line, /'Activity details'/);
+  assert.match(line, /'Output link'/,
+    'renaming an exported column without adding the alias breaks round-tripping');
+});
+
+// ── the promises the retired screen made ────────────────────────────────────
+
+test('it only offers spreadsheet files', async () => {
+  const ui = await mount(h(ImportWizard, { onClose() {} }));
+  const input = ui.container.querySelector('input[type="file"]');
+  assert.match(input.getAttribute('accept'), /csv/);
+  ui.unmount();
+});
+
+test('a file with the wrong columns is explained, not rejected with jargon', async () => {
+  const ui = await mount(h(ImportWizard, { initialKind: 'activities', onClose() {} }));
+  await pick(ui, 'Name,Amount\nx,1');
+  const shown = text(ui.container);
+  assert.doesNotMatch(shown, /undefined|Error:|-1\b/,
+    'the old screen was careful about this and the new one must be too');
+  // It names the columns it did find, so the person can map them by hand.
+  assert.match(shown, /Name/);
+  assert.match(shown, /Amount/);
+  ui.unmount();
+});
+
+test('it says what will happen before anything is written, and skips a bad row', async () => {
+  const ui = await mount(h(ImportWizard, { initialKind: 'activities', onClose() {} }));
+  // The third row has a date and hours but no task name — the same file the
+  // retired screen was tested with.
+  await pick(ui, 'Task,Date,Hours\nWrite the brief,2026-09-20,2\nShip the build,2026-09-21,1.5\n,2026-09-22,9\n');
+  const shown = text(ui.container);
+  assert.match(shown, /2 rows will be imported/);
+  assert.match(shown, /1 skipped/);
+  assert.match(shown, /Missing Task\./, 'and it says why, by row');
+  assert.match(shown, /Write the brief/);
+  assert.match(shown, /Ship the build/);
+
+  // Nothing is written until the button is pressed, and the button says how many.
+  const buttons = [...ui.container.querySelectorAll('button')].map((b) => b.textContent.trim());
+  assert.ok(buttons.some((b) => /^Import 2\b/.test(b)), `saw ${buttons.join(' | ')}`);
+  ui.unmount();
+});

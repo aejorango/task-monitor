@@ -114,9 +114,9 @@ test('the hook is imported wherever it is used', () => {
 });
 
 test('a modal that must not be dismissed mid-operation says so', () => {
-  // CsvImporter and ImportWizard are writing rows; closing mid-import would
+  // ImportWizard is writing rows; closing mid-import would
   // leave a half-applied import with no way to tell what got in.
-  for (const f of ['CsvImporter.jsx', 'ImportWizard.jsx']) {
+  for (const f of ['ImportWizard.jsx']) {
     assert.match(read(f), /importing \? undefined : onClose/, `${f} can be dismissed mid-import`);
   }
 });

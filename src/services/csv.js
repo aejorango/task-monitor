@@ -1,6 +1,6 @@
 // src/services/csv.js — CSV reading and writing, as pure functions.
 //
-// Split out of CsvImporter.jsx so the parser can be tested directly: a broken
+// Split out of the import screen so the parser can be tested directly: a broken
 // CSV importer corrupts a person's activity log silently, and that is exactly
 // the kind of code that must not live inside a component.
 
