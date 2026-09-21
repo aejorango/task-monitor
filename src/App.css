@@ -11174,3 +11174,59 @@ a:hover { text-decoration: underline; }
 }
 .pe-wip-row .field { flex: 0 1 120px; }
 .pe-wip-row .input { width: 100%; }
+
+
+/* ─── Ask about this project (T-0140) ─────────────────────────────────────
+   Three grounding states, and they are not interchangeable: grounded (with
+   what it read), degraded (answered anyway, and said so) and never asked. */
+.pa-scope { margin: 0 0 10px; }
+.pa-row { display: flex; gap: 8px; }
+.pa-row .input { flex: 1; }
+.pa-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pa-turn {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border);
+}
+.pa-question {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+.pa-answer { font-size: 13.5px; line-height: 1.6; }
+.pa-error { color: var(--c-danger); font-size: 13px; }
+.pa-actions { margin: 8px 0 0 18px; font-size: 13px; }
+.pa-ground {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  margin-bottom: 8px;
+  background: var(--c-info-bg);
+  color: var(--c-info);
+}
+.pa-ground.is-degraded {
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+}
+.pa-citations {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--c-surface-2);
+  border-radius: var(--r-md);
+  font-size: 12px;
+}
+.pa-citations-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-text-3);
+  font-weight: 620;
+}
+.pa-citations ul { margin: 4px 0 0 16px; }
+.pa-off { padding: 8px 0; }

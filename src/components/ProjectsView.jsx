@@ -44,6 +44,7 @@ import TemplateGallery from './TemplateGallery';
 import ShareLinksPanel from './ShareLinksPanel';
 import { useToast } from './Toast';
 import { describeDuplicate, duplicateProjectPlan } from '../services/duplicate';
+import ProjectAskPanel from './ProjectAskPanel';
 import ExportButton from './ExportButton';
 import { buildActivityLogDocument, buildWbsDocument } from '../services/activityExport';
 import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
@@ -1653,6 +1654,20 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
               <h4 className="pe-sect"><span className="pe-sect-mark">▤</span>Custom fields</h4>
               <CustomFieldsEditor fields={customFields} onChange={setCustomFields} bare />
             </section>
+
+            {!isNew && (
+              <section className="pe-card">
+                <h4 className="pe-sect"><span className="pe-sect-mark">✦</span>Ask about this project</h4>
+                <ProjectAskPanel
+                  project={project}
+                  workspace={workspace}
+                  tasks={tasks}
+                  activities={allActivities}
+                  memberProfiles={workspace?.memberProfiles || {}}
+                  userId={userId}
+                />
+              </section>
+            )}
 
             <section className="pe-card">
               <h4 className="pe-sect"><span className="pe-sect-mark">◇</span>Knowledge base</h4>

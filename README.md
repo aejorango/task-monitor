@@ -227,6 +227,13 @@ Whatever you pick is written in one go, and a message says what happened —
 puts them back exactly as they were. A plain click on a row still opens the
 task, as it always did.
 
+**Ask about one project.** Open a project and there is an **Ask about this
+project** panel. It answers from that project's tasks and activity only — not
+the whole workspace — and reads the project's NotebookLM notebook first (or the
+workspace's, if the project has none), showing which sources it used. If the
+notebook cannot be reached you still get an answer, marked *Not grounded* with
+the reason, rather than a confident-looking guess.
+
 **Duplicate anything.** A task editor has a **Duplicate** button, a project
 editor has one that brings its open tasks with it, and ⌘K takes *duplicate*,
 *copy* or *clone* followed by a name. A copy keeps the plan — dates, estimate,
@@ -568,6 +575,8 @@ run together.
 | `src/services/effort.test.mjs` | Estimate vs logged, including zero and missing estimates |
 | `src/services/wipLimits.test.mjs` | What a column may hold, and when a card is too old |
 | `src/services/duplicate.test.mjs` | What a copy carries, what it drops, and how its dates move |
+| `src/services/projectAsk.test.mjs` | One project's digest, its notebook, and the three grounding states |
+| `tests/ui/projectAsk.test.mjs` | Citations shown when grounded; the answer still given when not |
 | `tests/ui/duplicate.test.mjs` | The write path, the Undo, and the three places it is offered |
 | `tests/ui/wipLimits.test.mjs` | Under, at and over the limit — and that a drop is never blocked |
 | `tests/ui/effortVariance.test.mjs` | The table, the report, the workload grid and the round-trip |

@@ -148,7 +148,10 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
    It is also the app's **editing** surface for many tasks at once: tick rows (shift-click
    for a range, ⌘/Ctrl-click for individual ones) and the bulk bar sets status, priority,
    assignee or due date, adds a tag, or deletes — one batched write, a toast with Undo.
-7. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
+7. **Projects** — Project + phase CRUD. Each saved project also gets an **Ask about
+   this project** panel: the digest is that project's tasks and activity only, and
+   the question is grounded in the project's own NotebookLM notebook (falling back
+   to the workspace's), with the cited sources shown beside the answer. **Templates section** lists all saved task/project templates with delete + use actions.
 8. **Settings** — Per-device prefs: theme override, default project, week start. **Automations** section: rules as dropdowns, the run log, and the notices they raised for you. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
 
 ## v5 Cross-cutting features
@@ -346,6 +349,7 @@ src/
 │   ├── CalendarView.jsx      ← month grid by plan.endDate
 │   ├── ReviewView.jsx        ← KPIs, charts, lists
 │   ├── ProjectsView.jsx      ← project & phase CRUD
+│   ├── ProjectAskPanel.jsx   ← Ask about THIS project, grounded in its notebook
 │   └── SettingsView.jsx      ← per-device prefs + data export
 ├── hooks/
 │   ├── useTasks.js           ← useAuth, useProjects, useTasks, useActivities, useAllActivities
@@ -370,6 +374,7 @@ src/
 │   ├── effort.js             ← estimated hours vs logged hours, and the variance
 │   ├── wipLimits.js          ← what a column may hold, and how long a card may sit
 │   ├── duplicate.js          ← "do that again": what a copy carries and what it drops
+│   ├── projectAsk.js         ← one project's digest, its notebook, its grounding badge
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -504,6 +509,15 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Rendering a project answer as workspace-wide, or a failed grounding as a
+  clean one. `services/projectAsk.js` scopes the digest to ONE project (its
+  tasks, and the activities that reach it by project id *or* through one of its
+  tasks), resolves the notebook project-first with the workspace as the
+  documented fallback, and returns three grounding states that are not
+  interchangeable: grounded (with what it read and whose notebook), degraded
+  (answered anyway, and marked with the reason), and never asked. The panel goes
+  through `narrate` → `askAI` — no new provider path, no direct model call — and
+  gates on `useAiStatus()`, never on a key.
 - ❌ Duplicating by spreading the original. A copy carries the PLAN and drops the
   HISTORY: `services/duplicate.js` builds the payload, and the things that must
   never travel are listed in `NEVER_COPIED` (ids, counters, `lastActivityAt`,
