@@ -205,6 +205,14 @@ and `generateClaudePromptFull`.
   Both route through the bridge (`isBridgeProvider`); capability checks use
   `canBrowse(provider)` / `canGround(provider)`. `bridge-api` is never offered
   as a choice in Settings; it is what the bridge turns out to be.
+- **Why AI is OFF comes from `aiUnavailableCopy(status, { isOperator })`.**
+  `available` goes false for two unrelated reasons — the company gate, and
+  nothing being connected — and an empty state that writes its own sentence
+  describes only one of them. The AI helper blamed a missing company key
+  whatever the cause and pointed at Settings → User Management, a superadmin-only
+  screen, at a reader who cannot open it (T-0125). It returns
+  `headline` + `detail` for anybody and `operatorHint` for `<AiOperatorHint>`,
+  the same split `knowledgeCopy` makes.
 - **The AI brain panel's wording comes from `providerLabel` / `providerHeadline`**
   in `services/ai.js`. Components must not write their own — that is how a
   bridge billing API tokens ended up advertising "no API billing".

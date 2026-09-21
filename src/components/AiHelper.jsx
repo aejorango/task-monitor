@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
 import { suggestTopTasks, generateClaudePrompt } from '../services/anthropic';
 import { useAiStatus } from '../hooks/useAiStatus';
+import { aiUnavailableCopy } from '../services/ai';
+import AiOperatorHint from './AiOperatorHint';
 import { todayLocal } from '../services/firebase';
 import { useModalDialog } from '../hooks/useModalDialog';
 import { useIsOperator } from '../hooks/useUserProfile';
@@ -32,9 +34,15 @@ function AiHelperModal({ onClose }) {
   const modal = useModalDialog({ onClose });
   const { tasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
-  const { available: aiAvailable } = useAiStatus();
+  const aiStatus = useAiStatus();
+  const aiAvailable = aiStatus.available;
   const { userId } = useAuth();
   const { isOperator } = useIsOperator(userId);
+  // Why it is off, from the live status rather than from one hard-coded guess
+  // (T-0125). The old sentence blamed a missing company key whatever the real
+  // cause was, and pointed at Settings → User Management — a screen only a
+  // superadmin can open.
+  const off = aiUnavailableCopy(aiStatus, { isOperator });
 
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
@@ -93,8 +101,9 @@ function AiHelperModal({ onClose }) {
 
         {!aiAvailable ? (
           <div className="empty-state" style={{ padding: '24px 16px' }}>
-            <p className="muted">AI isn't enabled for your account yet.</p>
-            <p className="small muted">An admin needs to assign your account to a company that has an AI key (Settings → User Management).</p>
+            <p className="muted">{off.headline}</p>
+            {off.detail && <p className="small muted">{off.detail}</p>}
+            <AiOperatorHint hint={off.operatorHint} />
           </div>
         ) : (
           <>

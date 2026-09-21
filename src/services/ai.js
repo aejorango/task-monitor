@@ -16,7 +16,7 @@
 
 import {
   getEffectiveApiKey, getEffectiveModel, DEFAULT_MODEL, noKeyMessage,
-  isAiAllowedForUser, canUseAiProxy,
+  isAiAllowedForUser, canUseAiProxy, getCurrentCompanyMeta,
 } from './aiCredentials';
 import { callAiProxy } from './aiProxyClient';
 
@@ -285,6 +285,62 @@ export function providerHeadline(provider, known = true) {
       return known ? 'No AI brain is connected, so AI features are switched off.'
                    : 'Checking which AI brain is live…';
   }
+}
+
+/**
+ * Why an AI surface is switched off, for the person looking at it
+ * (T-0125 / POL-015).
+ *
+ * `available` goes false for two unrelated reasons, and the empty states that
+ * hard-coded their own sentence only ever described one of them: the AI helper
+ * said "an admin needs to assign your account to a company that has an AI key
+ * (Settings → User Management)" whether the real cause was a missing company,
+ * a dead bridge, or a provider set to none — and it named a superadmin-only
+ * screen at a reader who cannot open it.
+ *
+ * The split is the same one `knowledgeCopy(status, { isOperator })` makes:
+ * `headline` + `detail` are for anybody, `operatorHint` carries the Settings
+ * section and the shell command and is rendered only by <AiOperatorHint>.
+ *
+ * @param {object} status        an aiStatus() snapshot
+ * @param {object} opts
+ * @param {boolean} opts.isOperator  an approved superadmin — the person who can
+ *                                   actually fix it, so they get the runbook
+ *                                   rather than "ask your administrator"
+ */
+export function aiUnavailableCopy(status = aiStatus(), { isOperator = false } = {}) {
+  const { provider, known, allowed } = status || {};
+
+  // Still probing. Saying anything definite here is how a page comes to accuse
+  // a perfectly healthy bridge of being down for one frame.
+  if (!known) {
+    return { headline: providerHeadline(provider, false), detail: '', operatorHint: '' };
+  }
+
+  // The company gate — the one cause the old sentence described. It is still a
+  // real cause, so it still gets its own wording, naming the company when the
+  // app knows it.
+  if (!allowed) {
+    const company = getCurrentCompanyMeta()?.name;
+    return {
+      headline: company
+        ? `AI features are switched off for ${company}.`
+        : 'AI features are switched off for your account.',
+      detail: isOperator
+        ? ''
+        : 'Ask your administrator to turn them on, or email hello@blueinnovation.ph.',
+      operatorHint: 'Settings → Companies → turn AI on for this company.',
+    };
+  }
+
+  // Everything else: nothing is connected. providerHeadline already has the
+  // right sentence for each provider, so there is no second copy of it here.
+  return {
+    headline: providerHeadline(provider, known),
+    detail: isOperator ? '' : 'Ask your administrator to connect one.',
+    operatorHint: 'Start the local bridge with `npm run bridge`, '
+                + 'or pick a provider in Settings → AI.',
+  };
 }
 
 /* ── usage log (calls this tab made directly; the bridge logs its own) ─── */

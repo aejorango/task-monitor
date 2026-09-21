@@ -584,6 +584,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/recurrence.html` | Move the clock forward and watch a recurring task come round |
 | `/dev/log-time.html` | Every state of the Dashboard's "Log time" button, and the form behind it |
 | `/dev/due-chip.html` | A board card at every due state — overdue, today, this week, later, done |
+| `/dev/ai-off.html` | What each reader is told when AI is unavailable, operator and not |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 | `/dev/escape-key.html` | Who hears Escape: the real timer widget beside the five handlers it used to silence |
 | `/dev/gantt.html` | Gantt rows with every shape of plan (`?zoom=day\|week\|month`), and what a drag writes |
