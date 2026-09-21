@@ -149,3 +149,25 @@ test('there is one chip strip, not three', () => {
       `${name} must not hand-roll its own`);
   }
 });
+
+// ─── T-0104: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records the trap and the activity subtlety', () => {
+  const claude = read('CLAUDE.md');
+  assert.match(claude, /Passing a filter prop the receiving view never declares/);
+  assert.match(claude, /activity has no tags of its own/);
+  assert.match(claude, /tagFilter\.js/, 'the module belongs in the file map');
+});
+
+test('the README lists the new suites and the harness', () => {
+  const readme = read('README.md');
+  assert.match(readme, /src\/services\/tagFilter\.test\.mjs/);
+  assert.match(readme, /tests\/ui\/tagFilterViews\.test\.mjs/);
+  assert.match(readme, /\/dev\/tag-filter\.html/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = read('CHANGELOG.md');
+  assert.match(log, /T-0102 — Saved view's tag filter/);
+  assert.match(log, /T-0103 — Saved view's tag filter/);
+});
