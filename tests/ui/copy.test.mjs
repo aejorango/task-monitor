@@ -168,3 +168,37 @@ test('the notification test reports success as a success', () => {
     assert.ok(/[.!]$/.test(m[1]), `"${m[1]}" should end as a sentence`);
   }
 });
+
+// ─── T-0106 / BUG-021: nobody is asked to share an account id ───────────────
+//
+// Invite-by-email moved the only control that CONSUMES a raw id behind a
+// superadmin toggle, but left the Account section telling every user to copy
+// theirs and hand it to a workspace owner — down a path that does not exist.
+
+test('no screen tells a user to share an account ID', () => {
+  const offenders = [];
+  for (const file of componentFiles()) {
+    for (const { n, l } of userFacingLines(file)) {
+      if (/(share|send|give)[^.]{0,40}\b(account\s*id|your\s*id|uid)\b/i.test(l)) {
+        offenders.push(`${file.name}:${n}: ${l.trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'joining a workspace is by email — the id field is superadmin-only');
+});
+
+test('the Account section points at the email invite instead', () => {
+  const src = fs.readFileSync(path.join(componentsDir, 'SettingsView.jsx'), 'utf8');
+  assert.match(src, /ask an owner to invite/i);
+  assert.match(src, /nothing to copy or send/i);
+});
+
+test('the Account ID is superadmin-only, and behind a disclosure', () => {
+  const src = fs.readFileSync(path.join(componentsDir, 'SettingsView.jsx'), 'utf8');
+  assert.match(src, /\{userId && isSuperadmin && \(/,
+    'an ordinary user has nowhere to paste it, so they must not be handed it');
+  const block = src.slice(src.indexOf('{userId && isSuperadmin && ('));
+  assert.match(block.slice(0, 400), /<details/, 'and it stays out of the way');
+  assert.match(block.slice(0, 700), /aria-label="Account ID"/);
+});

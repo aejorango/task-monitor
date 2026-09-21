@@ -326,23 +326,36 @@ export default function SettingsView() {
             </div>
           </div>
 
-          {userId && (
-            <div className="field" style={{ marginTop: 12 }}>
-              <label className="label">Your Account ID</label>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  className="input input-sm mono"
-                  value={userId}
-                  readOnly
-                  onFocus={(e) => e.target.select()}
-                  style={{ flex: 1 }}
-                />
-                <CopyButton value={userId} />
+          {/* How somebody actually joins a workspace: by email. The only control
+              that consumes a raw account id is superadmin-only and behind an
+              Advanced toggle, so telling everyone to share theirs sent them down
+              a path that does not exist (BUG-021). */}
+          <p className="muted small" style={{ marginTop: 12 }}>
+            To be added to a workspace, ask an owner to invite{' '}
+            <strong>{profile?.email || 'your email address'}</strong>. The invitation is
+            waiting for you the next time you sign in — nothing to copy or send.
+          </p>
+
+          {/* The id itself is still here for whoever is debugging with support,
+              behind a disclosure and with no instruction attached. */}
+          {userId && isSuperadmin && (
+            <details style={{ marginTop: 12 }}>
+              <summary className="muted small" style={{ cursor: 'pointer' }}>Technical details</summary>
+              <div className="field" style={{ marginTop: 8 }}>
+                <label className="label">Account ID</label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    className="input input-sm mono"
+                    value={userId}
+                    readOnly
+                    aria-label="Account ID"
+                    onFocus={(e) => e.target.select()}
+                    style={{ flex: 1 }}
+                  />
+                  <CopyButton value={userId} />
+                </div>
               </div>
-              <p className="muted small" style={{ marginTop: 6 }}>
-                Share this ID with a workspace owner so they can add you as a member.
-              </p>
-            </div>
+            </details>
           )}
 
           <p className="muted small" style={{ marginTop: 8 }}>
