@@ -256,6 +256,12 @@ components/Toast.jsx   ← useToast(): a message, optionally with Undo
 components/Dialog.jsx  ← useDialog(): await ask.confirm(…) / ask.prompt(…)
                          plus the Modal shell (role=dialog, focus trap, Escape)
 services/access.js     ← friendlyError(err, fallback): one plain sentence
+services/errorMessages.js ← describeCrash() for a crash; describeAiFailure(err,
+                         fallback, { isOperator }) for an AI failure → one
+                         sentence for the screen + the operator's version for
+                         the console; isPlainUserMessage() is the guard
+hooks/useUserProfile.js ← isOperatorProfile() / useIsOperator(): who may be
+                          shown operator copy (an approved superadmin)
 ```
 
 Both providers are mounted once, in `App.jsx`. A component calls the hook; a
@@ -460,6 +466,8 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Adding an invite field without its flat twin. `pendingInvites` is an array of maps: rules cannot search it, so `pendingInviteEmails` (array-contains) and `pendingInviteRoles` (role lookup) must be written in the same update. `inviteFields()` / `revokeInviteFields()` do all three.
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
 - ❌ Gating the due-alert prompt block on an API key — use `useAiStatus().available`; CLI users have no key. When AI is unavailable the block falls back to `buildFallbackPrompt` and labels it as a template.
+- ❌ Putting a caught error's own message on the screen — `setError(err.message)`, or `{error.message}` in JSX. An AI error is written for whoever has to fix it ("Start it with `npm run bridge`", "AI API error 429: {…raw body…}"), and inline error rendering is copy just as much as a toast is; the toast guard only ever inspected toasts, so nine surfaces were showing SDK text. Every AI failure goes through `describeAiFailure(err, fallback, { isOperator })` in `services/errorMessages.js`: one plain sentence on screen, the operator's version to `console.error`, and the real thing shown only to an operator (`useIsOperator()`). `tests/ui/copy.test.mjs` fails the build on either pattern.
+- ❌ Writing the operator test out by hand. `profile.role === 'superadmin' && profile.status === 'approved'` lived in two components and was about to appear in a third — use `isOperatorProfile()` / `useIsOperator()` from `hooks/useUserProfile.js`. Guarded by `tests/ui/copy.test.mjs`.
 - ❌ Offering a field in the import wizard and not writing it. The mapping step, the preview and the write all read from `IMPORT_KINDS` — but the write used to be a hand-built object in `ImportWizard.jsx`, so Status was mapped, guessed from the heading, shown in the preview and then silently dropped, and every imported task landed in To Do. The payload is built by `importedTaskPayload()` in `services/csv.js`, **beside the field list**, and `tests/ui/importStatus.test.mjs` fails the build if a field is added to `IMPORT_KINDS.tasks` without a home in it.
 - ❌ Deriving progress and the actual dates from a status by hand. `statusStamps()` in the pure `services/taskStatus.js` is the one rule, used by `addTask` and `setTaskStatus` alike — otherwise a task reaches "done" with different stamps depending on how it got there. `addTask` takes an optional `status` that defaults to `'todo'`, so quick-add and the recurrence spawn are unaffected.
 - ❌ Requiring both plan dates to draw a Gantt bar. The row filter admits a task with **any** one of its four dates, and the app's dominant create path — quick-add, and the natural-language parser behind it — writes only an end date, so the commonest task in the app used to get a row with a title and a blank track that dragging could not fix. `effectivePlan()` in `services/ganttGeometry.js` makes a one-date plan a **one-day milestone** on that date; `dragOrigin()` gives it a real origin, so dragging its left edge is how it gains the `plan.startDate` it never had. Geometry and drag arithmetic live in that pure module — not inline in the component, where they were untestable.

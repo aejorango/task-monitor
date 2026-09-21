@@ -129,3 +129,21 @@ test('the sign-in page never shows a Firebase message or a Firebase instruction'
   assert.match(body, /console\.error\('\[auth\] unauthorized domain/,
     'but whoever runs the project still finds out how to fix it');
 });
+
+// ─── T-0096: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records the rule and the trap', () => {
+  const claude = read('CLAUDE.md');
+  assert.match(claude, /describeAiFailure/, 'the function belongs in the map');
+  assert.match(claude, /inline error/i, 'the pitfall names what the toast guard missed');
+});
+
+test('the README lists the new suite', () => {
+  assert.match(read('README.md'), /tests\/ui\/aiErrorCopy\.test\.mjs/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = read('CHANGELOG.md');
+  assert.match(log, /T-0094 — Raw AI error text/);
+  assert.match(log, /T-0095 — Raw AI error text/);
+});
