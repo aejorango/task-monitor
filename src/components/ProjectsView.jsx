@@ -35,7 +35,7 @@ import TemplateGallery from './TemplateGallery';
 import ShareLinksPanel from './ShareLinksPanel';
 import { useToast } from './Toast';
 import { downloadFile } from '../services/download';
-import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
@@ -58,7 +58,13 @@ export default function ProjectsView() {
   const [galleryOpen, setGalleryOpen] = useState(false);
 
   // ⌘K → "New project": open the editor with what they typed.
-  useQuickCreate('project', useCallback(() => setEditing('new'), []));
+  // ⌘K → "new project Website revamp" shows that name in its hint, so the
+  // editor has to open with it already typed (BUG-017).
+  const [nameSeed, setNameSeed] = useState(null);
+  useQuickCreate('project', useCallback((text) => {
+    setNameSeed(text ? newSeed(text) : null);
+    setEditing('new');
+  }, []));
   const [createFromTemplate, setCreateFromTemplate] = useState(null);
   const [aiFor, setAiFor] = useState(null);              // project to generate tasks for
   const [activityLogFor, setActivityLogFor] = useState(null); // project for activity log modal
@@ -265,7 +271,8 @@ export default function ProjectsView() {
           project={editing === 'new' ? null : editing}
           userId={userId}
           workspace={workspace}
-          onClose={() => setEditing(null)}
+          nameSeed={editing === 'new' ? nameSeed : null}
+          onClose={() => { setEditing(null); setNameSeed(null); }}
         />
       )}
 
@@ -924,7 +931,7 @@ const ACT_FILTERS = [
   { key: 'blocked', label: 'Blocked' },
 ];
 
-function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
+function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onClose }) {
   // The project editor is a full-bleed panel with a breadcrumb hero rather
   // than a heading, so it is labelled directly.
   const modal2 = useModalDialog({ onClose, title: 'Project editor' });
@@ -945,6 +952,8 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, onClose }) {
   const [icon, setIcon]         = useState(
     () => normalizeIcon(project?.icon, suggestIcon(project?.id || seed?.name || '')),
   );
+  // What the user typed after "new project" in ⌘K.
+  useSeededField(nameSeed, setName);
   const [segment, setSegment]   = useState(project?.segment || 'Uncategorized');
   const [phases, setPhases]     = useState(
     project?.phases?.length ? project.phases :

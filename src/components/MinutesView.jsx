@@ -17,7 +17,7 @@ import ExportButton from './ExportButton';
 import { buildMinutesDocument, minutesFileBase } from '../services/minutesExport';
 import { toMarkdown } from '../services/exporters';
 import { useToast } from './Toast';
-import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
 
@@ -64,7 +64,12 @@ export default function MinutesView({ projectFilter = 'all' }) {
   const [editing, setEditing] = useState(null); // minute object or 'new'
 
   // ⌘K → "New minute": open the editor with what they typed.
-  useQuickCreate('minute', useCallback(() => setEditing('new'), []));
+  // ⌘K → "new minutes Weekly stand-up" opens the editor with that title in it.
+  const [titleSeed, setTitleSeed] = useState(null);
+  useQuickCreate('minute', useCallback((text) => {
+    setTitleSeed(text ? newSeed(text) : null);
+    setEditing('new');
+  }, []));
 
   const tasksById = useMemo(() => {
     const m = {};
@@ -215,7 +220,8 @@ export default function MinutesView({ projectFilter = 'all' }) {
           minute={editing === 'new' ? null : editing}
           defaultProjectId={selectedId !== '__all__' && selectedId !== '__none__' ? selectedId : ''}
           projects={projects}
-          onClose={() => setEditing(null)}
+          titleSeed={editing === 'new' ? titleSeed : null}
+          onClose={() => { setEditing(null); setTitleSeed(null); }}
         />
       )}
     </>
@@ -484,7 +490,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
   );
 }
 
-function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose }) {
+function MinuteEditor({ minute, projects = [], defaultProjectId = '', titleSeed, onClose }) {
   const modal = useModalDialog({ onClose });
   const toast = useToast();
   const { userId } = useAuth();
@@ -511,6 +517,9 @@ function MinuteEditor({ minute, projects = [], defaultProjectId = '', onClose })
   );
   const [saving, setSaving] = useState(false);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+  // What the user typed after "new minutes" in ⌘K.
+  useSeededField(titleSeed, (text) => setForm((f) => ({ ...f, title: text })));
 
   const addItem = () => set({ actionItems: [...form.actionItems, { id: uid(), text: '', owner: '', due: '', done: false }] });
   const setItem = (id, patch) => set({ actionItems: form.actionItems.map((it) => (it.id === id ? { ...it, ...patch } : it)) });

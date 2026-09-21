@@ -12,7 +12,7 @@ import WbsModal from './WbsModal';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildGoalsDocument } from '../services/exporters';
-import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
@@ -56,7 +56,12 @@ export default function GoalsView() {
   const [editing, setEditing] = useState(null); // goal object or 'new'
 
   // ⌘K → "New goal": open the editor with what they typed.
-  useQuickCreate('goal', useCallback(() => setEditing('new'), []));
+  // ⌘K → "new goal Ship v1" opens the editor with that title in it.
+  const [titleSeed, setTitleSeed] = useState(null);
+  useQuickCreate('goal', useCallback((text) => {
+    setTitleSeed(text ? newSeed(text) : null);
+    setEditing('new');
+  }, []));
   const [wbsProjectId, setWbsProjectId] = useState(null); // project to show WBS for
 
   const projectById = useMemo(() => {
@@ -146,7 +151,8 @@ export default function GoalsView() {
           goal={editing === 'new' ? null : editing}
           projectsByWorkspace={projectsByWorkspace}
           projectStats={projectStats}
-          onClose={() => setEditing(null)}
+          titleSeed={editing === 'new' ? titleSeed : null}
+          onClose={() => { setEditing(null); setTitleSeed(null); }}
         />
       )}
 
@@ -272,7 +278,7 @@ function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs }) {
 
 // ─── Editor modal ───────────────────────────────────────────────────────────
 
-function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose }) {
+function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, titleSeed, onClose }) {
   const modal = useModalDialog({ onClose });
   const toast = useToast();
   const ask = useDialog();
@@ -297,6 +303,9 @@ function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, onClose
   const [saving, setSaving] = useState(false);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+  // What the user typed after "new goal" in ⌘K.
+  useSeededField(titleSeed, (text) => setForm((f) => ({ ...f, title: text })));
 
   // Change-agenda row helpers
   const addAgenda = () => set({ changeAgenda: [...form.changeAgenda, { id: uid(), from: '', to: '' }] });

@@ -143,3 +143,90 @@ test('the Board still seeds its quick-add box', () => {
   assert.match(read('src', 'components', 'Board.jsx'), /setQuickAddSeed\(newSeed\(text\)\)/);
   assert.match(read('src', 'components', 'TaskForm.jsx'), /useSeededField\(seed,/);
 });
+test('every quick-create listener actually takes the text', () => {
+  const dir = path.join(root, 'src', 'components');
+  const offenders = [];
+  for (const name of fs.readdirSync(dir).filter((f) => f.endsWith('.jsx'))) {
+    const src = fs.readFileSync(path.join(dir, name), 'utf8');
+    for (const m of src.matchAll(/useQuickCreate\('([a-z]+)',\s*useCallback\((\([^)]*\))\s*=>/g)) {
+      // 'activity' has nothing to prefill — a picker, not a form.
+      if (m[1] === 'activity') continue;
+      if (m[2] === '()') offenders.push(`${name}: ${m[1]} throws the text away`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'the palette shows the name in its hint; opening a blank form makes that a lie');
+});
+
+
+// ─── T-0100: the three pages that threw it away ─────────────────────────────
+
+for (const [file, entity, prop, seedState] of [
+  ['ProjectsView.jsx', 'project', 'nameSeed', 'setNameSeed'],
+  ['MinutesView.jsx', 'minute', 'titleSeed', 'setTitleSeed'],
+  ['GoalsView.jsx', 'goal', 'titleSeed', 'setTitleSeed'],
+]) {
+  test(`${file} carries the typed name into its editor`, () => {
+    const src = read('src', 'components', file);
+    assert.ok(src.includes(`useQuickCreate('${entity}', useCallback((text)`),
+      'the listener must take the text, not throw it away');
+    assert.ok(src.includes(`${seedState}(text ? newSeed(text) : null)`),
+      'an empty ask must open a blank form, not seed it with ""');
+    assert.ok(src.includes(`${prop}={editing === 'new' ? ${prop} : null}`),
+      'only a NEW one is seeded — editing an existing one must never be overwritten');
+    assert.match(src, /useSeededField\(/, 'the editor must apply it');
+    assert.ok(src.includes(`setEditing(null); ${seedState}(null);`),
+      'closing must clear the seed, or reopening refills it');
+  });
+}
+
+// ─── the real editors, rendered ─────────────────────────────────────────────
+
+const { default: ProjectsView } = await import('../../src/components/ProjectsView.jsx');
+const { default: MinutesView } = await import('../../src/components/MinutesView.jsx');
+const { default: GoalsView } = await import('../../src/components/GoalsView.jsx');
+const { ToastProvider } = await import('../../src/components/Toast.jsx');
+const { DialogProvider } = await import('../../src/components/Dialog.jsx');
+
+const page = (View, props = {}) => mount(
+  h(ToastProvider, null, h(DialogProvider, null, h(View, props))),
+);
+
+/** The field the seed goes into. Not simply "the first input": the goal
+ *  editor's first field is its short code, and seeding THAT would be wrong. */
+const seededInput = (ui, placeholder) => {
+  const dialog = ui.container.querySelector('[role="dialog"]');
+  if (!dialog) return null;
+  return dialog.querySelector(`input[placeholder="${placeholder}"]`);
+};
+
+// Placeholder identifies the field on purpose: it is what the user sees, and
+// it moves only when somebody deliberately changes the form.
+const PAGES = [
+  ['the project editor', ProjectsView, 'project', 'Website revamp', 'Untitled project'],
+  ['the minutes editor', MinutesView, 'minute', 'Weekly stand-up', 'e.g. Weekly sync — Data Governance'],
+  ['the goal editor', GoalsView, 'goal', 'Ship v1 by December', 'Enabling Data Driven Decisions'],
+];
+
+for (const [name, View, entity, typed, placeholder] of PAGES) {
+  test(`${name} opens with the name already typed`, async () => {
+    const ui = await page(View);
+    await act(async () => { requestQuickCreate(entity, typed); });
+
+    const input = seededInput(ui, placeholder);
+    assert.ok(input, `${name} did not open, or its name field moved`);
+    assert.equal(input.value, typed,
+      'the palette promised this name in its hint; a blank field makes that a lie');
+    ui.unmount();
+  });
+
+  test(`${name} still opens blank when nothing was typed`, async () => {
+    const ui = await page(View);
+    await act(async () => { requestQuickCreate(entity, ''); });
+
+    const input = seededInput(ui, placeholder);
+    assert.ok(input, `${name} did not open, or its name field moved`);
+    assert.equal(input.value, '', 'a bare "new project" must not seed an empty string over anything');
+    ui.unmount();
+  });
+}
