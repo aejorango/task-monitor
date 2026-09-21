@@ -1297,6 +1297,22 @@ a:hover { text-decoration: underline; }
   top: 6px;
   color: white;
 }
+/* A one-day plan — a task with only a due date, above all. It is a marker, not
+   a range, and it says so: brighter and outlined, and wide enough to see and to
+   grab even at month zoom, where a day column is six pixels. Deliberately NOT
+   rotated into a diamond: the left and right resize handles have to stay where
+   a user expects them, because dragging the left edge is how a due-only task
+   gets a start date. */
+.gantt-bar.plan.milestone {
+  opacity: 0.9;
+  min-width: 12px;
+  padding: 0;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--c-surface);
+}
+.gantt-bar.plan.milestone:hover { filter: brightness(1.15); }
+.gantt-bar.plan.milestone > span { display: none; }
+
 .gantt-bar.actual {
   background: var(--c-done);
   height: 6px;

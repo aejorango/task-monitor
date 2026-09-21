@@ -15,6 +15,11 @@ import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
 import { useToast } from './Toast';
+// The bar geometry and what a drag means live in a pure module, so a task with
+// only a due date is a one-day milestone here and in its tests alike (BUG-014).
+import {
+  effectivePlan, planBar, dragOrigin, dragTo, dragPatch, planLabel, shiftIso,
+} from '../services/ganttGeometry';
 
 const ZOOMS = [
   { id: 'day',   label: 'Day',   dayWidth: 36 },
@@ -513,24 +518,35 @@ export default function GanttView({ projectFilter }) {
 
 // ─── Individual row with draggable plan bar ────────────────────────────────
 
-function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth, rowWidth, today, onClick }) {
+// Exported for tests/ui/ganttMilestone.test.mjs and dev/gantt.html, which render
+// one row on its own — no Firestore, no sign-in, no whole timeline.
+export function GanttRow({
+  task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth,
+  rowWidth, today, onClick,
+  // How a committed drag is saved. Defaults to the real write; dev/gantt.html
+  // passes its own so the row can be driven with no Firestore behind it.
+  onSavePlan = updateTask,
+}) {
   const toast = useToast();
-  const planStart = parseDate(task.plan?.startDate);
   const planEnd   = parseDate(task.plan?.endDate);
   const actStart  = parseDate(task.actual?.startDate);
   const actEnd    = parseDate(task.actual?.endDate);
 
   // Drag state. While dragging, we shadow the real plan dates with local ones.
-  const [drag, setDrag] = useState(null);  // { mode, startX, origStartDay, origEndDay, curStartDay, curEndDay }
+  const [drag, setDrag] = useState(null);  // { mode, startX, origin, startDay, endDay }
 
   const trackRef = useRef(null);
 
-  // Resolve current bar position (drag-shadowed or real)
-  const liveStart = drag ? addDays(range.min, drag.curStartDay) : planStart;
-  const liveEnd   = drag ? addDays(range.min, drag.curEndDay)   : planEnd;
-
-  const planLeft  = liveStart ? diffDays(range.min, liveStart) * zoomConf.dayWidth  : null;
-  const planWidth = liveStart && liveEnd ? (diffDays(liveStart, liveEnd) + 1) * zoomConf.dayWidth : null;
+  // The span the chart draws. A task with only a due date is a one-day
+  // milestone on that date, not a blank track — which is what BUG-014 was.
+  const rangeMin = fmtDate(range.min);
+  const span = drag
+    ? { startDate: shiftIso(rangeMin, drag.startDay), endDate: shiftIso(rangeMin, drag.endDay), isMilestone: drag.startDay === drag.endDay, derived: null }
+    : effectivePlan(task);
+  const bar = span ? planBar(task, { rangeMin, dayWidth: zoomConf.dayWidth, span }) : null;
+  const planLeft  = bar ? bar.left  : null;
+  const planWidth = bar ? bar.width : null;
+  const isMilestone = !drag && span?.isMilestone;
 
   const actLeft   = actStart ? diffDays(range.min, actStart) * zoomConf.dayWidth : null;
   const actEndOrToday = actEnd || (task.status !== 'done' ? today : null);
@@ -543,38 +559,18 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
   useEffect(() => {
     if (!drag) return;
     const onMove = (e) => {
-      const dx = e.clientX - drag.startX;
-      const dDays = Math.round(dx / zoomConf.dayWidth);
-      let curStart = drag.origStartDay;
-      let curEnd   = drag.origEndDay;
-      if (drag.mode === 'move') {
-        curStart += dDays;
-        curEnd   += dDays;
-      } else if (drag.mode === 'resize-left') {
-        curStart = Math.min(curEnd, drag.origStartDay + dDays);
-      } else if (drag.mode === 'resize-right') {
-        curEnd = Math.max(curStart, drag.origEndDay + dDays);
-      }
-      setDrag({ ...drag, curStartDay: curStart, curEndDay: curEnd });
+      const dDays = Math.round((e.clientX - drag.startX) / zoomConf.dayWidth);
+      setDrag({ ...drag, ...dragTo(drag.mode, drag.origin, dDays) });
     };
     const onUp = async () => {
-      // Commit
-      const newStart = addDays(range.min, drag.curStartDay);
-      const newEnd   = addDays(range.min, drag.curEndDay);
-      const newStartStr = fmtDate(newStart);
-      const newEndStr   = fmtDate(newEnd);
-      const changed = newStartStr !== task.plan?.startDate || newEndStr !== task.plan?.endDate;
+      const patch = dragPatch(task, rangeMin, { startDay: drag.startDay, endDay: drag.endDay });
       setDrag(null);
-      if (changed) {
-        try {
-          await updateTask(task.id, {
-            'plan.startDate': newStartStr,
-            'plan.endDate':   newEndStr,
-          });
-        } catch (err) {
-          console.error('Could not save plan dates:', err);
-          toast.error(friendlyError(err, 'Could not save plan dates. Please try again.'));
-        }
+      if (!patch) return;   // nothing moved — no write
+      try {
+        await onSavePlan(task.id, patch);
+      } catch (err) {
+        console.error('Could not save plan dates:', err);
+        toast.error(friendlyError(err, 'Could not save plan dates. Please try again.'));
       }
     };
     window.addEventListener('pointermove', onMove);
@@ -583,20 +579,16 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup',   onUp);
     };
-  }, [drag, zoomConf.dayWidth, range.min, task.id, task.plan?.startDate, task.plan?.endDate]);
+  }, [drag, zoomConf.dayWidth, rangeMin, task.id, task.plan?.startDate, task.plan?.endDate, onSavePlan]);
 
   const startDrag = (e, mode) => {
-    if (!planStart || !planEnd) return;
+    // A milestone has an origin now — both ends on its one date — which is what
+    // lets a left-edge drag give a due-only task the start date it never had.
+    const origin = dragOrigin(task, rangeMin);
+    if (!origin) return;
     e.preventDefault();
     e.stopPropagation();
-    setDrag({
-      mode,
-      startX: e.clientX,
-      origStartDay: diffDays(range.min, planStart),
-      origEndDay:   diffDays(range.min, planEnd),
-      curStartDay:  diffDays(range.min, planStart),
-      curEndDay:    diffDays(range.min, planEnd),
-    });
+    setDrag({ mode, startX: e.clientX, origin, startDay: origin.startDay, endDay: origin.endDay });
   };
 
   // Clicking the row's label area opens the activities modal. Bar drags are
@@ -630,7 +622,7 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
 
         {planLeft != null && planWidth != null && (
           <div
-            className="gantt-bar plan"
+            className={`gantt-bar plan${isMilestone ? ' milestone' : ''}`}
             style={{
               left: planLeft,
               width: planWidth,
@@ -638,7 +630,8 @@ function GanttRow({ task, project, phaseName, range, zoomConf, totalWidth, phase
               cursor: drag?.mode === 'move' ? 'grabbing' : 'grab',
             }}
             onPointerDown={(e) => startDrag(e, 'move')}
-            title={`Plan: ${fmtDate(liveStart)} → ${fmtDate(liveEnd)}`}
+            title={planLabel(span)}
+            aria-label={`${task.title} — ${planLabel(span)}`}
           >
             {/* Left resize handle */}
             <div
