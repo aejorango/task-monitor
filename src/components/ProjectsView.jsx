@@ -30,6 +30,13 @@ import ActivityEditor from './ActivityEditor';
 import AssigneePicker from './AssigneePicker';
 import WbsModal from './WbsModal';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
+import {
+  DEFAULT_AGEING_DAYS, WIP_STATUSES, normalizeLimit, normalizeLimits,
+} from '../services/wipLimits';
+
+// The board's own column names, so the editor and the board cannot disagree
+// about what "In Progress" is called.
+const WIP_LABEL = { todo: 'To Do', doing: 'In Progress', done: 'Done' };
 import NotebookPicker from './NotebookPicker';
 import TemplateGallery from './TemplateGallery';
 import ShareLinksPanel from './ShareLinksPanel';
@@ -955,6 +962,17 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
   const [assignedTo, setAssignedTo] = useState(project?.assignedTo || []);
   const [assignedToExternal, setAssignedToExternal] = useState(project?.assignedToExternal || []);
   const [knowledge, setKnowledge] = useState(project?.knowledge || null);
+  // Work-in-progress limits and the ageing threshold (T-0138). Kept as typed
+  // strings so an empty box stays empty rather than snapping to 0.
+  const [wipLimits, setWipLimits] = useState(() => {
+    const src = project?.wipLimits || {};
+    return Object.fromEntries(WIP_STATUSES.map((id) => [
+      id, src[id] === null || src[id] === undefined ? '' : String(src[id]),
+    ]));
+  });
+  const [wipAgeingDays, setWipAgeingDays] = useState(
+    project?.wipAgeingDays ? String(project.wipAgeingDays) : '',
+  );
   const [saving, setSaving] = useState(false);
   const [newSegmentInput, setNewSegmentInput] = useState(null); // null = picker, string = creating
   const [actFilter, setActFilter] = useState('all');
@@ -1120,9 +1138,9 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
     setSaving(true);
     try {
       if (isNew) {
-        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, icon, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
+        await addProject(userId, { workspaceId, name: name.trim(), description: description.trim(), color, icon, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null, wipLimits: normalizeLimits(wipLimits), wipAgeingDays: normalizeLimit(wipAgeingDays) });
       } else {
-        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, icon, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null });
+        await updateProject(project.id, { name: name.trim(), description: description.trim(), color, icon, segment, phases, customFields, assignedTo, assignedToExternal, knowledge: knowledge || null, wipLimits: normalizeLimits(wipLimits), wipAgeingDays: normalizeLimit(wipAgeingDays) });
       }
       onClose();
     } catch (err) {
@@ -1555,6 +1573,41 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
                 <ShareLinksPanel project={project} tasks={tasks} />
               </section>
             )}
+
+            <section className="pe-card">
+              <h4 className="pe-sect"><span className="pe-sect-mark">▦</span>Board limits</h4>
+              <p className="muted small" style={{ margin: '0 0 10px' }}>
+                How many tasks each column of this project’s board should hold at once.
+                Going over is a warning, never a block — leave a box empty for no limit.
+              </p>
+              <div className="pe-wip-row">
+                {WIP_STATUSES.map((id) => (
+                  <div key={id} className="field">
+                    <label className="label" htmlFor={`pe-wip-${id}`}>{WIP_LABEL[id]}</label>
+                    <input
+                      id={`pe-wip-${id}`}
+                      type="number" min="1" max="999"
+                      className="input input-sm"
+                      value={wipLimits[id]}
+                      placeholder="No limit"
+                      onChange={(e) => setWipLimits((w) => ({ ...w, [id]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+                <div className="field">
+                  <label className="label" htmlFor="pe-wip-age">Flag after</label>
+                  <input
+                    id="pe-wip-age"
+                    type="number" min="1" max="365"
+                    className="input input-sm"
+                    value={wipAgeingDays}
+                    placeholder={String(DEFAULT_AGEING_DAYS)}
+                    onChange={(e) => setWipAgeingDays(e.target.value)}
+                  />
+                  <span className="muted small">days in progress</span>
+                </div>
+              </div>
+            </section>
 
             <section className="pe-card">
               <h4 className="pe-sect"><span className="pe-sect-mark">▤</span>Custom fields</h4>

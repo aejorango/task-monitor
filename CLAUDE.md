@@ -37,6 +37,10 @@ workspaces/{workspaceId}:                ← v10 top-level container
 projects/{projectId}:
   userId, workspaceId, name, description, color
   phases: [{ id, name, order }]
+  wipLimits: { todo?, doing?, done? }    ← v15: advisory column limits. A key is
+                                           absent when there is no limit; 0 is
+                                           never stored (see the pitfall below)
+  wipAgeingDays: number | null           ← days in Doing before a card is flagged
   acl: { [uid]: role }                   ← per-project ACL inside the workspace
   members: [uid, ...]
   knowledge: { notebookId, notebookTitle, setAt } | null   ← null = inherit ws
@@ -120,7 +124,10 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 
 ## Views (in sidebar order)
 
-1. **Board** — Kanban with drag-drop. Tag-filter chip-strip auto-populated. Cards show: project, status badges, **🔗 deps**, **🔁 recurrence**, **⏱ tracking**, tag pills, subtask progress bar, ▶ Start-timer button. Optional "Group by phase" mode (single-project filter only). **"+ From template"** quick-add button when task templates exist.
+1. **Board** — Kanban with drag-drop. Column headers read **"5 / 3"** when the
+   project sets a work-in-progress limit (amber at it, red past it), and a card
+   that has sat In Progress longer than the project allows carries an ageing
+   badge. Both are advisory; see `services/wipLimits.js`. Tag-filter chip-strip auto-populated. Cards show: project, status badges, **🔗 deps**, **🔁 recurrence**, **⏱ tracking**, tag pills, subtask progress bar, ▶ Start-timer button. Optional "Group by phase" mode (single-project filter only). **"+ From template"** quick-add button when task templates exist.
 2. **Table** — Flat activity log with bulk actions (delete / set completion / export). Sortable columns.
 3. **Gantt** — Timeline. Plan bars are draggable (resize + move). SVG dependency arrows. Rows grouped by project, sorted by earliest start.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
@@ -361,6 +368,7 @@ src/
 │   ├── bulkTasks.js          ← "do this to the ten I picked": actions, plan, undo
 │   ├── myWeek.js             ← my week across workspaces: day columns and two rails
 │   ├── effort.js             ← estimated hours vs logged hours, and the variance
+│   ├── wipLimits.js          ← what a column may hold, and how long a card may sit
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -495,6 +503,15 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Blocking a drop that breaks a WIP limit. A hard stop on a personal board is
+  an annoyance, not a discipline: `setTaskStatus` runs first and `warnOnDrop`'s
+  sentence follows as an **info** toast — nothing went wrong, you were told
+  something. A limit of 0 is not a limit either (a column you may put nothing in
+  is a column you should delete), so it reads as "no limit" rather than "always
+  breached", and limits only apply when the board is filtered to ONE project —
+  across all of them, "5 / 3" compares a count to a limit it does not belong to.
+  The ageing badge takes its threshold from the CARD's own project, not the
+  board's, for the same reason.
 - ❌ Treating "not estimated" as an estimate of zero. `estimateHours` is `null`
   when nobody has said, and `services/effort.js` is the only module that reads
   it: `estimateOf` returns null rather than 0, `variance()` gives `state: 'none'`

@@ -17,6 +17,8 @@ import { useTimer } from '../hooks/useTimer';
 import { auth } from '../services/firebase';
 import { taskChips } from '../services/customFields';
 import { dueChip } from '../services/dueChip';
+import { useToast } from './Toast';
+import { ageing, ageingDaysFor, columnState, warnOnDrop } from '../services/wipLimits';
 import { OPEN_TASK_EVENT } from '../services/openTask';
 import {
   setTaskStatus,
@@ -44,6 +46,7 @@ const COLUMNS = [
 const NO_PHASE_ID = '__nophase__';
 
 export default function Board({ projectFilter, initialTagFilter, initialStatusFilter, onlyMine }) {
+  const toast = useToast();
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const activeWorkspaceId = useActiveWorkspaceId();
@@ -152,6 +155,11 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     setActiveDrag(task);
   };
 
+  // Whose limits apply. A WIP limit belongs to a project, so it only means
+  // something when the board is showing one: across every project at once,
+  // "5 / 3" would be comparing a number to a limit it does not belong to.
+  const wipProject = projectFilter === 'all' ? null : projectById[projectFilter];
+
   const handleDragEnd = async (e) => {
     setActiveDrag(null);
     const taskId = e.active.id;
@@ -174,7 +182,15 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
        (targetPhase !== NO_PHASE_ID && task.phaseId !== targetPhase));
 
     if (statusChanged) {
+      // The drop always happens. A hard block on a personal board is an
+      // annoyance, not a discipline — so this warns and gets out of the way
+      // (T-0138).
+      const before = filtered.filter((t) => t.status === targetStatus).length;
+      const warning = warnOnDrop(wipProject, targetStatus, before, {
+        columnLabel: COLUMNS.find((c) => c.id === targetStatus)?.label,
+      });
       await setTaskStatus(task, targetStatus);
+      if (warning) toast.info(warning);
     }
     if (phaseChanged) {
       await updateTask(task.id, { phaseId: targetPhase === NO_PHASE_ID ? null : targetPhase });
@@ -260,6 +276,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
                 key={col.id}
                 column={col}
                 count={filtered.filter((t) => t.status === col.id).length}
+                project={wipProject}
               >
                 {showSwimLanes ? (
                   <SwimLanes
@@ -367,12 +384,19 @@ function ProjectSegment({ project, tasks, expanded, onToggle, expandedTaskId, se
 
 // ─── Column shell (header only) ───────────────────────────────────────────
 
-function ColumnShell({ column, count, children }) {
+function ColumnShell({ column, count, children, project }) {
+  // "5 / 3" when the project sets a limit, a bare count when it does not — a
+  // count with nothing to compare it to is what this row was about (T-0138).
+  const wip = columnState(project, column.id, count);
   return (
     <div className={`column status-tint-${column.id}`}>
       <div className={`column-head status-${column.id}`}>
         <span>{column.label}</span>
-        <span className="count">{count}</span>
+        <span
+          className={`count${wip.over ? ' is-over' : wip.at ? ' is-at' : ''}`}
+          title={wip.title}
+          aria-label={`${column.label}: ${wip.title}`}
+        >{wip.text}</span>
       </div>
       {children}
     </div>
@@ -488,6 +512,12 @@ export function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdi
   // is the only thing on the card that distinguished today from next month.
   const due = dueChip(task, today);
   const isOverdue = Boolean(due?.late);
+  // How long this has been in progress. Only a task in Doing ages, and only one
+  // that has sat there longer than the project allows earns a badge — a dot on
+  // everything says nothing (T-0138).
+  // Per-card, from the card's OWN project: threading a board-wide threshold
+  // down would be wrong on a board showing several projects at once.
+  const age = ageing(task, { today, days: ageingDaysFor(project) });
   const finishedEarly =
     task.status === 'done' && task.actual?.endDate && task.plan?.endDate &&
     task.actual.endDate < task.plan.endDate;
@@ -555,6 +585,11 @@ export function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdi
         {isTrackingThis && (
           <span className="badge badge-soft-success" title="Timer running">
             ⏱ tracking
+          </span>
+        )}
+        {age.stale && (
+          <span className="badge badge-soft-warn card-ageing" title={age.title}>
+            ◷ {age.days}d in progress
           </span>
         )}
       </div>

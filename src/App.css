@@ -11150,3 +11150,27 @@ a:hover { text-decoration: underline; }
   font-variant-numeric: tabular-nums;
   margin-left: auto;
 }
+
+
+/* ─── WIP limits (T-0138) ──────────────────────────────────────────────────
+   The column count becomes "5 / 3" when a project sets a limit. Amber at the
+   limit, red past it — and never a block: the card still drops. */
+.column-head .count.is-at {
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+}
+.column-head .count.is-over {
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+  font-weight: 700;
+}
+.card-ageing { font-variant-numeric: tabular-nums; }
+
+/* The project editor's limit boxes: four short number fields in a row. */
+.pe-wip-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pe-wip-row .field { flex: 0 1 120px; }
+.pe-wip-row .input { width: 100%; }

@@ -227,6 +227,13 @@ Whatever you pick is written in one go, and a message says what happened —
 puts them back exactly as they were. A plain click on a row still opens the
 task, as it always did.
 
+**Work-in-progress limits.** A project can say how many tasks each board column
+should hold at once (**Projects → the project → Board limits**). The column
+header then reads *5 / 3* — amber when you are at the limit, red when you are
+past it — and a card that has been In Progress longer than the project allows
+gets an ageing badge. Going over is always a **warning, never a block**: the
+card still drops, and the board just says what happened.
+
 **Estimated hours against actual.** Put an estimate on a task in the editor and
 the app tells you what it really cost: a **Variance** column in the Task table
 (*+4h (+50%)*), a line in the task editor beside the logged hours, a band over
@@ -551,6 +558,8 @@ run together.
 | `tests/ui/bulkTasksUi.test.mjs` | Select-all, shift-range, ⌘-click, and the bar's plain-language pickers |
 | `tests/ui/bulkTasksFlow.test.mjs` | Ten selected → High → one batch, a toast with Undo, selection cleared |
 | `src/services/effort.test.mjs` | Estimate vs logged, including zero and missing estimates |
+| `src/services/wipLimits.test.mjs` | What a column may hold, and when a card is too old |
+| `tests/ui/wipLimits.test.mjs` | Under, at and over the limit — and that a drop is never blocked |
 | `tests/ui/effortVariance.test.mjs` | The table, the report, the workload grid and the round-trip |
 | `tests/rules/bulkTasks.rules.test.mjs` | One task you may not write takes the whole batch down |
 | `src/services/myWeek.test.mjs` | One person's week across workspaces, and what a drop on a day writes |

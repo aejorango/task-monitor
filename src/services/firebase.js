@@ -69,6 +69,7 @@ import { catchUpPlan } from './recurrenceSchedule';
 import { clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
 import { chunkWrites } from './bulkTasks';
 import { normalizeEstimate } from './effort';
+import { normalizeLimits } from './wipLimits';
 // One sentence a person can act on — never the SDK's own text (see access.js).
 import { friendlyError } from './access';
 
@@ -939,6 +940,12 @@ export async function addProject(userId, project) {
 
     // v12: project segment/department for grouping (e.g., Sales, Finance)
     segment: project.segment || 'Uncategorized',
+
+    // v15: work-in-progress limits per board column, and how many days a task
+    // may sit In Progress before its card is flagged. Both are advisory — a
+    // drop over the limit warns and still lands (T-0138).
+    wipLimits:     normalizeLimits(project.wipLimits),
+    wipAgeingDays: project.wipAgeingDays ?? null,
 
     archived: false,
     deleted:  false,
