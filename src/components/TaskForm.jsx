@@ -9,6 +9,7 @@ import { pickDefaultProjectId } from '../services/preferences';
 import { useSettings } from '../hooks/useSettings';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
+import { useSeededField } from '../hooks/useQuickCreate';
 
 export default function TaskForm({ projects = [], projectFilter = 'all', seed = null }) {
   const toast = useToast();
@@ -61,12 +62,10 @@ export default function TaskForm({ projects = [], projectFilter = 'all', seed = 
 
   // ⌘K → "New task" hands the typed text over here. Keyed on the seed object so
   // asking twice with the same words still refills the box.
-  const [seenSeed, setSeenSeed] = useState(seed);
-  if (seed && seenSeed !== seed) {
-    setSeenSeed(seed);
-    setTitle(seed.text || '');
-    if (seed.text) setExpanded(true);
-  }
+  useSeededField(seed, (text) => {
+    setTitle(text);
+    if (text) setExpanded(true);
+  });
 
   const selectedProject = projects.find((p) => p.id === effectiveProjectId);
 

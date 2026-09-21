@@ -82,14 +82,16 @@ test('the event name lives in one place', () => {
 });
 
 test('a new task arrives in the quick-add box with its text', () => {
+  // Since T-0099 the seed shape and the apply-once rule live in
+  // hooks/useQuickCreate.js, so the four call sites cannot disagree about them.
   const board = fs.readFileSync(path.join(root, 'src', 'components', 'Board.jsx'), 'utf8');
-  assert.match(board, /setQuickAddSeed\(\{ text, at: Date\.now\(\) \}\)/,
+  assert.match(board, /setQuickAddSeed\(newSeed\(text\)\)/,
     'timestamped so asking twice with the same words still refills the box');
   assert.match(board, /seed=\{quickAddSeed\}/);
 
   const form = fs.readFileSync(path.join(root, 'src', 'components', 'TaskForm.jsx'), 'utf8');
-  assert.match(form, /if \(seed && seenSeed !== seed\)/);
-  assert.match(form, /setTitle\(seed\.text \|\| ''\)/);
+  assert.match(form, /useSeededField\(seed, \(text\) => \{/);
+  assert.match(form, /setTitle\(text\);/);
 });
 
 // ─── Recents (T-0062 / NEW-009) ─────────────────────────────────────────────

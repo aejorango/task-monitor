@@ -29,7 +29,7 @@ import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
-import { useQuickCreate } from '../hooks/useQuickCreate';
+import { useQuickCreate, newSeed } from '../hooks/useQuickCreate';
 import { useDialog } from './Dialog';
 
 const COLUMNS = [
@@ -77,7 +77,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   // so the natural-language parsing the palette previewed actually happens.
   const [quickAddSeed, setQuickAddSeed] = useState(null);
   useQuickCreate('task', useCallback((text) => {
-    setQuickAddSeed({ text, at: Date.now() });
+    setQuickAddSeed(newSeed(text));
   }, []));
 
   const sensors = useSensors(

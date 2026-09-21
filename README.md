@@ -501,6 +501,7 @@ run together.
 | `tests/ui/importStatus.test.mjs` | A mapped Status column reaches the task, and no offered field is dropped |
 | `tests/ui/quickCreateActivity.test.mjs` | ⌘K → Log an activity actually opens the picker |
 | `tests/ui/aiErrorCopy.test.mjs` | An AI failure is one plain sentence; the operator's version is in the console |
+| `tests/ui/quickCreateSeed.test.mjs` | What you typed in ⌘K survives the trip to the form |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
