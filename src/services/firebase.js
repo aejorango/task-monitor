@@ -66,7 +66,7 @@ import {
 import { catchUpPlan } from './recurrenceSchedule';
 // What a status implies about progress and the actual dates — one rule, so a
 // task imported as Done cannot land in To Do (BUG-015).
-import { normalizeTaskStatus, statusStamps } from './taskStatus';
+import { clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
 // One sentence a person can act on — never the SDK's own text (see access.js).
 import { friendlyError } from './access';
 
@@ -1084,11 +1084,19 @@ export function subscribeToActivitiesByProjects(projectIds, callback) {
 
 export async function addTask(userId, task) {
   if (!task.workspaceId) throw new Error('addTask requires task.workspaceId');
+  // A create may state the task's status, its progress and its actual dates —
+  // an import of a row already marked Done, a template that captures work in
+  // progress, an AI-generated backlog with a mix of states. Anything stated
+  // explicitly wins; `statusStamps` only fills the gaps. This used to hardcode
+  // status 'todo', progress 0 and empty actual dates and overwrite the payload
+  // in silence, so a caller that tried got no error and no effect (BUG-026).
   const status = normalizeTaskStatus(task.status);
   const stamps = statusStamps(status, {
     today: todayLocal(),
     current: { startDate: task.actual?.startDate, endDate: task.actual?.endDate, progress: task.progress },
   });
+  const statedProgress = clampProgress(task.progress);
+  const progress = statedProgress === null ? stamps.progress : statedProgress;
 
   return await addDoc(tasksRef, {
     userId,
@@ -1103,7 +1111,7 @@ export async function addTask(userId, task) {
     // recurrence spawn and every other create path behave exactly as before.
     // A spreadsheet import that says a row is already Done now says so here.
     status,
-    progress: stamps.progress,
+    progress,
     requestedBy: task.requestedBy || '',
 
     plan: {
@@ -1111,8 +1119,8 @@ export async function addTask(userId, task) {
       endDate:   task.plan?.endDate   || null,
     },
     actual: {
-      startDate: stamps.actualStartDate,
-      endDate:   stamps.actualEndDate,
+      startDate: task.actual?.startDate ?? stamps.actualStartDate,
+      endDate:   task.actual?.endDate   ?? stamps.actualEndDate,
     },
 
     // PM suite v4 fields

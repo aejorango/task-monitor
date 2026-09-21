@@ -65,3 +65,32 @@ test('the module never reads the clock itself', () => {
     progress: 100, actualStartDate: null, actualEndDate: null,
   });
 });
+
+// ─── T-0110 / BUG-026: a create may state its own progress ──────────────────
+
+import { clampProgress } from './taskStatus.js';
+
+test('a stated percentage is kept, rounded', () => {
+  assert.equal(clampProgress(0), 0);
+  assert.equal(clampProgress(40), 40);
+  assert.equal(clampProgress(100), 100);
+  assert.equal(clampProgress('75'), 75, 'a spreadsheet cell is a string');
+  assert.equal(clampProgress(33.4), 33);
+  assert.equal(clampProgress(33.6), 34);
+});
+
+test('an impossible percentage is clamped, not rejected', () => {
+  assert.equal(clampProgress(150), 100, 'a row saying 150% means finished');
+  assert.equal(clampProgress(-20), 0);
+  assert.ok(clampProgress(150) !== null, 'refusing the row would lose the task');
+});
+
+test('no statement about progress is null, not zero', () => {
+  assert.equal(clampProgress(undefined), null);
+  assert.equal(clampProgress(null), null);
+  assert.equal(clampProgress(''), null, 'an empty cell says nothing');
+  assert.equal(clampProgress('n/a'), null);
+  assert.equal(clampProgress(NaN), null);
+  assert.notEqual(clampProgress(undefined), 0,
+    'zero is a statement; null is the absence of one — the caller needs to tell them apart');
+});

@@ -50,3 +50,18 @@ export function statusStamps(status, { today, current = {} } = {}) {
   // todo — nothing has happened yet, so nothing is stamped.
   return { progress: 0, actualStartDate: null, actualEndDate: null };
 }
+
+/**
+ * A progress percentage, or null when the caller did not state one.
+ *
+ * Clamped rather than rejected: a spreadsheet that says 150% means "finished",
+ * and refusing the whole row over it would lose the task. A non-number — an
+ * empty cell, "n/a", undefined — is not a statement about progress at all, so
+ * it returns null and the caller falls back to what the status implies.
+ */
+export function clampProgress(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}

@@ -13,7 +13,7 @@ import {
   IMPORT_KINDS, importedTaskPayload, parseImportRows, summarizeImportRows,
   guessMapping, parseCsv, normalizeStatus,
 } from '../../src/services/csv.js';
-import { statusStamps, normalizeTaskStatus } from '../../src/services/taskStatus.js';
+import { statusStamps, normalizeTaskStatus, clampProgress } from '../../src/services/taskStatus.js';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
@@ -138,8 +138,9 @@ test('addTask takes a status instead of hardcoding one', () => {
   assert.doesNotMatch(firebase, /\n {4}status: 'todo',\n {4}progress: 0,/,
     'the hardcoded pair is what made every imported task To Do');
   assert.match(firebase, /const status = normalizeTaskStatus\(task\.status\);/);
-  assert.match(firebase, /progress: stamps\.progress,/);
-  assert.match(firebase, /startDate: stamps\.actualStartDate,/);
+  assert.match(firebase, /const progress = statedProgress === null \? stamps\.progress : statedProgress;/);
+  assert.match(firebase, /startDate: task\.actual\?\.startDate \?\? stamps\.actualStartDate,/,
+    'since T-0110 an explicitly stated date wins and the stamps fill the gap');
 });
 
 test('every create path still defaults to To Do when nothing is supplied', () => {
@@ -157,4 +158,53 @@ test('setTaskStatus and addTask derive the stamps from the same rule', () => {
 test('the wizard builds its payload beside the field list, not by hand', () => {
   assert.match(wizard, /importedTaskPayload\(record, \{ workspaceId, project, phase \}\)/);
   assert.match(wizard, /importedTaskPayload,/, 'imported from services/csv');
+});
+
+// ─── T-0110 / BUG-026: addTask stops overwriting what it was handed ─────────
+
+test('addTask honours a stated status, progress and actual dates', () => {
+  const body = firebase.slice(
+    firebase.indexOf('export async function addTask('),
+    firebase.indexOf('export async function updateTask('),
+  );
+  assert.match(body, /const statedProgress = clampProgress\(task\.progress\);/);
+  assert.match(body, /const progress = statedProgress === null \? stamps\.progress : statedProgress;/,
+    'an explicit 0 must not be mistaken for "no statement"');
+  assert.match(body, /startDate: task\.actual\?\.startDate \?\? stamps\.actualStartDate,/);
+  assert.match(body, /endDate:   task\.actual\?\.endDate   \?\? stamps\.actualEndDate,/);
+  assert.doesNotMatch(body, /progress: 0,/, 'the hardcoded pair is gone');
+  assert.doesNotMatch(body, /startDate: null,\n      endDate:   null,/,
+    'the hardcoded empty actual dates are gone');
+});
+
+test('the acceptance path: created as done, with full progress and an end date', () => {
+  // The three values addTask would write for { status: 'done' } and no more.
+  const status = normalizeTaskStatus('done');
+  const stamps = statusStamps(status, { today: TODAY });
+  const progress = stamps.progress;
+  assert.equal(status, 'done');
+  assert.equal(progress, 100);
+  assert.equal(stamps.actualEndDate, TODAY);
+});
+
+test('and a create with no status is still a fresh todo task', () => {
+  const status = normalizeTaskStatus(undefined);
+  const stamps = statusStamps(status, { today: TODAY });
+  assert.equal(status, 'todo');
+  assert.equal(stamps.progress, 0);
+  assert.equal(stamps.actualStartDate, null);
+  assert.equal(stamps.actualEndDate, null);
+});
+
+test('an unknown status is coerced, not stored', () => {
+  assert.equal(normalizeTaskStatus('archived'), 'todo');
+  assert.equal(normalizeTaskStatus('DONE'), 'todo', 'the caller normalises case; the store does not guess');
+  assert.equal(normalizeTaskStatus(42), 'todo');
+  assert.equal(normalizeTaskStatus({}), 'todo');
+});
+
+test('a task created as doing keeps the progress it was given', () => {
+  const stamps = statusStamps('doing', { today: TODAY, current: { progress: 60 } });
+  assert.equal(stamps.progress, 60);
+  assert.equal(stamps.actualStartDate, TODAY, 'something in progress has started');
 });
