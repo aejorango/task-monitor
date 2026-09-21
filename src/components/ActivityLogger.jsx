@@ -14,7 +14,15 @@ const COMPLETION_OPTIONS = [
   { value: 'completed',   label: 'Completed' },
 ];
 
-export default function ActivityLogger({ task, userId, onClose }) {
+// `taskOptions` + `onChangeTask`, when given, put a "Change task" control
+// beside the task name so a form opened on a task the app pre-chose is not a
+// trap (T-0122 / POL-012). Without them the heading is a plain line, as before.
+//
+// The switcher is INLINE — a select that replaces the name in place — rather
+// than a second modal over this one. A modal would unmount this form and take
+// the half-filled entry with it, and it would stack a second focus trap and a
+// second Escape handler on top of the first.
+export default function ActivityLogger({ task, userId, onClose, onChangeTask, taskOptions = [] }) {
   const modal = useModalDialog({ onClose });
   const toast = useToast();
   const [date, setDate]           = useState(todayLocal());
@@ -27,6 +35,9 @@ export default function ActivityLogger({ task, userId, onClose }) {
   const [attachUrl, setAttachUrl]   = useState('');
   const [attachments, setAttachments] = useState([]);
   const [saving, setSaving]         = useState(false);
+  const [switching, setSwitching]   = useState(false);
+
+  const canSwitch = Boolean(onChangeTask) && taskOptions.length > 1;
 
   const addAttachment = () => {
     if (!attachUrl.trim()) return;
@@ -70,7 +81,45 @@ export default function ActivityLogger({ task, userId, onClose }) {
     <div className="modal-backdrop" {...modal.backdropProps}>
       <div className="modal" {...modal.dialogProps}>
         <h3 className="modal-title" id={modal.titleId}>Log activity</h3>
-        <p className="modal-sub">{task.title}</p>
+        <p className="modal-sub al-task-line">
+          {switching ? (
+            <>
+              <label className="label" htmlFor="al-switch-task">Log against</label>
+              <select
+                id="al-switch-task"
+                className="select"
+                value={task.id}
+                autoFocus
+                onChange={(e) => {
+                  const next = taskOptions.find((t) => t.id === e.target.value);
+                  if (next) onChangeTask(next);
+                  setSwitching(false);
+                }}
+              >
+                {taskOptions.map((t) => (
+                  <option key={t.id} value={t.id}>{t.title}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => setSwitching(false)}
+              >Cancel</button>
+            </>
+          ) : (
+            <>
+              <span className="al-task-name">{task.title}</span>
+              {canSwitch && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => setSwitching(true)}
+                  title={`Log these hours against a task other than "${task.title}"`}
+                >Change task</button>
+              )}
+            </>
+          )}
+        </p>
 
         <div className="field-row">
           <div className="field">

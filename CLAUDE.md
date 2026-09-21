@@ -307,7 +307,9 @@ src/
 │   ├── NotebookPicker.jsx    ← cache-only notebook select (never spawns the CLI)
 │   ├── AddToNotebookButton.jsx ← ＋ Notebook on a task/artifact URL
 │   ├── DueAlertBell.jsx      ← topbar switch: turns due alerts on/off, shows waiting count
-│   ├── ActivityLogger.jsx    ← modal: log new activity
+│   ├── ActivityLogger.jsx    ← modal: log new activity (inline task switcher)
+│   ├── LogActivityPicker.jsx ← "which task did you work on?" — the one copy
+│   ├── LogTimeButton.jsx     ← Dashboard hero: pick → form → change task
 │   ├── ActivityEditor.jsx    ← modal: edit existing activity (atomic counter sync)
 │   ├── TableView.jsx         ← activity table + bulk actions + CSV
 │   ├── GanttView.jsx         ← timeline + draggable bars + dependency arrows
@@ -329,6 +331,7 @@ src/
 │   ├── anthropic.js          ← AI features (task drafts, summaries…) on top of ai.js
 │   ├── askAi.js              ← Ask AI digest + narration
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
+│   ├── logTime.js            ← which task "Log time" means, and what it says
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -431,6 +434,8 @@ npm run dev          # local at http://localhost:5173/task-monitor/
                      # dev/due-alert.html — harness that renders the due-task
                      # AlertDialog with sample tasks (no sign-in needed); ?ai=0 forces the offline template,
                      # &nb=1 pretends a notebook is configured
+                     # dev/log-time.html — every state of the Dashboard's
+                     # "Log time" button and the form it opens
                      # dev/knowledge.html — harness for Settings → Knowledge base +
                      # NotebookPicker against the live bridge (no sign-in needed)
 npm run build        # produces dist/
@@ -459,6 +464,20 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Naming a button's target only in its `title`. A touch device has no hover, so
+  the Dashboard's "Log time" told nobody which task it had chosen until the modal
+  was already open — and when nothing was overdue it fell through to `filtered[0]`,
+  logging hours against whichever task happened to sort first. `logTimeTarget()` in
+  the pure `services/logTime.js` picks only when there is a reason to (late, due
+  today, in progress) and returns `null` otherwise, which is the signal to ASK;
+  `logTimeLabel()` puts the title on the button face. A button that says "Log time"
+  must also open a form: it used to open `TaskActivitiesModal`, a read-only table.
+- ❌ Opening a second modal over a half-filled form to change one of its fields.
+  It unmounts the form and takes the entry with it, and it stacks a second focus
+  trap and a second Escape handler. `ActivityLogger`'s "Change task" is an inline
+  `select` that replaces the task name in place, so the hours already typed
+  survive both the change and the cancel. `LogActivityPicker` stays a modal
+  because there it is the ENTRY point — there is no form behind it yet.
 - ❌ An icon-only button (`✕ ✎ ▶ ↑ ↓ ⎘`) with no `aria-label`. It means nothing to a screen reader, and nothing on a touch device where there is no hover to reveal a `title`. Make the two match.
 - ❌ A confirm button that says "OK". Say what will happen — Delete, Remove, Revoke — and pass `danger: true` when it destroys something.
 - ❌ Showing a repo filename, a config key or "check the console" to a user. Error copy goes through `friendlyError(err, '<plain sentence>')` in `services/access.js`; `tests/ui/copy.test.mjs` fails the build otherwise.

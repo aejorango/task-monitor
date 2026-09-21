@@ -24,6 +24,7 @@ import { describeAiFailure } from '../services/errorMessages';
 import { activateProps } from '../hooks/useActivate';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
+import LogTimeButton from './LogTimeButton';
 import TaskEditor from './TaskEditor';
 import TaskForm from './TaskForm';
 import WorkspaceEditor from './WorkspaceEditor';
@@ -384,12 +385,16 @@ export default function DashboardView({ projectFilter, navigate }) {
                   <Icon name="sparkles" size={15} />{aiBusy ? 'Thinking…' : 'Plan my day with AI'}
                 </button>
               )}
-              <button
-                className="db-btn db-btn-ghost"
-                onClick={() => setViewingTask(actionQueue[0]?.task || inProgress[0] || filtered[0])}
-                disabled={!filtered.length}
-                title={actionQueue[0] ? `Log time on "${actionQueue[0].task.title}"` : 'Log time on a task'}
-              >Log time</button>
+              {/* Opens the logging FORM on the task it names — see
+                  LogTimeButton and services/logTime.js (T-0122). */}
+              <LogTimeButton
+                tasks={filtered}
+                actionQueue={actionQueue}
+                inProgress={inProgress}
+                projectById={projectById}
+                projectFilter={projectFilter}
+                userId={userId}
+              />
               <ExportButton
                 build={buildStatusReportDoc}
                 baseName={statusReportFileBase(activeWorkspace?.name)}

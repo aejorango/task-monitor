@@ -8,7 +8,7 @@ import { useAllActivities, useProjects, useAuth, useTasks } from '../hooks/useTa
 import { todayLocal } from '../services/firebase';
 import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
-import { useModalDialog } from '../hooks/useModalDialog';
+import LogActivityPicker from './LogActivityPicker';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { activateProps } from '../hooks/useActivate';
 
@@ -374,6 +374,8 @@ export default function WorkPerformedView({ projectFilter }) {
         <ActivityLogger
           task={loggingTask}
           userId={userId}
+          taskOptions={tasks}
+          onChangeTask={setLoggingTask}
           onClose={() => setLoggingTask(null)}
         />
       )}
@@ -384,65 +386,6 @@ export default function WorkPerformedView({ projectFilter }) {
           onClose={() => setEditingActivity(null)}
         />
       )}
-    </div>
-  );
-}
-
-/* ── Pick a task to log against ──────────────────────────── */
-function LogActivityPicker({ tasks, projectById, projectFilter, onPick, onClose }) {
-  const modal = useModalDialog({ onClose });
-  const [query, setQuery] = useState('');
-  const [taskId, setTaskId] = useState('');
-
-  const candidates = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tasks
-      .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
-      .filter((t) => !q || (t.title || '').toLowerCase().includes(q))
-      .sort((a, b) => {
-        const ap = projectById[a.projectId]?.name || '￿';
-        const bp = projectById[b.projectId]?.name || '￿';
-        return ap.localeCompare(bp) || (a.title || '').localeCompare(b.title || '');
-      });
-  }, [tasks, projectById, projectFilter, query]);
-
-  const chosen = candidates.find((t) => t.id === taskId) || null;
-
-  return (
-    <div className="modal-backdrop" {...modal.backdropProps}>
-      <div className="modal" style={{ maxWidth: 460 }} {...modal.dialogProps}>
-        <h3 className="modal-title" id={modal.titleId}>Log activity</h3>
-        <p className="modal-sub">Pick the task you worked on, then record what you did.</p>
-
-        <div className="field">
-          <label className="label">Search tasks</label>
-          <input className="input" value={query} autoFocus placeholder="Filter by title…"
-            onChange={(e) => setQuery(e.target.value)} />
-        </div>
-
-        <div className="field">
-          <label className="label">Task</label>
-          <select className="select" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-            <option value="">— Select a task —</option>
-            {candidates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {projectById[t.projectId]?.name ? `${projectById[t.projectId].name} · ` : ''}{t.title}
-              </option>
-            ))}
-          </select>
-          {candidates.length === 0 && (
-            <p className="muted small" style={{ marginTop: 6 }}>No tasks match — clear the search or add a task first.</p>
-          )}
-        </div>
-
-        <div className="modal-actions">
-          <div style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!chosen} onClick={() => chosen && onPick(chosen)}>
-            Continue
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

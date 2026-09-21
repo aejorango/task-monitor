@@ -582,6 +582,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/workload.html` | The workload grid and its drag-and-drop, against sample people |
 | `/dev/shared.html` | The page a client opens (`?kind=board`, `?kind=dead`) |
 | `/dev/recurrence.html` | Move the clock forward and watch a recurring task come round |
+| `/dev/log-time.html` | Every state of the Dashboard's "Log time" button, and the form behind it |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 | `/dev/escape-key.html` | Who hears Escape: the real timer widget beside the five handlers it used to silence |
 | `/dev/gantt.html` | Gantt rows with every shape of plan (`?zoom=day\|week\|month`), and what a drag writes |

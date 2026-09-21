@@ -1104,6 +1104,21 @@ a:hover { text-decoration: underline; }
   margin: 0 0 22px;
   line-height: 1.55;
 }
+/* Log activity — the task being logged against, with the way to change it
+   sitting on the same line rather than under the fields (T-0122). */
+.al-task-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.al-task-line .al-task-name {
+  color: var(--c-text);
+  font-weight: 550;
+}
+.al-task-line .label { margin: 0; }
+.al-task-line .select { width: auto; max-width: 320px; flex: 1 1 200px; }
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
