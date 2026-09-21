@@ -351,8 +351,11 @@ async function callApi(system, userPrompt, { maxTokens } = {}) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    const err = new Error(`AI API error ${res.status}: ${text.slice(0, 400)}`);
+    // Same rule: the upstream body is for the console, never for the screen.
+    const err = new Error('The AI service refused that request.');
     err.code = `http-${res.status}`;
+    err.status = res.status;
+    err.detail = `AI API error ${res.status}: ${text.slice(0, 400)}`;
     throw err;
   }
   const data = await res.json();
@@ -460,11 +463,14 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
           `The Claude Code bridge failed (${why}) and no API key is available — ` +
           'this is placeholder text, not a real AI response.');
       }
-      const e = new Error(
-        `The Claude Code bridge is not reachable (${why}). Start it with \`npm run bridge\`, ` +
-        'or switch the provider in Settings → AI brain.'
-      );
+      // The message is what a person may be shown; the operator's version —
+      // the address, the cause, the command to start it — goes on `detail`,
+      // for console.error and a bug report. Putting it in `message` is how a
+      // shell command ended up on the Dashboard (BUG-020).
+      const e = new Error('The AI is not connected right now. Try again in a moment — if it keeps happening, ask whoever set this up.');
       e.code = 'bridge-unreachable';
+      e.detail = `Claude Code bridge unreachable at ${aiSettings().bridgeUrl} (${why}). `
+        + 'Start it with `npm run bridge`, or switch the provider in Settings → AI brain.';
       throw e;
     }
   }
