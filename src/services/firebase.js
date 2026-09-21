@@ -1717,6 +1717,45 @@ export function subscribeToTasksAcrossWorkspaces(workspaceIds, callback) {
   return () => unsubs.forEach((u) => u && u());
 }
 
+/**
+ * Tasks assigned to ONE person, across every workspace they belong to (T-0130).
+ *
+ * Not `subscribeToTasksAcrossWorkspaces` with a filter in the callback: that one
+ * downloads every task in every workspace, and My Week is a screen somebody
+ * leaves open all day. `assignedTo array-contains uid` is applied at the server,
+ * so a member of four busy workspaces pays for their own tasks and nobody
+ * else's. It needs the composite index in firestore.indexes.json.
+ *
+ * One listener per workspace, and the callback does not fire until every one
+ * has reported once — otherwise the week paints a workspace at a time.
+ */
+export function subscribeToMyTasksAcrossWorkspaces(workspaceIds, userId, callback) {
+  if (!workspaceIds?.length || !userId) { callback([]); return () => {}; }
+  const byWs = {};
+  const seenInitial = new Set();
+  const fire = () => {
+    if (seenInitial.size < workspaceIds.length) return;
+    callback(Object.values(byWs).flat());
+  };
+  const unsubs = workspaceIds.map((wsId) => {
+    const q = query(
+      tasksRef,
+      where('workspaceId', '==', wsId),
+      where('assignedTo', 'array-contains', userId),
+    );
+    return onSnapshot(q, (snap) => {
+      byWs[wsId] = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((t) => !t.deleted && !t.archived);
+      seenInitial.add(wsId);
+      fire();
+    }, listenerError('myTasksAcrossWorkspaces', () => {
+      byWs[wsId] = []; seenInitial.add(wsId); fire();
+    }));
+  });
+  return () => unsubs.forEach((u) => u && u());
+}
+
 // ─── TEMPLATES ──────────────────────────────────────────────────────────────
 // A template is a reusable starting point for either a task or a project.
 //   kind: 'task' | 'project'

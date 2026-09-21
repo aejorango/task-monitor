@@ -13,6 +13,7 @@ import {
   subscribeToProjects,
   subscribeToProjectsAcrossWorkspaces,
   subscribeToTasksAcrossWorkspaces,
+  subscribeToMyTasksAcrossWorkspaces,
   subscribeToSharedProjects,
   subscribeToTasksByProjects,
   subscribeToActivitiesByProjects,
@@ -544,6 +545,40 @@ export function useAllWorkspaceTasks() {
   }, [wsKey]);
 
   return { tasks, loading };
+}
+
+/**
+ * Every task assigned to the signed-in person, in every workspace they belong
+ * to — the data behind My Week (T-0130).
+ *
+ * Deliberately NOT `useAllWorkspaceTasks()` with a filter applied afterwards:
+ * that one subscribes to every task in every workspace, and this is a screen
+ * somebody leaves open all day. The filter is at the server.
+ */
+export function useMyTasksAcrossWorkspaces() {
+  const { userId, ready } = useAuth();
+  const { workspaces, loading: wsLoading } = useWorkspaces();
+  const wsKey = workspaces.map((w) => w.id).sort().join(',');
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const ids = wsKey ? wsKey.split(',') : [];
+    if (!ready || !userId || ids.length === 0) {
+      setTasks([]);
+      // Still waiting for the workspace list is not the same as having none.
+      setLoading(Boolean(!ready || wsLoading));
+      return undefined;
+    }
+    setLoading(true);
+    const unsub = subscribeToMyTasksAcrossWorkspaces(ids, userId, (data) => {
+      setTasks(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [wsKey, userId, ready, wsLoading]);
+
+  return { tasks, loading, userId, workspaces };
 }
 
 // ─── useRecentActivities ───────────────────────────────────────────────────

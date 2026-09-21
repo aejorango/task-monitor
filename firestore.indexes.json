@@ -200,6 +200,22 @@
         }
       ]
     }
+,
+    {
+      "//": "My Week: one person's tasks in one workspace, across every workspace they are in.",
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "workspaceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "assignedTo",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    }
   ],
   "fieldOverrides": []
 }

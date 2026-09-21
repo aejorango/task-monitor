@@ -125,3 +125,52 @@ test('a batch of one behaves like a plain update', async () => {
   await assertSucceeds(bulkBatch(db, [MINE[0]], { priority: 'low' }));
   await assertFails(bulkBatch(db, [THEIRS], { priority: 'low' }));
 });
+
+// ─── T-0130 / NEW-020: the read behind My Week ──────────────────────────────
+//
+// My Week subscribes per workspace with `assignedTo array-contains me`. The
+// audit assumed the rules already permit it; these check that rather than
+// trusting it, and check the other half too — that the bounded query does not
+// become a way to read a workspace you are not in.
+
+test('a member can read their own assigned tasks in a workspace they belong to', async () => {
+  const db = await as(EDITOR, { email: email(EDITOR) });
+  const { collection, getDocs, query, where } = await import('firebase/firestore');
+  await assertSucceeds(getDocs(query(
+    collection(db, 'tasks'),
+    where('workspaceId', '==', WS),
+    where('assignedTo', 'array-contains', EDITOR),
+  )));
+});
+
+test('even a viewer can read their own week — reading is not editing', async () => {
+  const db = await as(VIEWER, { email: email(VIEWER) });
+  const { collection, getDocs, query, where } = await import('firebase/firestore');
+  await assertSucceeds(getDocs(query(
+    collection(db, 'tasks'),
+    where('workspaceId', '==', WS),
+    where('assignedTo', 'array-contains', VIEWER),
+  )));
+});
+
+test('array-contains is not a way into a workspace you are not in', async () => {
+  const db = await as(EDITOR, { email: email(EDITOR) });
+  const { collection, getDocs, query, where } = await import('firebase/firestore');
+  await assertFails(getDocs(query(
+    collection(db, 'tasks'),
+    where('workspaceId', '==', OTHER_WS),
+    where('assignedTo', 'array-contains', EDITOR),
+  )));
+});
+
+test('dropping the workspace clause gets the query refused outright', async () => {
+  // Rules are not filters: a bare assignedTo query could match a workspace the
+  // caller is not a member of, so it must be rejected rather than quietly
+  // returning less. This is why the subscription is one listener PER workspace.
+  const db = await as(EDITOR, { email: email(EDITOR) });
+  const { collection, getDocs, query, where } = await import('firebase/firestore');
+  await assertFails(getDocs(query(
+    collection(db, 'tasks'),
+    where('assignedTo', 'array-contains', EDITOR),
+  )));
+});

@@ -67,6 +67,15 @@ const hasIndex = (collection, fields) => indexes.indexes.some((idx) =>
   idx.collectionGroup === collection
   && fields.every(([p, o], i) => idx.fields[i]?.fieldPath === p && idx.fields[i]?.order === o));
 
+test('My Week reads one person\'s tasks at the server, and has the index for it', () => {
+  // workspaceId == ws AND assignedTo array-contains me. Without this the
+  // subscription falls back to downloading every task in the workspace.
+  const has = indexes.indexes.some((idx) => idx.collectionGroup === 'tasks'
+    && idx.fields.some((f) => f.fieldPath === 'workspaceId' && f.order === 'ASCENDING')
+    && idx.fields.some((f) => f.fieldPath === 'assignedTo' && f.arrayConfig === 'CONTAINS'));
+  assert.ok(has, 'see subscribeToMyTasksAcrossWorkspaces');
+});
+
 test('every ordered query has a composite index to run on', () => {
   assert.ok(hasIndex('activities', [['workspaceId', 'ASCENDING'], ['date', 'DESCENDING']]),
     'workspace activity log');
@@ -85,7 +94,15 @@ test('the index file is deployable and complete', () => {
     assert.ok(idx.fields.length >= 2, 'single-field indexes are automatic');
     for (const f of idx.fields) {
       assert.ok(f.fieldPath, 'every field has a path');
-      assert.match(f.order, /^(ASCENDING|DESCENDING)$/);
+      // A field is indexed for ordering OR for array-contains — an
+      // `arrayConfig` field has no `order`, and demanding one rejected a
+      // perfectly valid index (T-0130's workspaceId + assignedTo).
+      if (f.arrayConfig) {
+        assert.match(f.arrayConfig, /^(CONTAINS)$/);
+        assert.equal(f.order, undefined, 'a field is ordered or array-contains, not both');
+      } else {
+        assert.match(f.order, /^(ASCENDING|DESCENDING)$/);
+      }
     }
   }
 });

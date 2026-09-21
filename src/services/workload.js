@@ -216,6 +216,50 @@ export function moveTaskPlan(task, { toUserId = null, toWeek = null } = {}) {
   return Object.keys(patch).length ? patch : null;
 }
 
+/**
+ * What dropping a task on ONE DAY means (T-0130).
+ *
+ * `moveTaskPlan` above moves a task to a different WEEK and keeps its weekday.
+ * A day column is the finer gesture: the task is due on that day, and its
+ * duration comes with it.
+ *
+ * Two things this gets right that the Calendar's inline copy did not:
+ *
+ *   · A task with no due date at all can be dropped. That is the whole point of
+ *     an unscheduled rail — the Calendar returned early on `!oldEnd`, so the
+ *     tasks most in need of a day were the ones that could not be given one.
+ *   · Dropping on `UNSCHEDULED` takes the date off again, which is how a task
+ *     goes back to the rail.
+ *
+ * @returns {object|null} the patch, or null when nothing would change.
+ */
+export function moveTaskToDay(task, day) {
+  if (!task || !day) return null;
+
+  if (day === DAY_UNSCHEDULED) {
+    if (!task.plan?.endDate) return null;
+    // The start date goes too: a task with a start and no end is a plan that
+    // says it began and will never finish.
+    return task.plan?.startDate
+      ? { 'plan.endDate': null, 'plan.startDate': null }
+      : { 'plan.endDate': null };
+  }
+
+  const due = task.plan?.endDate || null;
+  if (due === day) return null;
+
+  const patch = { 'plan.endDate': day };
+  if (due && task.plan?.startDate) {
+    // Keep the duration: a three-day task dropped on Thursday starts Tuesday.
+    const span = daysBetween(task.plan.startDate, due);
+    patch['plan.startDate'] = addDaysISO(day, -span);
+  }
+  return patch;
+}
+
+/** The rail a task with no day sits in. Dropping here clears the date. */
+export const DAY_UNSCHEDULED = '__unscheduled__';
+
 /** Which day of the target week matches the weekday the task is due on. */
 function dayOffsetWithinWeek(due, week) {
   const dueDay = new Date(`${due}T00:00:00`).getDay();
