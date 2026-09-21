@@ -21,6 +21,7 @@ import ExportButton from './ExportButton';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { useIsOperator } from '../hooks/useUserProfile';
 import { describeAiFailure } from '../services/errorMessages';
+import { activateProps } from '../hooks/useActivate';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
@@ -485,10 +486,7 @@ export default function DashboardView({ projectFilter, navigate }) {
                 <div
                   key={task.id}
                   className={`db-queue-row${isLate ? ' is-late' : ''}`}
-                  onClick={() => setViewingTask(task)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter') setViewingTask(task); }}
+                  {...activateProps(() => setViewingTask(task))}
                 >
                   <span className="db-queue-rail" aria-hidden="true" />
                   <span className="db-prio" style={{ background: PRIORITY_DOT[task.priority] || PRIORITY_DOT.medium }} />
@@ -567,10 +565,9 @@ export default function DashboardView({ projectFilter, navigate }) {
                     <div
                       key={h.project.id}
                       className="db-health-row"
-                      onClick={() => navigate?.({ view: 'board', projectFilter: h.project.id })}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') navigate?.({ view: 'board', projectFilter: h.project.id }); }}
+                      {...activateProps(() => navigate?.({ view: 'board', projectFilter: h.project.id }), {
+                        label: `Open ${h.project.name} on the board`,
+                      })}
                     >
                       <span className="proj-dot" style={{ background: h.project.color }} />
                       <div className="db-health-id">
@@ -612,8 +609,7 @@ export default function DashboardView({ projectFilter, navigate }) {
                           ? firstNameFor(memberProfiles[t.assignedTo[0]], t.assignedTo[0])
                           : (t.assignedToExternal || [])[0] || null;
                         return (
-                          <div key={t.id} className="db-up-row" onClick={() => setViewingTask(t)} role="button" tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === 'Enter') setViewingTask(t); }}>
+                          <div key={t.id} className="db-up-row" {...activateProps(() => setViewingTask(t))}>
                             <span className="proj-dot" style={{ background: proj?.color || 'var(--c-border-strong)' }} />
                             <span className="db-up-title">{t.title}</span>
                             {who && <span className="db-who">{who}</span>}

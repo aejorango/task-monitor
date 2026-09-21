@@ -122,3 +122,95 @@ test('a row that reads as a sentence is not given a redundant name', async () =>
     'a label that repeats the visible text is noise to a screen-reader user');
   ui.unmount();
 });
+
+// ─── T-0119: every call site really uses it ─────────────────────────────────
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = path.resolve(import.meta.dirname, '..', '..');
+const componentsDir = path.join(root, 'src', 'components');
+const componentFiles = () => fs.readdirSync(componentsDir)
+  .filter((f) => f.endsWith('.jsx'))
+  .map((f) => ({ name: f, src: fs.readFileSync(path.join(componentsDir, f), 'utf8') }));
+
+/**
+ * The tag an attribute line belongs to — looking back for the nearest `<tag`.
+ * Enter-only is CORRECT on a text input (Enter submits, Space types a space);
+ * it is the bug only on something pretending to be a button.
+ */
+function tagAt(lines, i) {
+  for (let n = i; n >= 0 && n > i - 12; n--) {
+    const m = lines[n].match(/<([a-zA-Z][\w.]*)\b/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+test('nothing acting as a button hand-rolls the contract', () => {
+  const TYPING = new Set(['input', 'textarea', 'select']);
+  const offenders = [];
+  for (const { name, src } of componentFiles()) {
+    const lines = src.split('\n');
+    lines.forEach((line, i) => {
+      if (!/onKeyDown=.*e\.key === 'Enter'/.test(line)) return;
+      if (/e\.key === ' '/.test(line)) return;              // handles Space already
+      const tag = tagAt(lines, i);
+      if (TYPING.has(tag)) return;                          // Enter submits; Space types
+      offenders.push(`${name}:${i + 1} <${tag}>: ${line.trim()}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    'a div acting as a button must use activateProps() from hooks/useActivate');
+});
+
+test('the guard knows a text input from a fake button', () => {
+  // Enter-only on an input is left alone, on purpose: several forms rely on it.
+  const inputs = componentFiles().flatMap(({ name, src }) => {
+    const lines = src.split('\n');
+    return lines
+      .map((line, i) => ({ line, i }))
+      .filter(({ line, i }) => /onKeyDown=.*e\.key === 'Enter'/.test(line)
+        && ['input', 'textarea', 'select'].includes(tagAt(lines, i)))
+      .map(({ i }) => `${name}:${i + 1}`);
+  });
+  assert.ok(inputs.length > 0, 'if this ever hits zero the guard above is unproven');
+});
+
+test('every role="button" div goes through the helper', () => {
+  const offenders = [];
+  for (const { name, src } of componentFiles()) {
+    src.split('\n').forEach((line, i) => {
+      if (!/role="button"/.test(line)) return;
+      // The helper spreads role/tabIndex/onClick/onKeyDown together, so a
+      // literal role="button" in the markup means it was written by hand.
+      offenders.push(`${name}:${i + 1}: ${line.trim()}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    'activateProps() supplies role, tabIndex, onClick and onKeyDown as one set');
+});
+
+test('the four Dashboard and editor rows use it', () => {
+  for (const [file, count] of [['DashboardView.jsx', 3], ['TaskEditor.jsx', 1], ['WorkPerformedView.jsx', 1], ['AppShell.jsx', 1]]) {
+    const src = fs.readFileSync(path.join(componentsDir, file), 'utf8');
+    const uses = (src.match(/\{\.\.\.activateProps\(/g) || []).length;
+    assert.equal(uses, count, `${file} should spread it ${count} time(s)`);
+  }
+});
+
+test('an icon-only row is given a name, a readable one is not', () => {
+  const shell = fs.readFileSync(path.join(componentsDir, 'AppShell.jsx'), 'utf8');
+  assert.match(shell, /label: `Remove saved view \$\{v\.name\}`/,
+    'a bare ✕ means nothing to a screen reader');
+
+  const dash = fs.readFileSync(path.join(componentsDir, 'DashboardView.jsx'), 'utf8');
+  assert.match(dash, /activateProps\(\(\) => setViewingTask\(task\)\)/,
+    'the queue row reads as a sentence already — a label would be noise');
+});
+
+test('the confirm behind the saved-view delete is written once', () => {
+  const shell = fs.readFileSync(path.join(componentsDir, 'AppShell.jsx'), 'utf8');
+  const confirms = (shell.match(/Remove saved view "\$\{v\.name\}"\?/g) || []).length;
+  assert.equal(confirms, 1, 'it used to be written once per input, and could drift');
+});

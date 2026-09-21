@@ -41,6 +41,7 @@ import AddToNotebookButton from './AddToNotebookButton';
 import { friendlyError } from '../services/access';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { activateProps } from '../hooks/useActivate';
 
 // ── Small formatters ────────────────────────────────────────────────────────
 function daysBetween(fromYmd, toYmd) {
@@ -711,10 +712,9 @@ export default function TaskEditor({ task, projects, onClose }) {
                   <div
                     key={s.id}
                     className={`te-sub${s.done ? ' is-done' : ''}`}
-                    onClick={() => toggleSubtask(s.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSubtask(s.id); } }}
+                    {...activateProps(() => toggleSubtask(s.id), {
+                      label: `${s.done ? 'Mark not done' : 'Mark done'}: ${s.text}`,
+                    })}
                   >
                     <span className="te-sub-box" aria-hidden="true">{s.done ? '✓' : ''}</span>
                     <span className="te-sub-text">{s.text}</span>

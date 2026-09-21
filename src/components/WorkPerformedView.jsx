@@ -10,6 +10,7 @@ import ActivityLogger from './ActivityLogger';
 import ActivityEditor from './ActivityEditor';
 import { useModalDialog } from '../hooks/useModalDialog';
 import { useQuickCreate } from '../hooks/useQuickCreate';
+import { activateProps } from '../hooks/useActivate';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function friendlyDate(s) {
@@ -513,12 +514,9 @@ function ActivityNode({ a, proj, color, compStatus, isOpen, onToggle, onEdit }) 
           )}
           <div className="wp-node-actions">
             <span
-              role="button"
-              tabIndex={0}
               className="wp-node-edit"
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onEdit(); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(); } }}
+              {...activateProps((e) => { e.stopPropagation(); onEdit(); })}
             >
               ✎ Edit
             </span>

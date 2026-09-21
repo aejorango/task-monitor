@@ -16,6 +16,7 @@ import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
 import { VIEW_REGISTRY, RENDERABLE_VIEWS, isKnownView } from '../services/views';
+import { activateProps } from '../hooks/useActivate';
 import { buildCommands, commandsFirst, CREATE_VIEW, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
@@ -348,20 +349,14 @@ function SidebarSavedViews({ route, navigate }) {
             <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {v.name}
             </span>
+            {/* The confirm was written out twice, once per input — the click
+                path and the key path could drift apart. One helper, one path. */}
             <span
               className="saved-view-delete"
-              role="button"
-              tabIndex={0}
-              onClick={async (e) => {
+              {...activateProps(async (e) => {
                 e.stopPropagation();
                 if (await ask.confirm({ title: `Remove saved view "${v.name}"?`, confirmLabel: 'Remove', danger: true })) softDeleteSavedView(v.id);
-              }}
-              onKeyDown={async (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.stopPropagation();
-                  if (await ask.confirm({ title: `Remove saved view "${v.name}"?`, confirmLabel: 'Remove', danger: true })) softDeleteSavedView(v.id);
-                }
-              }}
+              }, { label: `Remove saved view ${v.name}` })}
               title="Remove saved view"
             >✕</span>
           </button>
