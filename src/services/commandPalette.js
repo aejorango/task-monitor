@@ -139,9 +139,62 @@ export function buildCommands(query, opts = {}) {
   return out.slice(0, 8);
 }
 
+/* ── Duplicate (T-0139) ─────────────────────────────────────────────────────
+   "Do that again" decided after the fact. Unlike a create, this needs a TARGET,
+   so it matches what the user typed against what exists rather than taking the
+   text as a name. */
+
+const DUPLICATE_VERBS = /^\s*(duplicate|copy|clone)\s+/i;
+
+/**
+ * "duplicate board pack" → rows for the tasks and projects that match.
+ *
+ * Nothing is offered for a bare "duplicate": a command that has to pick a
+ * target for you is how the wrong thing gets copied.
+ */
+export function buildDuplicateCommands(query, { tasks = [], projects = [], limit = 5 } = {}) {
+  const raw = String(query || '');
+  if (!DUPLICATE_VERBS.test(raw)) return [];
+  const needle = raw.replace(DUPLICATE_VERBS, '').trim().toLowerCase();
+  if (!needle) return [];
+
+  const hits = [];
+  for (const p of projects) {
+    if (p?.deleted || p?.archived) continue;
+    if (String(p.name || '').toLowerCase().includes(needle)) {
+      hits.push({
+        id: `duplicate:project:${p.id}`,
+        kind: 'duplicate',
+        entity: 'project',
+        label: `Duplicate “${p.name}”`,
+        hint: 'Project · opens it so you can confirm what comes across',
+        icon: 'projects',
+        payload: { id: p.id },
+      });
+    }
+  }
+  for (const t of tasks) {
+    if (t?.deleted || t?.archived) continue;
+    if (String(t.title || '').toLowerCase().includes(needle)) {
+      hits.push({
+        id: `duplicate:task:${t.id}`,
+        kind: 'duplicate',
+        entity: 'task',
+        label: `Duplicate “${t.title}”`,
+        hint: 'Task · opens it so you can confirm what comes across',
+        icon: 'board',
+        payload: { id: t.id, projectId: t.projectId || null },
+      });
+    }
+  }
+  return hits.slice(0, limit);
+}
+
 /** Should the palette lead with commands rather than with search results? */
 export function commandsFirst(query) {
-  return !!parseCreateIntent(query) || /^\s*(\/|>)/.test(String(query || ''));
+  return !!parseCreateIntent(query)
+    || DUPLICATE_VERBS.test(String(query || ''))
+    || /^\s*(\/|>)/.test(String(query || ''));
 }
 
 /* ── Recent items (T-0062 / NEW-009) ───────────────────────────────────────

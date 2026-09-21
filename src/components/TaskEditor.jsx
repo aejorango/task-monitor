@@ -10,6 +10,7 @@ import {
   addTask,
   updateTask,
   softDeleteTask,
+  duplicateTask,
   restoreDeleted,
   uid,
   addTemplate,
@@ -395,6 +396,37 @@ export default function TaskEditor({ task, projects, onClose }) {
       toast.error(friendlyError(err, 'Could not delete that task.'));
     }
   };
+
+  const duplicate = async () => {
+
+    setSaving(true);
+
+    try {
+
+      const newId = await duplicateTask(userId, task);
+
+      toast.success(`Copied “${task.title}”.`, {
+
+        // A copy nobody wanted is one click to take back.
+
+        undo: async () => { await softDeleteTask(newId); toast.info('Copy removed.'); },
+
+      });
+
+      onClose();
+
+    } catch (err) {
+
+      console.error('[duplicate] task failed:', err);
+
+      toast.error(friendlyError(err, 'Could not duplicate that task. Please try again.'));
+
+      setSaving(false);
+
+    }
+
+  };
+
 
   const saveAsTemplate = async () => {
     const name = await ask.prompt({ title: 'Template name:', defaultValue: title.trim() || 'New template' });
@@ -957,6 +989,14 @@ export default function TaskEditor({ task, projects, onClose }) {
         <footer className="pe-foot">
           <button type="button" className="btn btn-danger btn-sm" onClick={remove} disabled={saving}>Delete task</button>
           <button type="button" className="btn btn-sm" onClick={saveAsTemplate} disabled={saving || !title.trim()}>Save as template</button>
+          {/* "Do that again", decided after the fact — the case templates do
+              not cover (T-0139). */}
+          <button
+            type="button" className="btn btn-sm"
+            onClick={duplicate}
+            disabled={saving || !task.id}
+            title={`Make another task like “${task.title}”`}
+          >Duplicate</button>
           {updatedAt && (
             <span className="pe-foot-note">Last edited {updatedAt.toLocaleString('en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
           )}

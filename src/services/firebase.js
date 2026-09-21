@@ -70,6 +70,7 @@ import { clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
 import { chunkWrites } from './bulkTasks';
 import { normalizeEstimate } from './effort';
 import { normalizeLimits } from './wipLimits';
+import { duplicateProjectPlan, duplicateTaskPayload } from './duplicate';
 // One sentence a person can act on — never the SDK's own text (see access.js).
 import { friendlyError } from './access';
 
@@ -1921,6 +1922,109 @@ export function subscribeToMinutes(workspaceId, callback) {
 }
 
 // Save the structural shape of a task as a template (no dates, IDs, counters).
+/**
+ * Duplicate one task (T-0139).
+ *
+ * Everything about WHAT a copy is lives in services/duplicate.js; this only
+ * writes it. Returns the new task's id so the caller can offer an Undo.
+ */
+export async function duplicateTask(userId, task, opts = {}) {
+  const payload = duplicateTaskPayload(task, opts);
+  if (!payload) throw new Error('There is nothing to duplicate.');
+  const ref = await addTask(userId, payload);
+  return ref.id;
+}
+
+/**
+ * Duplicate a project and, optionally, its open tasks.
+ *
+ * The project is created first because every task needs its id; the tasks then
+ * go in one batch rather than one write each — twelve tasks is twelve round
+ * trips otherwise, and a mis-click makes a lot of rows.
+ *
+ * Dependencies between the copied tasks are wired in a second pass, once the
+ * real ids exist: `duplicate.js` hands over placeholder ids, and only this
+ * function can turn them into real ones.
+ *
+ * @returns {{ projectId, taskIds, skipped, dayShift }} — enough for an Undo.
+ */
+export async function duplicateProject(userId, project, tasks = [], opts = {}) {
+  const plan = duplicateProjectPlan(project, tasks, opts);
+  if (!plan.project) throw new Error('There is nothing to duplicate.');
+
+  const projectRef = await addProject(userId, plan.project);
+  const projectId = projectRef.id;
+  if (!plan.tasks.length) {
+    return { projectId, taskIds: [], skipped: plan.skipped, dayShift: plan.dayShift };
+  }
+
+  // Pass one: one document per task, in batches Firestore will accept. The ids
+  // are allocated up front so the dependency pass has something to point at.
+  const realId = {};
+  const refs = plan.tasks.map((t) => {
+    const ref = doc(tasksRef);
+    realId[t._tempId] = ref.id;
+    return ref;
+  });
+
+  const writes = plan.tasks.map((t, i) => {
+    const { _tempId, ...payload } = t;
+    return {
+      ref: refs[i],
+      data: {
+        ...payload,
+        projectId,
+        userId,
+        // Placeholders become real ids now that the refs exist.
+        dependsOn: (payload.dependsOn || []).map((id) => realId[id]).filter(Boolean),
+        links: (payload.links || []).map((l) => ({ ...l, targetId: realId[l.targetId] })).filter((l) => l.targetId),
+        // Counters start at zero: a copy has no history, whatever the original had.
+        activityCount: 0,
+        totalHoursLogged: 0,
+        attachmentCount: 0,
+        lastActivityAt: null,
+        recurrenceParentId: null,
+        archived: false,
+        deleted: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+    };
+  });
+
+  for (const chunk of chunkWrites(writes)) {
+    const batch = writeBatch(db);
+    for (const { ref, data } of chunk) batch.set(ref, data);
+    await batch.commit();
+  }
+
+  return {
+    projectId,
+    taskIds: refs.map((r) => r.id),
+    skipped: plan.skipped,
+    dayShift: plan.dayShift,
+  };
+}
+
+/**
+ * Take a duplicate back. Soft-deletes the project and everything it created,
+ * so a mis-click costs one click rather than an afternoon of tidying.
+ */
+export async function undoDuplicateProject({ projectId, taskIds = [] }) {
+  const writes = [
+    ...taskIds.map((id) => ({ ref: doc(db, 'tasks', id) })),
+    ...(projectId ? [{ ref: doc(db, 'projects', projectId) }] : []),
+  ];
+  for (const chunk of chunkWrites(writes)) {
+    const batch = writeBatch(db);
+    for (const { ref } of chunk) {
+      batch.update(ref, { deleted: true, updatedAt: serverTimestamp() });
+    }
+    await batch.commit();
+  }
+  return { removed: writes.length };
+}
+
 export function taskAsTemplatePayload(task) {
   return {
     title: task.title,

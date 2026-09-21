@@ -7,6 +7,8 @@ import {
   addProject,
   updateProject,
   archiveProject,
+  duplicateProject,
+  undoDuplicateProject,
   softDeleteProject,
   restoreDeleted,
   uid,
@@ -41,6 +43,7 @@ import NotebookPicker from './NotebookPicker';
 import TemplateGallery from './TemplateGallery';
 import ShareLinksPanel from './ShareLinksPanel';
 import { useToast } from './Toast';
+import { describeDuplicate, duplicateProjectPlan } from '../services/duplicate';
 import ExportButton from './ExportButton';
 import { buildActivityLogDocument, buildWbsDocument } from '../services/activityExport';
 import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
@@ -72,6 +75,12 @@ export default function ProjectsView() {
   useQuickCreate('project', useCallback((text) => {
     setNameSeed(text ? newSeed(text) : null);
     setEditing('new');
+  }, []));
+
+  // ⌘K → "Duplicate <project>" opens that project's editor, where the Duplicate
+  // button says what is about to be copied before anything is written (T-0139).
+  useQuickCreate('duplicate-project', useCallback((projectId) => {
+    if (projectId) setEditing(projectId);
   }, []));
   const [createFromTemplate, setCreateFromTemplate] = useState(null);
   const [aiFor, setAiFor] = useState(null);              // project to generate tasks for
@@ -1176,6 +1185,37 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
     onClose();
   };
 
+  // "Do that again for the next client" — the case templates do not cover,
+  // because it is decided after the fact (T-0139). The plan is worked out
+  // first so the question can say exactly what is about to happen: how many
+  // tasks, how many finished ones are being left behind, and how far the dates
+  // move. Twelve documents on a mis-click is a lot to tidy by hand, so it
+  // comes with an Undo.
+  const duplicate = async () => {
+    const preview = duplicateProjectPlan(project, tasks, { startOn: todayLocal() });
+    const answer = await ask.confirm({
+      title: `Duplicate “${project.name}”?`,
+      message: `This creates ${describeDuplicate(preview)}. Nothing is copied from its history — `
+             + 'no logged hours, no activity, no progress.',
+      confirmLabel: 'Duplicate',
+    });
+    if (!answer) return;
+
+    setSaving(true);
+    try {
+      const made = await duplicateProject(userId, project, tasks, { startOn: todayLocal() });
+      toast.success(
+        `Copied “${project.name}” with ${made.taskIds.length} task${made.taskIds.length === 1 ? '' : 's'}.`,
+        { undo: async () => { await undoDuplicateProject(made); toast.info('Copy removed.'); } },
+      );
+      onClose();
+    } catch (err) {
+      console.error('[duplicate] project failed:', err);
+      toast.error(friendlyError(err, 'Could not duplicate that project. Please try again.'));
+      setSaving(false);
+    }
+  };
+
   const saveAsTemplate = async () => {
     const tplName = await ask.prompt({ title: 'Template name:', defaultValue: name.trim() || 'New project template' });
     if (!tplName) return;
@@ -1703,6 +1743,10 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
             <>
               <button type="button" className="btn btn-danger btn-sm" onClick={remove} disabled={saving}>Delete project</button>
               <button type="button" className="btn btn-sm" onClick={archive} disabled={saving}>Archive</button>
+              <button
+                type="button" className="btn btn-sm" onClick={duplicate} disabled={saving}
+                title={`Make another project like “${project.name}”, with its open tasks`}
+              >Duplicate</button>
             </>
           )}
           {lastEdited && <span className="pe-foot-note">Last edited {lastEdited}</span>}

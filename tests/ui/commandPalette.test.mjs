@@ -9,8 +9,13 @@ const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx
 const search = shell.slice(shell.indexOf('function GlobalSearch'));
 
 test('the palette asks the command module what to offer', () => {
-  assert.match(search, /const commands = buildCommands\(q\)/);
+  assert.match(search, /buildCommands\(q\)/);
   assert.match(search, /commandsFirst\(q\)/);
+  // Duplicate needs a TARGET, so it is built from what exists rather than from
+  // what was typed — but it is still the command module that decides (T-0139).
+  assert.match(search, /buildDuplicateCommands\(q, \{ tasks, projects \}\)/);
+  assert.doesNotMatch(search, /\.filter\(\(p\) => p\.name\.toLowerCase\(\)\.includes/,
+    'the matching belongs in services/commandPalette.js');
 });
 
 test('an explicit command leads; otherwise search results do', () => {

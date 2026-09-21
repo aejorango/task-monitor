@@ -369,6 +369,7 @@ src/
 │   ├── myWeek.js             ← my week across workspaces: day columns and two rails
 │   ├── effort.js             ← estimated hours vs logged hours, and the variance
 │   ├── wipLimits.js          ← what a column may hold, and how long a card may sit
+│   ├── duplicate.js          ← "do that again": what a copy carries and what it drops
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -503,6 +504,20 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Duplicating by spreading the original. A copy carries the PLAN and drops the
+  HISTORY: `services/duplicate.js` builds the payload, and the things that must
+  never travel are listed in `NEVER_COPIED` (ids, counters, `lastActivityAt`,
+  `recurrenceParentId`, the actual dates). Subtasks come back unticked with fresh
+  ids — two tasks sharing a subtask id tick together — and a copied project gets
+  NEW phase ids, or moving a task in one project moves it in the other. A
+  dependency inside the copy is remapped to the copy; one pointing outside it is
+  dropped, because a copy that waits on the thing it was copied from is wrong.
+  `duplicateProject` writes the tasks in batches (twelve tasks is twelve round
+  trips otherwise) and returns the ids, because `undoDuplicateProject` needs them.
+- ❌ Writing from the ⌘K box. "Duplicate <project>" OPENS the project so its
+  editor can say what is about to be copied and how far the dates move; copying
+  twelve documents from a search box with no preview is not a thing a palette
+  should do. The matching lives in `services/commandPalette.js`, not in AppShell.
 - ❌ Blocking a drop that breaks a WIP limit. A hard stop on a personal board is
   an annoyance, not a discipline: `setTaskStatus` runs first and `warnOnDrop`'s
   sentence follows as an **info** toast — nothing went wrong, you were told

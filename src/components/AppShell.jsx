@@ -17,7 +17,7 @@ import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
 import { VIEW_REGISTRY, RENDERABLE_VIEWS, isKnownView } from '../services/views';
 import { activateProps } from '../hooks/useActivate';
-import { buildCommands, commandsFirst, CREATE_VIEW, recentCommands, rememberRecent } from '../services/commandPalette';
+import { buildCommands, buildDuplicateCommands, commandsFirst, CREATE_VIEW, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
@@ -494,7 +494,9 @@ function GlobalSearch({ projects, navigate }) {
       .slice(0, 6);
     // ⌘K is also where things get MADE. "new project X", "log hours", or just
     // "gantt" — see services/commandPalette.js.
-    const commands = buildCommands(q);
+    // "duplicate board pack" needs a target, so it is built from what exists
+    // rather than from what was typed (T-0139).
+    const commands = [...buildDuplicateCommands(q, { tasks, projects }), ...buildCommands(q)];
     // Flat list lets keyboard nav cycle through every group in display order.
     const lead = commandsFirst(q);
     const flat = lead
@@ -530,6 +532,20 @@ function GlobalSearch({ projects, navigate }) {
     setQ(''); setOpen(false);
     inputRef.current?.blur();
     if (cmd.kind === 'navigate') { navigate({ view: cmd.payload.view }); return; }
+
+    // A duplicate OPENS the thing so the user can see what is about to be
+    // copied and confirm it there — copying twelve documents straight from a
+    // search box, with no preview, is not a thing a palette should do.
+    if (cmd.kind === 'duplicate') {
+      if (cmd.entity === 'task') {
+        const t = tasks.find((x) => x.id === cmd.payload.id);
+        if (t) goToTask(t);
+        return;
+      }
+      navigate({ view: 'projects' });
+      setTimeout(() => requestQuickCreate('duplicate-project', cmd.payload.id), 60);
+      return;
+    }
 
     if (cmd.kind === 'recent') {
       const { entity, payload } = cmd;

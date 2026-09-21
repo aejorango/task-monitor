@@ -227,6 +227,14 @@ Whatever you pick is written in one go, and a message says what happened —
 puts them back exactly as they were. A plain click on a row still opens the
 task, as it always did.
 
+**Duplicate anything.** A task editor has a **Duplicate** button, a project
+editor has one that brings its open tasks with it, and ⌘K takes *duplicate*,
+*copy* or *clone* followed by a name. A copy keeps the plan — dates, estimate,
+tags, assignees, subtasks (unticked) — and keeps none of the history: no logged
+hours, no activity, no progress. Duplicating a project asks first, telling you
+how many tasks are coming, how many finished ones are being left behind, and
+how far the dates move to start today; both come with **Undo**.
+
 **Work-in-progress limits.** A project can say how many tasks each board column
 should hold at once (**Projects → the project → Board limits**). The column
 header then reads *5 / 3* — amber when you are at the limit, red when you are
@@ -559,6 +567,8 @@ run together.
 | `tests/ui/bulkTasksFlow.test.mjs` | Ten selected → High → one batch, a toast with Undo, selection cleared |
 | `src/services/effort.test.mjs` | Estimate vs logged, including zero and missing estimates |
 | `src/services/wipLimits.test.mjs` | What a column may hold, and when a card is too old |
+| `src/services/duplicate.test.mjs` | What a copy carries, what it drops, and how its dates move |
+| `tests/ui/duplicate.test.mjs` | The write path, the Undo, and the three places it is offered |
 | `tests/ui/wipLimits.test.mjs` | Under, at and over the limit — and that a drop is never blocked |
 | `tests/ui/effortVariance.test.mjs` | The table, the report, the workload grid and the round-trip |
 | `tests/rules/bulkTasks.rules.test.mjs` | One task you may not write takes the whole batch down |
