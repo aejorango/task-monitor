@@ -497,6 +497,8 @@ run together.
 | `tests/ui/recurrenceOnSave.test.mjs` | Finishing a recurring task means the same thing whichever button you press |
 | `src/services/ganttGeometry.test.mjs` | Where a plan bar sits, and what a drag on it writes |
 | `tests/ui/ganttMilestone.test.mjs` | A task with only a due date draws, and can be dragged into a range |
+| `src/services/taskStatus.test.mjs` | What a status implies about progress and the actual dates |
+| `tests/ui/importStatus.test.mjs` | A mapped Status column reaches the task, and no offered field is dropped |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |

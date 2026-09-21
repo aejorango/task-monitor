@@ -411,3 +411,30 @@ export function chunkForImport(rows, size = IMPORT_BATCH_SIZE) {
   for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
   return out;
 }
+
+/**
+ * The task document an imported row becomes, shaped for addTask().
+ *
+ * Every field the mapping step offers has to arrive here, because the preview
+ * shows the user what it read — and what the preview promises, the import owes.
+ * Status is the one that was missing (BUG-015): the wizard mapped it, guessed
+ * it from a "Status" heading, showed it in the preview, and then dropped it, so
+ * rows the file said were Done landed in To Do. addTask derives progress and
+ * the actual dates from the status it is given.
+ *
+ * Pure: the caller has already resolved the project and the phase.
+ */
+export function importedTaskPayload(record, { workspaceId, project, phase } = {}) {
+  return {
+    workspaceId,
+    title: record.title,
+    description: record.description,
+    projectId: project?.id || null,
+    phaseId: phase?.id || null,
+    priority: record.priority,
+    status: record.status,
+    tags: record.tags,
+    requestedBy: record.requestedBy,
+    plan: { startDate: record.startDate || null, endDate: record.endDate || null },
+  };
+}

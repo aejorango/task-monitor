@@ -15,8 +15,8 @@ import { useAuth, useProjects, useTasks } from '../hooks/useTasks';
 import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { addTask, addProject, addActivity, uid } from '../services/firebase';
 import {
-  IMPORT_KINDS, chunkForImport, guessMapping, missingRequired, parseCsv,
-  parseImportRows, summarizeImportRows,
+  IMPORT_KINDS, chunkForImport, guessMapping, importedTaskPayload, missingRequired,
+  parseCsv, parseImportRows, summarizeImportRows,
 } from '../services/csv';
 import { friendlyError } from '../services/access';
 import { useModalDialog } from '../hooks/useModalDialog';
@@ -334,17 +334,10 @@ async function writeOne(record, ctx) {
   if (kind === 'tasks') {
     const project = await resolveProject(record.project);
     const phase = project?.phases?.find((p) => p.name?.toLowerCase() === record.phase?.toLowerCase());
-    return addTask(userId, {
-      workspaceId,
-      title: record.title,
-      description: record.description,
-      projectId: project?.id || null,
-      phaseId: phase?.id || null,
-      priority: record.priority,
-      tags: record.tags,
-      requestedBy: record.requestedBy,
-      plan: { startDate: record.startDate || null, endDate: record.endDate || null },
-    });
+    // The payload is built in services/csv.js, beside IMPORT_KINDS — so the
+    // list of fields the wizard offers and the list it actually writes cannot
+    // drift apart, which is what BUG-015 was.
+    return addTask(userId, importedTaskPayload(record, { workspaceId, project, phase }));
   }
 
   // activities

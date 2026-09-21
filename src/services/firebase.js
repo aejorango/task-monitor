@@ -64,6 +64,9 @@ import {
   buildShareLink, buildSnapshot, cryptoBytes, isShareLive, newShareToken,
 } from './shareLinks';
 import { catchUpPlan } from './recurrenceSchedule';
+// What a status implies about progress and the actual dates — one rule, so a
+// task imported as Done cannot land in To Do (BUG-015).
+import { normalizeTaskStatus, statusStamps } from './taskStatus';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -1072,6 +1075,12 @@ export function subscribeToActivitiesByProjects(projectIds, callback) {
 
 export async function addTask(userId, task) {
   if (!task.workspaceId) throw new Error('addTask requires task.workspaceId');
+  const status = normalizeTaskStatus(task.status);
+  const stamps = statusStamps(status, {
+    today: todayLocal(),
+    current: { startDate: task.actual?.startDate, endDate: task.actual?.endDate, progress: task.progress },
+  });
+
   return await addDoc(tasksRef, {
     userId,
     workspaceId: task.workspaceId,
@@ -1081,8 +1090,11 @@ export async function addTask(userId, task) {
     projectId: task.projectId || null,
     phaseId: task.phaseId || null,
     priority: task.priority || 'medium',
-    status: 'todo',
-    progress: 0,
+    // Optional, and 'todo' when nothing is supplied — so quick-add, the
+    // recurrence spawn and every other create path behave exactly as before.
+    // A spreadsheet import that says a row is already Done now says so here.
+    status,
+    progress: stamps.progress,
     requestedBy: task.requestedBy || '',
 
     plan: {
@@ -1090,8 +1102,8 @@ export async function addTask(userId, task) {
       endDate:   task.plan?.endDate   || null,
     },
     actual: {
-      startDate: null,
-      endDate:   null,
+      startDate: stamps.actualStartDate,
+      endDate:   stamps.actualEndDate,
     },
 
     // PM suite v4 fields
@@ -1154,21 +1166,19 @@ export function emitTaskDone(task) {
 // recurring, also spawn the next instance.
 export async function setTaskStatus(task, nextStatus) {
   if (task.status === nextStatus) return;
-  const updates = { status: nextStatus, updatedAt: serverTimestamp() };
-
-  if (nextStatus === 'doing' && !task.actual?.startDate) {
-    updates['actual.startDate'] = todayLocal();
-  }
-  if (nextStatus === 'done') {
-    updates['actual.endDate'] = todayLocal();
-    updates.progress = 100;
-    if (!task.actual?.startDate) updates['actual.startDate'] = todayLocal();
-  }
-  if (nextStatus === 'todo') {
-    updates['actual.startDate'] = null;
-    updates['actual.endDate']   = null;
-    updates.progress = 0;
-  }
+  // Same rule as addTask and the importer, so however a task reaches a status
+  // it carries the same progress and the same actual dates.
+  const stamps = statusStamps(nextStatus, {
+    today: todayLocal(),
+    current: { startDate: task.actual?.startDate, endDate: task.actual?.endDate, progress: task.progress },
+  });
+  const updates = {
+    status: nextStatus,
+    progress: stamps.progress,
+    'actual.startDate': stamps.actualStartDate,
+    'actual.endDate':   stamps.actualEndDate,
+    updatedAt: serverTimestamp(),
+  };
   await updateDoc(doc(db, 'tasks', task.id), updates);
 
   if (nextStatus === 'done') emitTaskDone(task);
