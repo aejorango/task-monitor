@@ -67,6 +67,7 @@ import { catchUpPlan } from './recurrenceSchedule';
 // What a status implies about progress and the actual dates — one rule, so a
 // task imported as Done cannot land in To Do (BUG-015).
 import { clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
+import { chunkWrites } from './bulkTasks';
 // One sentence a person can act on — never the SDK's own text (see access.js).
 import { friendlyError } from './access';
 
@@ -1294,6 +1295,50 @@ export async function archiveTask(taskId) {
 
 export async function softDeleteTask(taskId) {
   return await updateTask(taskId, { deleted: true });
+}
+
+/**
+ * Apply one patch per task, in as few commits as Firestore allows (T-0127).
+ *
+ * The caller hands over a plan from `services/bulkTasks.js` — `[{ id, patch }]`
+ * — and this only commits it. Deciding WHAT to write stays in that pure module
+ * so it can be checked without touching data; deciding HOW to write it is here,
+ * because only this file knows about `db`.
+ *
+ * Commits run in series, not in parallel: `Promise.all` over batches would put
+ * hundreds of writes in flight at once and, on a failure, leave no way to say
+ * how far it got. On an error the writes already committed stay committed, and
+ * the error carries `committed` so the caller can say "4 of 10" honestly rather
+ * than claiming nothing happened.
+ *
+ * Per-project ACLs are NOT re-checked here: `firestore.rules` is the enforcement
+ * point, and a batch that touches a task the caller may not write is rejected
+ * whole. That is the behaviour we want — a partial bulk edit driven by a
+ * client-side guess about permissions would be worse.
+ */
+export async function bulkUpdateTasks(writes = [], { newBatch = null, stamp = null } = {}) {
+  // `newBatch` / `stamp` exist so the batching, the serial commits and the
+  // partial-failure count can be exercised without a Firestore behind them.
+  // Nothing in the app passes them.
+  const makeBatch = newBatch || (() => writeBatch(db));
+  const touched = stamp || serverTimestamp;
+
+  const chunks = chunkWrites(writes);
+  let committed = 0;
+  for (const chunk of chunks) {
+    const batch = makeBatch();
+    for (const { id, patch } of chunk) {
+      batch.update(doc(db, 'tasks', id), { ...patch, updatedAt: touched() });
+    }
+    try {
+      await batch.commit();
+    } catch (err) {
+      err.committed = committed;
+      throw err;
+    }
+    committed += chunk.length;
+  }
+  return { committed, batches: chunks.length };
 }
 
 // ─── TRASH ──────────────────────────────────────────────────────────────────
