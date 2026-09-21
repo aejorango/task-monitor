@@ -90,7 +90,11 @@ export function useOverdueScan() {
   }, []);
 
   useEffect(() => {
-    if (permission !== 'granted') return;
+    // The topbar switch is presented as the on/off control for due-task alerts,
+    // full stop. It used to gate only the in-app modal, so a user who turned it
+    // off kept getting desktop banners every five minutes for the same tasks
+    // and reasonably read that as broken (BUG-022). One switch, both surfaces.
+    if (permission !== 'granted' || !prefs.enabled) return;
     let cancelled = false;
 
     const scan = async () => {
@@ -116,7 +120,7 @@ export function useOverdueScan() {
     scan();
     const id = setInterval(() => { if (!cancelled) scan(); }, 5 * 60 * 1000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [tasks, permission, userId, prefs.leadDays]);
+  }, [tasks, permission, userId, prefs.enabled, prefs.leadDays]);
 
   return { permission, refresh: () => setPermission(getNotificationPermission()) };
 }

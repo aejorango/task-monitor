@@ -23,12 +23,15 @@ export default function DueAlertBell() {
     if (!enabled && muted) unmute();
   };
 
+  // The label says what the switch actually controls: both the in-app alert and
+  // the desktop notification. It used to govern only the first, which made "off"
+  // a lie for anyone who had granted notification permission (BUG-022).
   const waiting = remaining ? ` (${remaining} waiting)` : '';
   const title = enabled
     ? muted
       ? `Due-task alerts on, paused for today${waiting} — click to turn off`
       : `Due-task alerts on${waiting} — click to turn off`
-    : 'Due-task alerts off — click to turn on';
+    : 'Due-task alerts off, in the app and on your desktop — click to turn on';
 
   return (
     <button

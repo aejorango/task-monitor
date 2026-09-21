@@ -380,6 +380,10 @@ export default function SettingsView() {
             You’ll be pinged when a task with a plan-end date is due today or overdue (same rules as the
             in-app alert below, including snooze). Scanned on app load and every 5 min.
           </p>
+          <p className="muted small" style={{ marginTop: 8 }}>
+            These follow the due-task alert switch in the top bar: with it off, nothing is sent here
+            or in the app.
+          </p>
           {notifPerm === 'granted' && (
             <p className="muted small" style={{ marginTop: 8 }}>
               Not seeing them? Your computer can hide notifications even when this site is allowed to
