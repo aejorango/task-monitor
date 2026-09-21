@@ -508,6 +508,7 @@ run together.
 | `tests/ui/aiOperatorCopy.test.mjs` | A shell command reaches the operator and nobody else |
 | `src/services/activityExport.test.mjs` | The activity log and the WBS as documents, not just CSV |
 | `tests/ui/activityExportUi.test.mjs` | The four pages that could only make a CSV, and the real .xlsx bytes |
+| `tests/ui/activateProps.test.mjs` | A div acting as a button obeys Enter, Space and the rest of the contract |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
