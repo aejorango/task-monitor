@@ -57,27 +57,39 @@ export function useModalDialog({
   const restoreTo = useRef(null);
   const titleId = useId();
 
+  // Everything the key handler needs, in refs the handler reads at the moment
+  // it fires. The effect below must run ONCE per open — keying it on `onClose`
+  // meant it re-ran on every render of the parent, because almost every call
+  // site passes a fresh arrow (`onClose={() => setLoggingTask(null)}`). Board
+  // re-renders whenever the workspace tasks listener fires — a teammate's edit,
+  // a counter bump, the user's own timer — and each one moved the caret back to
+  // the modal's first field mid-edit (BUG-024). DueTaskAlertModal already did
+  // it this way on purpose; now the shared hook matches.
+  const latest = useRef({ onClose, closeOnEscape, autoFocus });
+  latest.current = { onClose, closeOnEscape, autoFocus };
+
   useEffect(() => {
     // Closed means closed: no listener, no focus moved in, no focus restored.
     if (!open) return undefined;
 
     restoreTo.current = typeof document === 'undefined' ? null : document.activeElement;
 
-    if (autoFocus) {
-      // Focus the first control, so a keyboard user is already inside.
+    if (latest.current.autoFocus) {
+      // Focus the first control, so a keyboard user is already inside. Once,
+      // on open — never again, or it takes the caret off whoever is typing.
       const first = ref.current?.querySelector(FOCUSABLE);
       (first || ref.current)?.focus?.({ preventScroll: true });
     }
 
     const onKey = (e) => {
-      if (e.key === 'Escape' && closeOnEscape) {
+      if (e.key === 'Escape' && latest.current.closeOnEscape) {
         // Belt and braces for a call site that forgot `open`: if the panel is
         // not actually in the document there is nothing to close, and taking
         // the key would silence every other Escape handler in the app.
         if (!ref.current) return;
         // Stop here: a modal inside a modal must close only the top one.
         e.stopPropagation();
-        onClose?.();
+        latest.current.onClose?.();
         return;
       }
       if (e.key !== 'Tab' || !ref.current) return;
@@ -107,7 +119,9 @@ export function useModalDialog({
       // Put focus back where it came from, so the page does not jump to the top.
       restoreTo.current?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose, closeOnEscape, autoFocus]);
+    // `open` only. Adding anything a call site re-creates each render brings
+    // the stolen caret straight back — that is the whole of BUG-024.
+  }, [open]);
 
   // Close on the backdrop itself, never on a click that started inside the
   // panel and happened to finish on the backdrop (a drag-select, say).

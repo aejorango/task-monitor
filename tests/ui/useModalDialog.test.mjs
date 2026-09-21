@@ -247,3 +247,107 @@ test('opening the modal after mount installs the trap, closing it removes it', a
   assert.equal(closed, 1);
   ui.unmount();
 });
+
+// ---------------------------------------------------------------------------
+// T-0098 / BUG-024 — focus belongs to whoever is typing.
+//
+// The effect that installs the key handler ALSO moved focus to the first
+// control, and it was keyed on `onClose`. Almost every call site passes a fresh
+// arrow (`onClose={() => setLoggingTask(null)}`), so the identity changed on
+// every render of the parent — and Board re-renders whenever the workspace
+// tasks listener fires: a teammate's edit, a counter bump, the user's own
+// timer. Each one yanked the caret back to the modal's first field mid-edit.
+// ---------------------------------------------------------------------------
+
+test('a parent re-render with a new onClose does not move the caret', async () => {
+  const node = (onClose) => h(Panel, { onClose, title: 'Log activity' });
+  const ui = await mount(node(() => {}));
+
+  // The user is typing in the third control.
+  const last = [...ui.container.querySelectorAll('button, input')].at(-1);
+  last.focus();
+  assert.equal(document.activeElement, last);
+
+  // The parent re-renders — a teammate edited a task — with a brand-new arrow.
+  await ui.render(node(() => {}));
+  assert.equal(document.activeElement, last, 'focus was stolen back to the first field');
+
+  await ui.render(node(() => {}));
+  await ui.render(node(() => {}));
+  assert.equal(document.activeElement, last, 'and it stays put however often it happens');
+  ui.unmount();
+});
+
+test('a selection inside the modal survives a parent re-render', async () => {
+  const node = (onClose) => h(Panel, { onClose, title: 'Log activity' });
+  const ui = await mount(node(() => {}));
+
+  const input = ui.container.querySelector('input');
+  input.focus();
+  input.value = 'half-written note';
+  input.setSelectionRange(4, 9);
+
+  await ui.render(node(() => {}));
+  assert.equal(document.activeElement, input);
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [4, 9],
+    'moving focus would have collapsed the selection');
+  ui.unmount();
+});
+
+test('Escape still calls the newest onClose, not the one from the first render', async () => {
+  const calls = [];
+  const node = (tag) => h(Panel, { onClose: () => calls.push(tag), title: 'x' });
+  const ui = await mount(node('first'));
+  await ui.render(node('second'));
+
+  await press('Escape');
+  assert.deepEqual(calls, ['second'],
+    'a ref that is never updated is the other half of this bug');
+  ui.unmount();
+});
+
+test('the backdrop click also calls the newest onClose', async () => {
+  const { act } = await import('react');
+  const calls = [];
+  const node = (tag) => h(Panel, { onClose: () => calls.push(tag), title: 'x' });
+  const ui = await mount(node('first'));
+  await ui.render(node('second'));
+
+  const backdrop = ui.container.querySelector('.modal-backdrop');
+  await act(async () => { backdrop.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true })); });
+  assert.deepEqual(calls, ['second']);
+  ui.unmount();
+});
+
+test('closeOnEscape can still be flipped while the modal is open', async () => {
+  // The import wizard turns it off mid-write. That must take effect without
+  // re-running the effect, which is what would move focus.
+  const calls = [];
+  const node = (closeOnEscape) => h(Panel, { onClose: () => calls.push(1), title: 'x', closeOnEscape });
+  const ui = await mount(node(true));
+
+  const last = [...ui.container.querySelectorAll('button, input')].at(-1);
+  last.focus();
+
+  await ui.render(node(false));
+  assert.equal(document.activeElement, last, 'flipping the flag must not move focus');
+  await press('Escape');
+  assert.equal(calls.length, 0, 'and it really is off');
+
+  await ui.render(node(true));
+  await press('Escape');
+  assert.equal(calls.length, 1, 'and really back on');
+  ui.unmount();
+});
+
+test('focus is still moved in once, when the modal opens', async () => {
+  const outside = document.createElement('button');
+  document.body.appendChild(outside);
+  outside.focus();
+
+  const ui = await mount(h(Panel, { onClose() {}, title: 'x' }));
+  assert.ok(ui.container.querySelector('[role="dialog"]').contains(document.activeElement),
+    'the fix must not cost a keyboard user their way in');
+  ui.unmount();
+  outside.remove();
+});
