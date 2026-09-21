@@ -295,7 +295,11 @@ export default function SettingsView() {
           ))}
         </div>
         <p className="settings-hero-note">
-          <strong>System</strong> follows your OS setting via <code>prefers-color-scheme</code>.
+          {/* Plain language: `prefers-color-scheme` is a CSS property name, and
+              this note is read by everybody — more so now that System is the
+              default (T-0126). */}
+          <strong>System</strong> follows whatever your device is set to, and changes
+          with it. It is the default.
         </p>
       </section>
 

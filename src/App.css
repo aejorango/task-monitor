@@ -97,6 +97,13 @@
   --shadow-accent: 0 6px 16px rgba(226, 137, 46, 0.32);
   --shadow-card:   0 2px 14px rgba(22, 50, 77, 0.06);
 
+  /* Native chrome — date pickers, number spinners, select popups, scrollbars —
+     is painted by the browser, not by these tokens. Without `color-scheme` it
+     stays light whatever the page does, so a dark app grew a white date picker
+     the moment somebody opened the task editor. Declared everywhere the tokens
+     are, so the two can never disagree (T-0126). */
+  color-scheme: light;
+
   /* ── Layout ── */
   --sidebar-w: 232px;
   --topbar-h:  60px;
@@ -109,6 +116,7 @@
    orange accent carried over from the light theme. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --c-bg:           #0f1621;
     --c-surface:      #1a2333;
     --c-surface-2:    #243242;
@@ -144,6 +152,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --c-bg:           #0f1621;
   --c-surface:      #1a2333;
   --c-surface-2:    #243242;

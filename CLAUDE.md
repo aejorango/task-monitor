@@ -291,7 +291,7 @@ module-level helper cannot, so it returns a result and the component speaks.
 - **An attachment belongs to the workspace.** Uploads go to `workspaces/{workspaceId}/{taskId|general|logo}/…` — `uploadPath()` in the pure `services/uploadPaths.js` builds every one and refuses a path with no workspace. `storage.rules` reads that workspace document to decide access, so any member can open, replace or delete the file. `users/{uid}/…` is frozen legacy: readable and deletable by its uploader, never written again.
 - **Soft delete** via `deleted: false` flag; **archive** via `archived: false`. Never hard-delete tasks because activities reference them.
 - **`userId` on every document** — keeps security rules trivial.
-- **Theme:** CSS variables in `:root` and `@media (prefers-color-scheme: dark)`. All tokens prefixed `--c-` (colors), `--s-` (spacing), `--r-` (radii).
+- **Theme:** CSS variables in `:root` and `@media (prefers-color-scheme: dark)`. All tokens prefixed `--c-` (colors), `--s-` (spacing), `--r-` (radii). **The default is `'system'`** (T-0126) — it was `'light'` from before the System option existed, so a new user on a dark-mode Mac got a bright white app. No migration was written and none is wanted: a stored value always beats a default, so a device that chose Light keeps Light. **`color-scheme` is declared beside the tokens in all three states**, because native chrome — date pickers, number spinners, select popups, scrollbars — is painted by the browser and stays light without it, which is a white date picker inside a dark task editor.
 - **Mobile-responsive** — sidebar hides under 720px.
 
 ## File Layout

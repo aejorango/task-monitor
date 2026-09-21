@@ -7,7 +7,13 @@ import { DEFAULT_DUE_ALERT_SETTINGS } from '../services/dueAlerts';
 const STORAGE_KEY = 'task-monitor.settings.v1';
 
 const DEFAULTS = {
-  theme:           'light',   // 'system' | 'light' | 'dark'
+  // 'system' | 'light' | 'dark'. The default follows the operating system,
+  // which is what the Appearance picker has described System as doing all
+  // along and what the whole stylesheet is built around — a new user on a
+  // dark-mode Mac used to get a bright white app until they found Settings
+  // (T-0126 / POL-016). Deliberately NO migration: a stored value always wins
+  // over a default, so a device that chose Light keeps Light.
+  theme:           'system',
   defaultProject:  null,      // projectId to preselect in quick-add
   weekStart:       1,         // 0=Sun, 1=Mon
   dueAlerts:       { ...DEFAULT_DUE_ALERT_SETTINGS }, // in-app due-task modal
