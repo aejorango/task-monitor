@@ -19,25 +19,48 @@ const TASK = {
   tags: ['finance', 'urgent'], requestedBy: 'Ace',
 };
 
+// Cells are looked up by COLUMN NAME rather than by index: the positional
+// version broke the moment a column was inserted in the middle, which says
+// nothing about whether the export is right.
+const cellsOf = (task, opts = {}) => {
+  const row = taskRow(task, { projectById: PROJECTS, memberProfiles: PROFILES, ...opts });
+  assert.equal(row.length, TASK_COLUMNS.length, 'a row must have one cell per column');
+  return Object.fromEntries(TASK_COLUMNS.map((name, i) => [name, row[i]]));
+};
+
 test('a row carries every column, in words rather than codes', () => {
-  const row = taskRow(TASK, { projectById: PROJECTS, memberProfiles: PROFILES });
-  assert.equal(row.length, TASK_COLUMNS.length);
-  assert.equal(row[0], 'Disbursement report');
-  assert.equal(row[1], 'SBLAF rollout');
-  assert.equal(row[2], 'Discovery');
-  assert.equal(row[3], 'In progress', 'not "doing"');
-  assert.equal(row[4], 'High', 'not "high"');
-  assert.equal(row[5], 'Ace, sam@example.com, Jordan', 'names, never uids');
-  assert.equal(row[7], '2026-09-18');
-  assert.equal(row[10], 40);
-  assert.equal(row[11], 6.5);
-  assert.equal(row[12], 'finance, urgent');
+  const c = cellsOf(TASK);
+  assert.equal(c.Task, 'Disbursement report');
+  assert.equal(c.Project, 'SBLAF rollout');
+  assert.equal(c.Phase, 'Discovery');
+  assert.equal(c.Status, 'In progress', 'not "doing"');
+  assert.equal(c.Priority, 'High', 'not "high"');
+  assert.equal(c['Assigned to'], 'Ace, sam@example.com, Jordan', 'names, never uids');
+  assert.equal(c['Due (plan)'], '2026-09-18');
+  assert.equal(c.Progress, 40);
+  assert.equal(c['Hours logged'], 6.5);
+  assert.equal(c.Tags, 'finance, urgent');
 });
 
 test('a done task reads as 100% however its progress field was left', () => {
-  const row = taskRow({ ...TASK, status: 'done', progress: 40 }, { projectById: PROJECTS });
-  assert.equal(row[3], 'Done');
-  assert.equal(row[10], 100);
+  const c = cellsOf({ ...TASK, status: 'done', progress: 40 });
+  assert.equal(c.Status, 'Done');
+  assert.equal(c.Progress, 100);
+});
+
+// T-0137: the file is where a manager compares what it cost with what it was
+// meant to cost, so both numbers have to be in it.
+test('the estimate and the variance travel with the task', () => {
+  const c = cellsOf({ ...TASK, estimateHours: 4 });
+  assert.equal(c['Estimate (hours)'], 4, 'a number, so a spreadsheet can sum the column');
+  assert.equal(c['Hours logged'], 6.5);
+  assert.equal(c.Variance, '+2.5h (+63%)');
+});
+
+test('an unestimated task exports a blank estimate, not a zero', () => {
+  const c = cellsOf(TASK);
+  assert.equal(c['Estimate (hours)'], '', '0 would claim somebody estimated it at nothing');
+  assert.equal(c.Variance, '—');
 });
 
 test('a bare task exports without holes or "undefined"', () => {

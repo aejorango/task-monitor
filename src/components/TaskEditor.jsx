@@ -36,6 +36,7 @@ import TaskAiPanel from './TaskAiPanel';
 import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
+import { formatHours, formatVariance, normalizeEstimate, variance } from '../services/effort';
 import { useToast } from './Toast';
 import AddToNotebookButton from './AddToNotebookButton';
 import { friendlyError } from '../services/access';
@@ -99,6 +100,11 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [priority, setPriority]       = useState(task.priority || 'medium');
   const [status, setStatus]           = useState(task.status || 'todo');
   const [planStart, setPlanStart]     = useState(task.plan?.startDate || '');
+  // '' means "nobody has estimated this" — distinct from an estimate of zero,
+  // which is why it is stored as null rather than 0 (T-0137).
+  const [estimate, setEstimate]       = useState(
+    task.estimateHours === null || task.estimateHours === undefined ? '' : String(task.estimateHours),
+  );
   const [planEnd, setPlanEnd]         = useState(task.plan?.endDate || '');
   const [actualStart, setActualStart] = useState(task.actual?.startDate || '');
   const [actualEnd, setActualEnd]     = useState(task.actual?.endDate || '');
@@ -160,6 +166,14 @@ export default function TaskEditor({ task, projects, onClose }) {
   const progressPct = status === 'done' ? 100 : (completionPct ?? task.progress ?? 0);
 
   const loggedHours = activities.reduce((s, a) => s + (a.hoursSpent || 0), 0);
+  // The variance updates as the estimate is typed, and reads the hours from the
+  // task's denormalised counter rather than from the activity list: the list
+  // loads asynchronously, so summing it would show "−8h (−100%)" for a moment
+  // on a task that has actually overrun.
+  const effort = variance({
+    estimateHours: normalizeEstimate(estimate),
+    totalHoursLogged: task.totalHoursLogged ?? loggedHours,
+  });
   const blockedCount = activities.filter(
     (a) => a.completionStatus === 'blocked' || a.bottleneckRemarks,
   ).length;
@@ -312,6 +326,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         customValues,
         assignedTo,
         assignedToExternal,
+        estimateHours:      normalizeEstimate(estimate),
         'plan.startDate':   planStart        || null,
         'plan.endDate':     planEnd          || null,
         'actual.startDate': nextActualStart  || null,
@@ -352,6 +367,7 @@ export default function TaskEditor({ task, projects, onClose }) {
         customValues,
         assignedTo,
         assignedToExternal,
+        estimateHours: normalizeEstimate(estimate),
         plan:   { startDate: planStart       || null, endDate: planEnd        || null },
         actual: { startDate: nextActualStart || null, endDate: nextActualEnd  || null },
       });
@@ -622,11 +638,33 @@ export default function TaskEditor({ task, projects, onClose }) {
                   />
                 </div>
                 <div>
+                  <label className="pe-lbl" htmlFor="te-estimate">Estimated hours</label>
+                  <input
+                    id="te-estimate"
+                    type="number" min="0" step="0.25"
+                    className="input pe-input"
+                    value={estimate}
+                    placeholder="e.g. 8"
+                    onChange={(e) => setEstimate(e.target.value)}
+                  />
+                  <span className="pe-fld-note">Leave blank if you have not estimated it</span>
+                </div>
+                <div>
                   <span className="pe-lbl">Logged hours</span>
                   <div className="pe-fld pe-fld-strong">
                     {loggedHours.toFixed(1)}h
                     <span className="pe-fld-note">· {activities.length} session{activities.length === 1 ? '' : 's'}</span>
                   </div>
+                  {/* The other half of plan-versus-actual: the app compared
+                      dates and never effort, so it could say a task finished
+                      late but never that it cost three times what it should
+                      (T-0137). */}
+                  {effort.state !== 'none' && (
+                    <div className={`pe-fld te-variance is-${effort.state}`}>
+                      {formatVariance(effort)}
+                      <span className="pe-fld-note">· against {formatHours(effort.estimate)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>

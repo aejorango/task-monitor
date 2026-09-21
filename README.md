@@ -227,6 +227,15 @@ Whatever you pick is written in one go, and a message says what happened —
 puts them back exactly as they were. A plain click on a row still opens the
 task, as it always did.
 
+**Estimated hours against actual.** Put an estimate on a task in the editor and
+the app tells you what it really cost: a **Variance** column in the Task table
+(*+4h (+50%)*), a line in the task editor beside the logged hours, a band over
+the **Timesheet** for the week's work, and an *Effort against estimate* section
+in the status report naming whatever overran. Leaving the estimate blank is
+different from estimating zero — an unestimated task shows a dash, never a
+made-up overrun, and the **Workload** planner says out loud when it is counting
+a task at its flat four-hour assumption instead of a real estimate.
+
 **Custom fields travel with the task.** A project can define fields of its own
 (Client, Contract value, Go-live) in the project editor. The values show as
 chips on the board card, can be added as columns in **Reports → Task table**
@@ -541,6 +550,8 @@ run together.
 | `tests/ui/bulkTasksApi.test.mjs` | The commits themselves: 400s, in series, and a partial failure |
 | `tests/ui/bulkTasksUi.test.mjs` | Select-all, shift-range, ⌘-click, and the bar's plain-language pickers |
 | `tests/ui/bulkTasksFlow.test.mjs` | Ten selected → High → one batch, a toast with Undo, selection cleared |
+| `src/services/effort.test.mjs` | Estimate vs logged, including zero and missing estimates |
+| `tests/ui/effortVariance.test.mjs` | The table, the report, the workload grid and the round-trip |
 | `tests/rules/bulkTasks.rules.test.mjs` | One task you may not write takes the whole batch down |
 | `src/services/myWeek.test.mjs` | One person's week across workspaces, and what a drop on a day writes |
 | `tests/ui/myWeekApi.test.mjs` | The read is filtered at the server, and has its index |

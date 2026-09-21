@@ -172,9 +172,36 @@ test('a cell describes itself in a sentence, for a tooltip and a screen reader',
   const ace = rows.find((r) => r.userId === ACE);
   assert.equal(
     describeCell(ace, weeks[0], ace.cells['2026-09-14']),
-    'Ace Jorango, 14–20 Sep 2026: 2 tasks, about 50 hours — more than a full week',
+    'Ace Jorango, 14–20 Sep 2026: 2 tasks, about 50 hours — more than a full week — all estimated',
   );
   assert.match(describeCell(ace, weeks[2], ace.cells['2026-09-28']), /nothing planned$/);
+});
+
+// T-0137: tasks can carry a real estimate now, so the grid has to say when the
+// number it is showing is an assumption instead. A manager trusting a full-week
+// bar deserves to know it was four-hours-a-task all the way down.
+test('the cell says whether its hours are estimates or the flat assumption', () => {
+  const row = { userId: ACE, name: 'Ace Jorango' };
+  const week = weeks[0];
+  const cell = (tasks, hours) => ({ tasks, hours, level: 'ok' });
+
+  assert.match(
+    describeCell(row, week, cell([{ estimateHours: 8 }, { estimateHours: 4 }], 12)),
+    /all estimated$/,
+  );
+  assert.match(
+    describeCell(row, week, cell([{}, {}], 8)),
+    /none estimated, counted at 4h each$/,
+  );
+  assert.match(
+    describeCell(row, week, cell([{ estimateHours: 8 }, {}], 12)),
+    /1 of them not estimated, counted at 4h each$/,
+  );
+  // A zero or unusable estimate is not an estimate.
+  assert.match(
+    describeCell(row, week, cell([{ estimateHours: 0 }], 4)),
+    /none estimated/,
+  );
 });
 
 // ─── what a drop means ──────────────────────────────────────────────────────

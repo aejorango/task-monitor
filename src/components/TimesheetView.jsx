@@ -5,7 +5,7 @@
 // actually file, review or pay against.
 
 import { useMemo, useState } from 'react';
-import { useAllActivities, useProjects } from '../hooks/useTasks';
+import { useAllActivities, useProjects, useTasks } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useSettings } from '../hooks/useSettings';
 import { todayLocal } from '../services/firebase';
@@ -14,9 +14,11 @@ import {
   weekDays, weekLabel,
 } from '../services/timesheet';
 import ExportButton from './ExportButton';
+import { formatHours, formatVariance, totalVariance } from '../services/effort';
 
 export default function TimesheetView({ projectFilter = 'all' }) {
   const { activities, loading } = useAllActivities();
+  const { tasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { settings } = useSettings();
   const workspaceId = useActiveWorkspaceId();
@@ -39,6 +41,21 @@ export default function TimesheetView({ projectFilter = 'all' }) {
     }),
     [activities, days, memberProfiles, projectById, project],
   );
+
+  // What the week's work was supposed to cost. Per PERSON there is no estimate
+  // — estimates live on tasks — so this is a band over the sheet rather than a
+  // column in it: inventing a per-person estimate would be a made-up number
+  // (T-0137). Scoped to the tasks the filter is showing, and to the tasks
+  // actually touched this week, so it answers "this week", not "ever".
+  const touched = useMemo(() => {
+    const ids = new Set(
+      activities
+        .filter((a) => days.includes(a.date) && (project === 'all' || a.projectId === project))
+        .map((a) => a.taskId),
+    );
+    return tasks.filter((t) => ids.has(t.id));
+  }, [activities, tasks, days, project]);
+  const effort = useMemo(() => totalVariance(touched), [touched]);
 
   const projectName = project === 'all' ? 'All projects' : (projectById[project]?.name || 'Project');
   const isThisWeek = days.includes(todayLocal());
@@ -87,6 +104,22 @@ export default function TimesheetView({ projectFilter = 'all' }) {
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
+
+      {effort.estimated > 0 && (
+        <div className={`ts-effort is-${effort.state}`}>
+          <span className="ts-effort-label">Against estimate</span>
+          <span className="ts-effort-fig">
+            <strong>{formatHours(effort.logged)}</strong> logged on {touched.length} task{touched.length === 1 ? '' : 's'}
+            {' · '}{formatHours(effort.estimate)} estimated
+          </span>
+          <span className="ts-effort-var">{formatVariance(effort)}</span>
+          {effort.unestimated > 0 && (
+            <span className="muted small">
+              {effort.unestimated} of them {effort.unestimated === 1 ? 'has' : 'have'} no estimate
+            </span>
+          )}
+        </div>
+      )}
 
       {sheet.rows.length === 0 ? (
         <div className="empty-state">

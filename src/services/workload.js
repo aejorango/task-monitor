@@ -300,6 +300,18 @@ export function describeMove(patch, memberProfiles = {}) {
 export function describeCell(row, week, cell) {
   const n = cell?.tasks?.length || 0;
   if (!n) return `${row.name}, ${week.label}: nothing planned`;
+  // Where the hours come from matters to whoever is trusting this grid: a task
+  // with an estimate weighs its estimate, and one without weighs a flat
+  // assumption. Since tasks CAN be estimated now (T-0137), the assumption has
+  // to be named rather than silently applied.
+  const guessed = cell.tasks.filter((t) => !Number.isFinite(Number(t?.estimateHours))
+    || Number(t?.estimateHours) <= 0).length;
+  const basis = guessed === 0
+    ? ' — all estimated'
+    : guessed === n
+      ? ` — none estimated, counted at ${HOURS_PER_TASK}h each`
+      : ` — ${guessed} of them not estimated, counted at ${HOURS_PER_TASK}h each`;
   return `${row.name}, ${week.label}: ${n} task${n === 1 ? '' : 's'}, `
-    + `about ${cell.hours} hour${cell.hours === 1 ? '' : 's'} — ${LOAD_LABEL[cell.level].toLowerCase()}`;
+    + `about ${cell.hours} hour${cell.hours === 1 ? '' : 's'} — ${LOAD_LABEL[cell.level].toLowerCase()}`
+    + basis;
 }

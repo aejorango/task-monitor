@@ -11115,3 +11115,38 @@ a:hover { text-decoration: underline; }
     padding-bottom: 8px;
   }
 }
+
+
+/* ─── Estimate versus logged (T-0137) ──────────────────────────────────────
+   Three tones, one meaning each: under, on, over. Used by the task editor's
+   variance line and the timesheet's band. */
+.te-variance.is-over,  .ts-effort.is-over  .ts-effort-var { color: var(--c-danger); }
+.te-variance.is-under, .ts-effort.is-under .ts-effort-var { color: var(--c-success); }
+.te-variance.is-on,    .ts-effort.is-on    .ts-effort-var { color: var(--c-text-3); }
+.te-variance { font-weight: 600; }
+
+.ts-effort {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  font-size: 13px;
+}
+.ts-effort.is-over { border-color: var(--c-danger); }
+.ts-effort-label {
+  font-weight: 620;
+  color: var(--c-text-3);
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+.ts-effort-var {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}

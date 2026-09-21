@@ -7,6 +7,7 @@
 
 import { allFields, formatValue } from './customFields';
 import { heading, paragraph, sheetFromRows, table } from './exporters';
+import { estimateOf, formatVariance, variance } from './effort';
 
 const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
 const PRIORITY_LABEL = { low: 'Low', medium: 'Medium', high: 'High' };
@@ -15,7 +16,9 @@ const PRIORITY_LABEL = { low: 'Low', medium: 'Medium', high: 'High' };
 export const TASK_COLUMNS = [
   'Task', 'Project', 'Phase', 'Status', 'Priority', 'Assigned to',
   'Start (plan)', 'Due (plan)', 'Start (actual)', 'Finished (actual)',
-  'Progress', 'Hours logged', 'Tags', 'Requested by',
+  // "Estimate (hours)" is spelled exactly as the import wizard's alias, so the
+  // app can read its own file back (T-0137).
+  'Progress', 'Estimate (hours)', 'Hours logged', 'Variance', 'Tags', 'Requested by',
 ];
 
 /**
@@ -53,7 +56,11 @@ export function taskRow(task, { projectById = {}, memberProfiles = {}, projects 
     task.actual?.startDate || '',
     task.actual?.endDate || '',
     task.status === 'done' ? 100 : (task.progress ?? 0),
+    // A number, not "8h": a spreadsheet should be able to sum this column, and
+    // the import wizard reads it back the same way.
+    estimateOf(task) ?? '',
     task.totalHoursLogged ?? 0,
+    formatVariance(variance(task)),
     (task.tags || []).join(', '),
     task.requestedBy || '',
     ...customColumns(projects).map((f) => formatValue(f, task.customValues?.[f.id])),

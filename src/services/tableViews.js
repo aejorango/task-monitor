@@ -10,6 +10,7 @@
 // what this returns without knowing anything about task shape.
 
 import { customFieldColumns } from './customFields';
+import { estimateOf, formatHours, formatVariance, variance } from './effort';
 import { memberLabel } from './invites';
 
 const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
@@ -78,6 +79,22 @@ export const TASK_TABLE_COLUMNS = [
     id: 'hours', label: 'Hours', align: 'right',
     value: (t) => t.totalHoursLogged ?? 0,
     text: (t) => String(t.totalHoursLogged ?? 0),
+  },
+  // Plan-versus-actual on EFFORT, the half the app had never had (T-0137).
+  // Sorting puts "no estimate" last rather than at zero: an unestimated task is
+  // not a task estimated at nothing.
+  {
+    id: 'estimate', label: 'Estimate', align: 'right',
+    value: (t) => estimateOf(t) ?? Number.POSITIVE_INFINITY,
+    text: (t) => formatHours(estimateOf(t)),
+  },
+  {
+    id: 'variance', label: 'Variance', align: 'right',
+    value: (t) => {
+      const v = variance(t);
+      return v.state === 'none' ? Number.NEGATIVE_INFINITY : v.delta;
+    },
+    text: (t) => formatVariance(variance(t)),
   },
   {
     id: 'tags', label: 'Tags',

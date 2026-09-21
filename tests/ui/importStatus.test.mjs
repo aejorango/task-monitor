@@ -98,6 +98,7 @@ test('every field the mapping step offers reaches the payload', () => {
     endDate: 'plan.endDate',
     tags: 'tags',
     requestedBy: 'requestedBy',
+    estimateHours: 'estimateHours',
   };
 
   const offered = IMPORT_KINDS.tasks.fields.map((f) => f.key);
@@ -108,7 +109,7 @@ test('every field the mapping step offers reaches the payload', () => {
     title: 'Ship the pilot', project: 'Bridged', phase: 'Delivery',
     description: 'The first one', status: 'done', priority: 'high',
     startDate: '2026-09-14', endDate: '2026-09-18',
-    tags: ['pilot', 'q3'], requestedBy: 'Ace',
+    tags: ['pilot', 'q3'], requestedBy: 'Ace', estimateHours: 8,
   };
   const payload = importedTaskPayload(record, {
     workspaceId: 'ws1', project: { id: 'p1' }, phase: { id: 'ph1' },
@@ -123,6 +124,28 @@ test('every field the mapping step offers reaches the payload', () => {
   assert.equal(payload.plan.endDate, '2026-09-18');
   assert.deepEqual(payload.tags, ['pilot', 'q3']);
   assert.equal(payload.workspaceId, 'ws1', 'without this the task never shows on the Board');
+  assert.equal(payload.estimateHours, 8);
+});
+
+// The round-trip rule: a column the app EXPORTS must be an alias the wizard
+// RECOGNISES, or the app cannot read its own file back (T-0137).
+test('the Estimate column the task table exports is one the wizard takes back', () => {
+  const field = IMPORT_KINDS.tasks.fields.find((f) => f.key === 'estimateHours');
+  assert.ok(field, 'the export has a column the import does not know');
+  for (const heading of ['Estimate', 'estimate (hours)', 'Estimated hours', 'est']) {
+    assert.ok(field.aliases.includes(heading.toLowerCase()),
+      `the wizard should recognise a column headed "${heading}"`);
+  }
+});
+
+test('a blank estimate imports as "not estimated", not as zero hours', () => {
+  const payload = importedTaskPayload(
+    { title: 'No idea how long', estimateHours: '' }, { workspaceId: 'ws1' });
+  assert.equal(payload.estimateHours, null, 'zero would claim somebody estimated it at nothing');
+
+  const zero = importedTaskPayload(
+    { title: 'Trivial', estimateHours: 0 }, { workspaceId: 'ws1' });
+  assert.equal(zero.estimateHours, 0, 'but an explicit zero in the file is a statement');
 });
 
 test('a row with no project or phase still builds a payload', () => {

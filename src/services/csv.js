@@ -5,6 +5,7 @@
 // the kind of code that must not live inside a component.
 
 import { todayLocal } from './recurrence';
+import { normalizeEstimate } from './effort';
 
 /**
  * Minimal RFC-4180 parser. Handles quoted cells, escaped quotes ("") and
@@ -290,6 +291,13 @@ export const IMPORT_KINDS = {
       { key: 'endDate', label: 'Due date', aliases: ['due', 'due date', 'end', 'end date', 'deadline', 'target'], parse: (v) => (String(v || '').trim() ? normalizeDate(v) : '') },
       { key: 'tags', label: 'Tags', aliases: ['tags', 'labels'], parse: splitList },
       { key: 'requestedBy', label: 'Requested by', aliases: ['requested by', 'requester', 'owner', 'assignee', 'assigned to'], parse: (v) => String(v || '').trim() },
+      // The Task table exports an Estimate column (T-0137), so the wizard has
+      // to recognise it coming back — the app must be able to read its own
+      // file. Blank stays blank: "not estimated" is not "estimated at zero".
+      // Blank stays '' here, not null: a parsed record never holds null or
+      // undefined (a row that did would write one). `importedTaskPayload` turns
+      // '' into the null that means "nobody estimated this".
+      { key: 'estimateHours', label: 'Estimate (hours)', aliases: ['estimate', 'estimate (hours)', 'estimated hours', 'estimated', 'est', 'est hours', 'budget hours'], parse: (v) => normalizeEstimate(v) ?? '' },
     ],
   },
   projects: {
@@ -435,6 +443,7 @@ export function importedTaskPayload(record, { workspaceId, project, phase } = {}
     status: record.status,
     tags: record.tags,
     requestedBy: record.requestedBy,
+    estimateHours: normalizeEstimate(record.estimateHours),
     plan: { startDate: record.startDate || null, endDate: record.endDate || null },
   };
 }

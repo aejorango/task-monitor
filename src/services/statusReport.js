@@ -6,6 +6,7 @@
 // disagree.
 
 import { bullets, heading, keyValues, paragraph, sheetFromRows, table } from './exporters';
+import { formatHours, formatVariance, totalVariance, variance } from './effort';
 
 /** Red / amber / green, with what each one means spelled out. */
 export const RAG = {
@@ -38,6 +39,60 @@ export function ragRows(digest) {
       // Positive gap = more time gone than work done.
       gap: p.gap ?? null,
     }));
+}
+
+/**
+ * Estimated hours against logged hours, for the tasks anybody estimated.
+ *
+ * Silent when nobody has estimated anything: an "Effort" section that is all
+ * dashes tells a reader the feature is broken rather than unused. And when
+ * some tasks are unestimated it says so — hours logged against nothing inflate
+ * the overrun, and a total that hides that is a misleading total.
+ */
+export function effortBlocks(digest) {
+  const tasks = (digest?.taskIndex || []).map((t) => t.task).filter(Boolean);
+  const total = totalVariance(tasks);
+  if (total.estimated === 0) return [];
+
+  const worst = tasks
+    .map((t) => ({ t, v: variance(t) }))
+    .filter((r) => r.v.state === 'over')
+    .sort((a, b) => b.v.delta - a.v.delta)
+    .slice(0, 10);
+
+  const blocks = [
+    heading('Effort against estimate', 1),
+    keyValues([
+      ['Estimated', formatHours(total.estimate)],
+      ['Logged', formatHours(total.logged)],
+      ['Variance', formatVariance(total)],
+      ['Tasks estimated', `${total.estimated} of ${total.estimated + total.unestimated}`],
+    ]),
+  ];
+
+  if (total.unestimated > 0) {
+    blocks.push(paragraph(
+      `${total.unestimated} task${total.unestimated === 1 ? ' has' : 's have'} no estimate, so any `
+      + 'hours logged against them count towards the total logged but not towards the total estimated.',
+    ));
+  }
+
+  if (worst.length) {
+    blocks.push(heading('Costing more than expected', 2));
+    blocks.push(table(
+      ['Task', 'Project', 'Estimated', 'Logged', 'Variance'],
+      worst.map(({ t, v }) => [
+        t.title || 'Untitled task',
+        (digest?.taskIndex || []).find((x) => x.id === t.id)?.project || '—',
+        formatHours(v.estimate),
+        formatHours(v.logged),
+        formatVariance(v),
+      ]),
+    ));
+  } else {
+    blocks.push(paragraph('Nothing has overrun its estimate.'));
+  }
+  return blocks;
 }
 
 /** Why a project is the colour it is, in one sentence. */
@@ -97,6 +152,11 @@ export function buildStatusReport(digest, opts = {}) {
   } else {
     blocks.push(paragraph('There are no projects in this workspace yet.'));
   }
+
+  // Plan-versus-actual on effort. The report has always compared DATES; this is
+  // the other half, and it is the question a manager actually asks about a
+  // project that finished on time (T-0137).
+  blocks.push(...effortBlocks(digest));
 
   blocks.push(heading('Overdue', 1));
   blocks.push(overdueTasks.length

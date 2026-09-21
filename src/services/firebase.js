@@ -68,6 +68,7 @@ import { catchUpPlan } from './recurrenceSchedule';
 // task imported as Done cannot land in To Do (BUG-015).
 import { clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
 import { chunkWrites } from './bulkTasks';
+import { normalizeEstimate } from './effort';
 // One sentence a person can act on — never the SDK's own text (see access.js).
 import { friendlyError } from './access';
 
@@ -1123,6 +1124,11 @@ export async function addTask(userId, task) {
       startDate: task.actual?.startDate ?? stamps.actualStartDate,
       endDate:   task.actual?.endDate   ?? stamps.actualEndDate,
     },
+
+    // v15: what this was expected to cost, in hours. `null` means nobody has
+    // estimated it — distinct from an estimate of zero, which the workload
+    // planner and the variance column both read differently (T-0137).
+    estimateHours: normalizeEstimate(task.estimateHours),
 
     // PM suite v4 fields
     dependsOn: task.dependsOn || [],      // [taskId, ...]

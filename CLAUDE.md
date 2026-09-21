@@ -47,6 +47,8 @@ tasks/{taskId}:
   projectId, phaseId               ← PM suite
   category                         ← legacy back-compat
   priority, status, progress
+  estimateHours                    ← v15: hours it was expected to take.
+                                     null = nobody estimated it, which is NOT 0
   requestedBy
   plan: { startDate, endDate }
   actual: { startDate, endDate }
@@ -358,6 +360,7 @@ src/
 │   ├── dueChip.js            ← the due date as a board card shows it
 │   ├── bulkTasks.js          ← "do this to the ten I picked": actions, plan, undo
 │   ├── myWeek.js             ← my week across workspaces: day columns and two rails
+│   ├── effort.js             ← estimated hours vs logged hours, and the variance
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -492,6 +495,23 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Treating "not estimated" as an estimate of zero. `estimateHours` is `null`
+  when nobody has said, and `services/effort.js` is the only module that reads
+  it: `estimateOf` returns null rather than 0, `variance()` gives `state: 'none'`
+  so the table shows a dash instead of "−12h (−100%)", and `normalizeEstimate`
+  turns a blank form field into null. A percentage against a ZERO estimate is
+  also refused — "+Infinity%" and "+0%" are both lies, so the hours are shown
+  and the percentage is not. `totalVariance` carries `unestimated` so a roll-up
+  can say that some of its logged hours are against nothing.
+- ❌ Letting the workload grid quietly assume four hours a task. It still falls
+  back to `HOURS_PER_TASK` when there is no estimate, but `describeCell` now says
+  which tasks were counted that way — a manager trusting a full-week bar deserves
+  to know it was an assumption all the way down.
+- ❌ Adding an export column without an import alias. A column the app EXPORTS
+  must be one the wizard RECOGNISES, or the app cannot read its own file back:
+  `Estimate (hours)` is spelled identically in `taskExport.js` and
+  `IMPORT_KINDS.tasks`, and `tests/ui/importStatus.test.mjs` fails the build if a
+  new importable field has no home in `importedTaskPayload`.
 - ❌ A second copy of what a drop means. `services/workload.js` owns both:
   `moveTaskPlan` (a different WEEK, keeping the weekday) and `moveTaskToDay` (a
   day column, keeping the duration). The Calendar had its own inline version and
