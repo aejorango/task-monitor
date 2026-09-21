@@ -1459,8 +1459,27 @@ export async function bulkUpdateActivityCompletion(activities, completionStatus)
 }
 
 // Activities per task — single where, sort client-side by date desc.
-export function subscribeToActivities(taskId, callback) {
-  const q = query(activitiesRef, where('taskId', '==', taskId));
+/**
+ * One task's activity log.
+ *
+ * The `workspaceId` clause is NOT redundant with `taskId` — it is what makes
+ * the query legal. Rules gate an activity read on workspaceId / owner /
+ * project, and rules are not filters: a bare `where('taskId','==',id)` query
+ * could match documents in a workspace the caller is not a member of, so
+ * Firestore rejects the whole query and the log comes back silently empty.
+ * Constraining workspaceId to one the caller belongs to makes every result
+ * provably readable.
+ *
+ * Two equality clauses and no `orderBy`, so this needs no composite index —
+ * the sort is client-side, over one task's own (small, bounded) history.
+ */
+export function subscribeToActivities(workspaceId, taskId, callback) {
+  if (!workspaceId || !taskId) { callback([]); return () => {}; }
+  const q = query(
+    activitiesRef,
+    where('workspaceId', '==', workspaceId),
+    where('taskId', '==', taskId),
+  );
   return onSnapshot(q, (snap) => {
     const data = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))

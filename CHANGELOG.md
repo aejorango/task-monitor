@@ -88,3 +88,5 @@ One line per task from the Ideon task sheet.
 - T-0082 — Read-only share links for a board or Gantt (UI) — src/components/SharedViewPage.jsx, src/components/SharedSnapshot.jsx, src/components/ShareLinksPanel.jsx, src/components/ProjectsView.jsx, src/App.jsx, src/services/shareLinks.js, src/App.css, dev/shared.html, dev/shared.jsx, tests/ui/shareLinks.test.mjs, README.md, CLAUDE.md
 - T-0083 — Read-only share links for a board or Gantt (tests & docs) — tests/ui/shareFlow.test.mjs, README.md, CHANGELOG.md
 - T-0084 — Scheduled recurrence instead of on-completion only — src/services/recurrenceSchedule.js, src/services/firebase.js, src/hooks/useRecurrenceCatchUp.js, src/App.jsx, dev/recurrence.html, dev/recurrence.jsx, tests/ui/recurrenceCatchUp.test.mjs, README.md, CLAUDE.md
+
+- **T-0085 — Timer widget swallows Escape for the whole app (API/data layer)** — `useModalDialog` takes an `open` flag (default `true`); when it is `false` the effect does nothing at all, and the Escape branch now returns early unless the panel is really in the document. `src/hooks/useModalDialog.js`, `tests/ui/useModalDialog.test.mjs`.

@@ -1,0 +1,11 @@
+import ExcelJS from 'exceljs';
+const want = process.argv.slice(2);
+const wb = new ExcelJS.Workbook();
+await wb.xlsx.readFile(new URL('../../audit-and-task-2026-09-21.xlsx', import.meta.url).pathname);
+const ws = wb.getWorksheet('Tasks');
+const hdr = ws.getRow(1).values.slice(1).map(String);
+const txt = v => { if (v==null) return ''; if (typeof v==='object' && v.richText) return v.richText.map(t=>t.text).join(''); if (typeof v==='object' && v.text) return v.text; return String(v); };
+ws.eachRow((r,i)=>{ if(i===1) return; const id=txt(r.getCell(1).value); if(!want.includes(id)) return;
+  console.log('='.repeat(70));
+  hdr.forEach((h,j)=>{ const v=txt(r.getCell(j+1).value); if(v) console.log(`## ${h}\n${v}\n`); });
+});

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   subscribeToTasks,
+  subscribeToActivities,
   subscribeToRecentActivities,
   subscribeToAllActivities,
   loadMoreActivities,
@@ -36,6 +37,33 @@ import { createSharedSubscription } from '../services/sharedSubscription';
 const workspaceActivitiesCache = createSharedSubscription(
   (workspaceId, emit) => subscribeToAllActivities(workspaceId, emit),
   { name: 'activities', empty: [] },
+);
+
+// One listener per TASK, shared by every surface showing that task's log (the
+// editor's Activity log, the Board card's inline list, TaskActivitiesModal).
+//
+// A task's log used to be filtered out of workspaceActivitiesCache instead.
+// That listener is capped at ACTIVITY_PAGE_SIZE **workspace-wide**, so once a
+// workspace had more recent entries than the cap, any task whose activities
+// fell outside that window rendered as "No activities logged yet." — the work
+// was still in Firestore, the screen just denied it.
+//
+// The key carries the workspace as well as the task because the query needs
+// both (see subscribeToActivities: without the workspaceId clause the rules
+// reject the query outright).
+const TASK_KEY_SEP = '::';
+const taskActivitiesCache = createSharedSubscription(
+  (key, emit) => {
+    // Split on the FIRST separator only: a plain split() would truncate an id
+    // that happened to contain one.
+    const at = key.indexOf(TASK_KEY_SEP);
+    return subscribeToActivities(
+      key.slice(0, at),
+      key.slice(at + TASK_KEY_SEP.length),
+      emit,
+    );
+  },
+  { name: 'taskActivities', empty: [] },
 );
 
 const workspaceTasksCache = createSharedSubscription(
@@ -199,11 +227,12 @@ export function useTasks() {
 }
 
 // ─── useActivities (one task) ───────────────────────────────────────────────
-// Subscribe via the workspace-scoped query and filter to this task client-side.
-// A direct `where('taskId','==',id)` query is rejected by the security rules
-// (they gate reads on workspaceId/owner/project, and "rules are not filters"),
-// which silently returned an empty list — so the activity log looked empty
-// everywhere except WBS/Table (which already use the workspace-scoped query).
+// Queried per task (scoped to the workspace so the rules accept it), NOT
+// filtered out of the workspace-wide window: that window is capped at
+// ACTIVITY_PAGE_SIZE newest rows across the whole workspace, so a task whose
+// entries had scrolled past the cap showed "No activities logged yet." while
+// the same rows were still listed in Table/WBS. One task's history is small,
+// so this query needs no cap of its own.
 export function useActivities(taskId) {
   const workspaceId = useActiveWorkspaceId();
   const [activities, setActivities] = useState([]);
@@ -216,15 +245,8 @@ export function useActivities(taskId) {
       return;
     }
     setLoading(true);
-    // Derived from the ONE workspace-wide activities listener, not a new query
-    // per task. Every expanded Board card used to open its own subscription to
-    // the whole collection and then filter it client-side anyway.
-    return workspaceActivitiesCache.subscribe(workspaceId, (all) => {
-      setActivities(
-        all
-          .filter((a) => a.taskId === taskId)
-          .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
-      );
+    return taskActivitiesCache.subscribe(`${workspaceId}${TASK_KEY_SEP}${taskId}`, (rows) => {
+      setActivities(rows);        // subscribeToActivities already date-sorts
       setLoading(false);
     });
   }, [taskId, workspaceId]);

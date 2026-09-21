@@ -353,7 +353,7 @@ src/
 - `addTask`, `updateTask`, `setTaskStatus(task, nextStatus)`, `moveTaskStatus(task)` (cycle), `archiveTask`, `softDeleteTask`, `subscribeToTasks`
 - `addActivity`, `editActivity(oldActivity, updates)` ← **syncs task counters atomically**, `updateActivity` (raw, no counter sync), `deleteActivity`
 - `bulkDeleteActivities(activities)`, `bulkUpdateActivityCompletion(activities, status)` ← used by Table bulk bar
-- `subscribeToActivities`, `subscribeToAllActivities`, `subscribeToRecentActivities`
+- `subscribeToActivities(workspaceId, taskId, cb)` ← **both** ids (see pitfalls), `subscribeToAllActivities`, `subscribeToRecentActivities`
 - `addProject`, `updateProject`, `archiveProject`, `softDeleteProject`, `subscribeToProjects`
 - `migrateLegacyCategories(userId)` — idempotent
 - `todayLocal()` — YYYY-MM-DD in local timezone
@@ -427,6 +427,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Importing `exceljs` / `jspdf` / `docx` at the top of a module — they are megabytes, and `await import()` inside the writer keeps them out of the eager bundle.
 - ❌ Naming a download with `new Date().toISOString().slice(0,10)` — that is the UTC day. Use `downloadFile(base, ext, content)` from `services/download.js`.
 - ❌ Reading the activities collection just for a count — use the denormalized counter
+- ❌ Getting one task's activity log from either half of the query alone. It needs **`workspaceId` AND `taskId`**, and this has broken twice in opposite directions. `where('taskId','==',id)` on its own is refused outright — rules are not filters, and that query could match a workspace the caller is not in, so the log came back empty everywhere. Filtering the workspace-wide listener down to one task instead is *silently* worse: that listener stops at the newest `ACTIVITY_PAGE_SIZE` rows **across the whole workspace**, so any task whose entries had scrolled past the cap showed "No activities logged yet." while Table and WBS still listed them. `subscribeToActivities(workspaceId, taskId)` passes both, needs no composite index (two equality clauses, sorted client-side over one task's own history) and no cap. `tests/rules/activities.rules.test.mjs` fails the build if either clause is dropped.
 - ❌ `query(ref, where(...))` then `.sort().slice()` in the callback — the whole collection was already downloaded. Put `orderBy` and `limit` in the query and add the composite index to `firestore.indexes.json`.
 - ❌ Using `arrayUnion` to push activities into a task document — they go in the root `activities` collection
 - ❌ Renaming `userId` — it's referenced by security rules

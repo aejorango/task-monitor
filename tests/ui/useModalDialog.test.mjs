@@ -144,3 +144,106 @@ test('a nested dialog closes only itself', async () => {
   assert.equal(innerClosed + outerClosed, 1, 'Escape must not close the whole stack at once');
   ui.unmount();
 });
+
+// ---------------------------------------------------------------------------
+// T-0085 / BUG-012 — a hook whose modal is not on screen must not take the key.
+//
+// The hook's Escape branch calls stopPropagation() from a document-capture
+// listener, which kills the event before anything else in the app sees it. A
+// component that calls the hook above an early return (TimerWidget did) left
+// that listener installed for the whole life of the app, so Escape was dead in
+// the search dropdown, the Export menu, the inbox, the column picker, the
+// tutorial tour and the due-task alert — every one of which listens on window
+// or on document-bubble.
+// ---------------------------------------------------------------------------
+
+/** A component that owns its own open/closed state, the way TimerWidget does. */
+function Conditional({ onClose, showing, passOpen = true }) {
+  const modal = useModalDialog({ onClose, title: 'Stop timer', ...(passOpen ? { open: showing } : {}) });
+  if (!showing) return h('span', null, 'nothing on screen');
+  return h('div', { className: 'modal-backdrop', ...modal.backdropProps },
+    h('div', { className: 'modal', ...modal.dialogProps },
+      h('h3', { id: modal.titleId }, 'Stop timer'),
+      h('button', { type: 'button' }, 'Discard')));
+}
+
+/** Somebody else's Escape handler, registered on window in the bubble phase. */
+function Bystander({ onEscape }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onEscape(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onEscape]);
+  return h('span', null, 'bystander');
+}
+
+test('a closed modal lets Escape through to the rest of the app', async () => {
+  let bystanderHeard = 0;
+  let closed = 0;
+  const ui = await mount(h('div', null,
+    h(Conditional, { onClose: () => { closed += 1; }, showing: false }),
+    h(Bystander, { onEscape: () => { bystanderHeard += 1; } })));
+
+  await press('Escape');
+  assert.equal(bystanderHeard, 1, 'the window handler must still hear Escape');
+  assert.equal(closed, 0, 'there was nothing on screen to close');
+  ui.unmount();
+});
+
+test('a call site that forgets `open` still cannot swallow Escape', async () => {
+  let bystanderHeard = 0;
+  const ui = await mount(h('div', null,
+    h(Conditional, { onClose() {}, showing: false, passOpen: false }),
+    h(Bystander, { onEscape: () => { bystanderHeard += 1; } })));
+
+  await press('Escape');
+  assert.equal(bystanderHeard, 1, 'no panel in the document means nothing to close');
+  ui.unmount();
+});
+
+test('once the modal is on screen Escape closes it and stops there', async () => {
+  let bystanderHeard = 0;
+  let closed = 0;
+  const ui = await mount(h('div', null,
+    h(Conditional, { onClose: () => { closed += 1; }, showing: true }),
+    h(Bystander, { onEscape: () => { bystanderHeard += 1; } })));
+
+  await press('Escape');
+  assert.equal(closed, 1, 'the open dialog closes');
+  assert.equal(bystanderHeard, 0, 'and the key goes no further');
+  ui.unmount();
+});
+
+test('a closed modal moves nobody’s focus', async () => {
+  const outside = document.createElement('button');
+  document.body.appendChild(outside);
+  outside.focus();
+
+  const ui = await mount(h(Conditional, { onClose() {}, showing: false }));
+  assert.equal(document.activeElement, outside, 'focus stays where the user put it');
+  ui.unmount();
+  outside.remove();
+});
+
+test('opening the modal after mount installs the trap, closing it removes it', async () => {
+  let bystanderHeard = 0;
+  let closed = 0;
+  const node = (showing) => h('div', null,
+    h(Conditional, { onClose: () => { closed += 1; }, showing }),
+    h(Bystander, { onEscape: () => { bystanderHeard += 1; } }));
+
+  const ui = await mount(node(false));
+  await press('Escape');
+  assert.equal(bystanderHeard, 1);
+
+  await ui.render(node(true));
+  await press('Escape');
+  assert.equal(closed, 1, 'now open: the dialog takes it');
+  assert.equal(bystanderHeard, 1, 'and the bystander hears nothing');
+
+  await ui.render(node(false));
+  await press('Escape');
+  assert.equal(bystanderHeard, 2, 'closed again: the bystander hears it once more');
+  assert.equal(closed, 1);
+  ui.unmount();
+});
