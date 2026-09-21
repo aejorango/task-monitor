@@ -167,3 +167,25 @@ test('the five Escape consumers still listen where the bug affected them', () =>
   const tour = read('src', 'components', 'TutorialGuide.jsx');
   assert.match(tour, /Escape/, 'the tutorial tour closes on Escape');
 });
+
+// ─── T-0087: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records the trap, so it is not reintroduced', () => {
+  const claude = read('CLAUDE.md');
+  assert.match(claude, /Calling `useModalDialog` above the early return/,
+    'the pitfall list is what a future session reads first');
+  assert.match(claude, /document-capture/, 'the pitfall names WHY it is so far-reaching');
+  assert.match(claude, /Pass\s*\n?\s*`open:`/, 'the hook map says when the flag is needed');
+});
+
+test('the README lists the new suite and the new harness', () => {
+  const readme = read('README.md');
+  assert.match(readme, /tests\/ui\/escapeKey\.test\.mjs/);
+  assert.match(readme, /\/dev\/escape-key\.html/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = read('CHANGELOG.md');
+  assert.match(log, /T-0085 — Timer widget swallows Escape/);
+  assert.match(log, /T-0086 — Timer widget swallows Escape/);
+});

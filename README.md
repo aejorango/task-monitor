@@ -492,7 +492,8 @@ run together.
 | `tests/ui/shareFlow.test.mjs` | A link opened signed-out renders read-only — and what it never contains |
 | `tests/ui/recurrenceCatchUp.test.mjs` | A weekly task nobody completed still comes round |
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
-| `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things |
+| `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things, and stays quiet while closed |
+| `tests/ui/escapeKey.test.mjs` | Escape belongs to whatever is actually on screen, not to a hidden modal |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
@@ -567,6 +568,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/shared.html` | The page a client opens (`?kind=board`, `?kind=dead`) |
 | `/dev/recurrence.html` | Move the clock forward and watch a recurring task come round |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
+| `/dev/escape-key.html` | Who hears Escape: the real timer widget beside the five handlers it used to silence |
 
 ## Working with Claude Code
 
