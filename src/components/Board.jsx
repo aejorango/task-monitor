@@ -30,6 +30,7 @@ import ActivityEditor from './ActivityEditor';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
 import { useQuickCreate, newSeed } from '../hooks/useQuickCreate';
+import { filterByTag, tagFilterState } from '../services/tagFilter';
 import { useDialog } from './Dialog';
 
 const COLUMNS = [
@@ -89,9 +90,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     ? tasks
     : tasks.filter((t) => t.projectId === projectFilter);
 
-  const tagFiltered = tagFilter
-    ? projectFiltered.filter((t) => (t.tags || []).includes(tagFilter))
-    : projectFiltered;
+  const tagFiltered = filterByTag(projectFiltered, tagFilter);
   const statusFiltered = initialStatusFilter
     ? tagFiltered.filter((t) => t.status === initialStatusFilter)
     : tagFiltered;
@@ -99,12 +98,11 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     ? statusFiltered.filter((t) => (t.assignedTo || []).includes(userId))
     : statusFiltered;
 
-  // All tags available across the (project-filtered) tasks, for the chip strip
-  const availableTags = (() => {
-    const set = new Set();
-    projectFiltered.forEach((t) => (t.tags || []).forEach((tg) => set.add(tg)));
-    return [...set].sort();
-  })();
+  // All tags available across the (project-filtered) tasks, for the chip strip.
+  // Shared with the Gantt and the Activity Log, so a saved view means the same
+  // thing wherever it points (BUG-018).
+  const tagState = tagFilterState(projectFiltered, tagFilter);
+  const availableTags = tagState.tags;
 
   // Export exactly what is on screen — the same filters, the same order.
   const buildTaskExport = () => buildTaskListDocument(filtered, {
