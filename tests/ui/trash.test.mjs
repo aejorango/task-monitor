@@ -77,10 +77,10 @@ test('a task row says why it cannot be purged, instead of hiding the button', ()
   assert.match(src, /Kept — the activity log refers to it/);
 });
 
-test('Trash is in the sidebar and on a route', () => {
-  const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
+test('Trash is in the sidebar and on a route', async () => {
+  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
   const app = fs.readFileSync(path.join(root, 'src', 'App.jsx'), 'utf8');
-  assert.match(shell, /id: 'trash',\s+label: 'Trash'/);
+  assert.ok(VIEW_REGISTRY.find((v) => v.id === 'trash' && v.label === 'Trash'));
   assert.match(app, /route\.view === 'trash'/);
 });
 

@@ -174,9 +174,10 @@ test('the page is routed, named and code-split like every other view', () => {
   assert.match(app, /route\.view === 'workload'\s+&& <WorkloadView projectFilter=\{route\.projectFilter\} \/>/);
 });
 
-test('it lives under Board in the sidebar, which is where the audit put it', () => {
+test('it lives under Board in the sidebar, which is where the audit put it', async () => {
+  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
   const shell = read('src', 'components', 'AppShell.jsx');
-  assert.match(shell, /\{ id: 'workload',\s+label: 'Workload'/);
+  assert.ok(VIEW_REGISTRY.find((v) => v.id === 'workload' && v.label === 'Workload'));
   assert.match(shell, /childIds: \['board', 'calendar', 'gantt', 'wbs', 'workload'\]/);
 });
 

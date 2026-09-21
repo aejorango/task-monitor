@@ -15,47 +15,15 @@ import { goToTask as openTask } from '../services/openTask';
 import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
+import { VIEW_REGISTRY, RENDERABLE_VIEWS, isKnownView } from '../services/views';
 import { buildCommands, commandsFirst, CREATE_VIEW, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
 
-const VIEWS = [
-  { id: 'ask-ai',         label: 'Ask AI',           icon: 'sparkles' },
-  { id: 'dashboard',      label: 'Dashboard',       icon: 'dashboard' },
-  { id: 'projects',       label: 'Projects',         icon: 'projects' },
-  { id: 'board',          label: 'Kanban',           icon: 'board' },
-  { id: 'calendar',       label: 'Calendar',         icon: 'calendar' },
-  { id: 'gantt',          label: 'Gantt chart',      icon: 'gantt' },
-  { id: 'wbs',            label: 'WBS',              icon: 'wbs' },
-  { id: 'workload',       label: 'Workload',         icon: 'goals' },
-  { id: 'goals',          label: 'Goals',            icon: 'goals' },
-  { id: 'messages',       label: 'Messages',         icon: 'messages' },
-  { id: 'minutes',        label: 'Minutes',          icon: 'minutes' },
-  { id: 'tasks-table',    label: 'Task table',       icon: 'wbs' },
-  { id: 'table',          label: 'Activity Log',     icon: 'list' },
-  { id: 'work-performed', label: 'Work Performed',   icon: 'clock' },
-  { id: 'timesheet',      label: 'Timesheet',        icon: 'clock' },
-  { id: 'review',         label: 'Review',           icon: 'review' },
-  { id: 'artifacts',      label: 'Artifacts',        icon: 'artifacts' },
-  { id: 'analytics',      label: 'Analytics',        icon: 'analytics' },
-  { id: 'trash',          label: 'Trash',            icon: 'trash' },
-  { id: 'how-to-use',     label: 'How to Use',       icon: 'help' },
-  { id: 'settings',       label: 'Settings',         icon: 'settings' },
-];
-
-// Views that render inside the shell but have no sidebar entry of their own.
-const UNLISTED_VIEWS = [
-  { id: 'invite', label: 'Invitation' },
-];
-
-/** Every view the app can actually render inside the shell. */
-export const RENDERABLE_VIEWS = [...VIEWS, ...UNLISTED_VIEWS];
-
-/** Is this hash a page that exists? Used by the topbar and by the not-found card. */
-export function isKnownView(view) {
-  return RENDERABLE_VIEWS.some((v) => v.id === view);
-}
+// The sidebar reads the one view registry (services/views.js), which the ⌘K
+// palette reads too — so a page cannot exist in one and not the other.
+const VIEWS = VIEW_REGISTRY;
 
 // Sidebar-only grouping: some views collapse under a parent that toggles
 // open/closed on click — the parent isn't a view itself. Declarative so new
@@ -124,6 +92,8 @@ export function useRoute() {
   const navigate = (patch) => setHash({ ...route, ...patch });
   return { route, navigate };
 }
+
+export { RENDERABLE_VIEWS, isKnownView };
 
 export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget, userProfile }) {
   const online = useOnline();

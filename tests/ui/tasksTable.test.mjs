@@ -94,8 +94,9 @@ test('the toolbar offers both saving the arrangement and exporting it', async ()
 const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'src', 'App.jsx'), 'utf8');
 
-test('the view is in the sidebar under Reports', () => {
-  assert.match(shell, /id: 'tasks-table',\s+label: 'Task table'/);
+test('the view is in the sidebar under Reports', async () => {
+  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
+  assert.ok(VIEW_REGISTRY.find((v) => v.id === 'tasks-table' && v.label === 'Task table'));
   assert.match(shell, /childIds: \['tasks-table', 'table'/);
 });
 

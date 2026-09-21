@@ -24,26 +24,12 @@ const NOUNS = [
 ];
 
 /** Views ⌘K can jump to, in the order they appear in the sidebar. */
-export const NAV_TARGETS = [
-  { view: 'ask-ai', label: 'Ask AI', words: ['ask', 'ai', 'question'] },
-  { view: 'dashboard', label: 'Dashboard', words: ['dashboard', 'home', 'today'] },
-  { view: 'projects', label: 'Projects', words: ['projects'] },
-  { view: 'board', label: 'Kanban board', words: ['board', 'kanban', 'tasks'] },
-  { view: 'calendar', label: 'Calendar', words: ['calendar', 'month'] },
-  { view: 'gantt', label: 'Gantt chart', words: ['gantt', 'timeline', 'schedule'] },
-  { view: 'wbs', label: 'WBS', words: ['wbs', 'breakdown'] },
-  { view: 'goals', label: 'Goals', words: ['goals', 'objectives'] },
-  { view: 'messages', label: 'Messages', words: ['messages', 'chat'] },
-  { view: 'minutes', label: 'Minutes', words: ['minutes', 'meetings'] },
-  { view: 'tasks-table', label: 'Task table', words: ['table', 'report', 'columns'] },
-  { view: 'table', label: 'Activity Log', words: ['log', 'activities', 'activity log'] },
-  { view: 'work-performed', label: 'Work Performed', words: ['work', 'performed'] },
-  { view: 'timesheet', label: 'Timesheet', words: ['timesheet', 'hours', 'week'] },
-  { view: 'review', label: 'Review', words: ['review', 'summary', 'weekly'] },
-  { view: 'analytics', label: 'Analytics', words: ['analytics', 'charts', 'trends'] },
-  { view: 'settings', label: 'Settings', words: ['settings', 'preferences', 'members', 'workspace'] },
-  { view: 'how-to-use', label: 'How to Use', words: ['help', 'how', 'guide'] },
-];
+// The palette's destinations come from the one view registry, so a page added
+// to the sidebar is searchable the same day. This was a hand-maintained copy
+// and drifted: Workload, Trash and Artifacts were unreachable from ⌘K.
+import { NAV_TARGETS } from './views';
+
+export { NAV_TARGETS };
 
 /**
  * What the user typed, read as an intent to create something.

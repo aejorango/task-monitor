@@ -164,3 +164,80 @@ test('every create command has a destination, named in one place', async () => {
   assert.doesNotMatch(shell, /const VIEW_FOR = \{/,
     'the component must not keep its own copy of the destinations');
 });
+
+// ─── T-0113 / BUG-029: every page is reachable from ⌘K ──────────────────────
+//
+// NAV_TARGETS was a hand-maintained copy of the sidebar's VIEWS and drifted as
+// pages were added: Workload, Trash and Artifacts had no entry, so typing their
+// names returned nothing and the only way in was a collapsed sidebar group.
+// Trash above all — that is where somebody goes the moment they have deleted
+// something by accident.
+
+test('every page in the sidebar can be navigated to from the palette', async () => {
+  const { VIEW_REGISTRY, NAV_TARGETS } = await import('../../src/services/views.js');
+  const reachable = new Set(NAV_TARGETS.map((t) => t.view));
+  const missing = VIEW_REGISTRY.map((v) => v.id).filter((id) => !reachable.has(id));
+  assert.deepEqual(missing, [], 'a new page must not be able to ship unsearchable');
+});
+
+test('the three pages that were missing are findable by name', async () => {
+  const { buildCommands } = await import('../../src/services/commandPalette.js');
+  for (const [typed, view] of [
+    ['workload', 'workload'],
+    ['trash', 'trash'],
+    ['artifacts', 'artifacts'],
+  ]) {
+    const hit = buildCommands(typed).find((c) => c.payload?.view === view);
+    assert.ok(hit, `typing "${typed}" found nothing`);
+  }
+});
+
+test('the words people actually reach for get them there', async () => {
+  const { buildCommands } = await import('../../src/services/commandPalette.js');
+  for (const [typed, view] of [
+    ['deleted', 'trash'],
+    ['restore', 'trash'],
+    ['recover', 'trash'],
+    ['capacity', 'workload'],
+    ['who is busy', 'workload'],
+    ['attachments', 'artifacts'],
+    ['timeline', 'gantt'],
+    ['hours', 'timesheet'],
+  ]) {
+    const hit = buildCommands(typed).find((c) => c.payload?.view === view);
+    assert.ok(hit, `typing "${typed}" did not offer ${view}`);
+  }
+});
+
+test('the destinations are derived, not listed a second time', async () => {
+  const palette = fs.readFileSync(path.join(root, 'src', 'services', 'commandPalette.js'), 'utf8');
+  assert.doesNotMatch(palette, /export const NAV_TARGETS = \[/,
+    'a second hand-maintained list is what drifted in the first place');
+  assert.match(palette, /import \{ NAV_TARGETS \} from '\.\/views'/);
+
+  const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
+  assert.match(shell, /const VIEWS = VIEW_REGISTRY;/, 'the sidebar reads the same registry');
+});
+
+test('a label with more than one word is findable by any of them', async () => {
+  const { NAV_TARGETS } = await import('../../src/services/views.js');
+  const gantt = NAV_TARGETS.find((t) => t.view === 'gantt');
+  assert.ok(gantt.words.includes('gantt') && gantt.words.includes('chart'),
+    'the label’s own words count, so they are not written twice');
+  const dashboard = NAV_TARGETS.find((t) => t.view === 'dashboard');
+  assert.ok(dashboard.words.includes('dashboard'));
+  for (const t of NAV_TARGETS) {
+    assert.equal(new Set(t.words).size, t.words.length, `${t.view} has a duplicate word`);
+  }
+});
+
+test('the sidebar groups still name only real views', async () => {
+  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
+  const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
+  const ids = new Set(VIEW_REGISTRY.map((v) => v.id));
+  const grouped = [...shell.matchAll(/childIds: \[([^\]]+)\]/g)]
+    .flatMap((m) => m[1].split(',').map((s) => s.trim().replace(/'/g, '')));
+  assert.ok(grouped.length > 0);
+  const orphans = grouped.filter((id) => !ids.has(id));
+  assert.deepEqual(orphans, [], 'a group child with no view is a dead sidebar row');
+});

@@ -12,7 +12,8 @@ import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import { useRecurrenceCatchUp } from './hooks/useRecurrenceCatchUp';
 import { useSettings } from './hooks/useSettings';
-import AppShell, { useRoute, isKnownView } from './components/AppShell';
+import AppShell, { useRoute } from './components/AppShell';
+import { isKnownView } from './services/views';
 import NotFoundView from './components/NotFoundView';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
