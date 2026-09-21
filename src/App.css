@@ -679,6 +679,15 @@ a:hover { text-decoration: underline; }
 .badge-soft-muted   { background: var(--c-surface-2);  color: var(--c-text-3); }
 .badge-soft-accent  { background: var(--c-accent-soft); color: var(--c-accent-ink, var(--c-accent)); }
 
+/* The due date on a board card (T-0123). It sits among counters and tag pills,
+   so it is tabular — the digits in "3d late" must not jitter the row as the
+   number changes — and it carries its own weight, being the one thing on the
+   card that separates today from next month. */
+.due-chip {
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

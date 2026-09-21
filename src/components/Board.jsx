@@ -16,6 +16,7 @@ import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useTimer } from '../hooks/useTimer';
 import { auth } from '../services/firebase';
 import { taskChips } from '../services/customFields';
+import { dueChip } from '../services/dueChip';
 import { OPEN_TASK_EVENT } from '../services/openTask';
 import {
   setTaskStatus,
@@ -474,12 +475,19 @@ function DraggableCard({ task, project, expanded, onToggleExpand, onLog, onEdit,
 }
 
 // ─── Card body ────────────────────────────────────────────────────────────
+//
+// Exported so a test can render a real card rather than a stand-in: what the
+// card shows about dates is exactly the thing POL-013 was about (T-0123).
 
-function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEditActivity, dragging }) {
+export function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEditActivity, dragging }) {
   const today = todayLocal();
   const { running, state: timerState, start: startTimer } = useTimer();
-  const isOverdue =
-    task.status !== 'done' && task.plan?.endDate && task.plan.endDate < today;
+  // The due date as the card shows it: "Due today", "Due Fri", "Due Oct 12",
+  // "3d late" — the rule is in services/dueChip.js. It replaces the bare
+  // "Overdue" badge, which said a task was late but never by how much, and it
+  // is the only thing on the card that distinguished today from next month.
+  const due = dueChip(task, today);
+  const isOverdue = Boolean(due?.late);
   const finishedEarly =
     task.status === 'done' && task.actual?.endDate && task.plan?.endDate &&
     task.actual.endDate < task.plan.endDate;
@@ -518,7 +526,11 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
             {task.category}
           </span>
         )}
-        {isOverdue && <span className="badge badge-soft-danger">Overdue</span>}
+        {due && (
+          <span className={`badge badge-soft-${due.tone} due-chip`} title={due.title}>
+            {due.text}
+          </span>
+        )}
         {finishedEarly && <span className="badge badge-soft-success">Done early</span>}
         {finishedLate && <span className="badge badge-soft-warn">Done late</span>}
         {depsCount > 0 && (
@@ -579,9 +591,6 @@ function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdit, onEd
           <span className="subtask-progress-label">{subtasksDone}/{subtaskCount}</span>
         </div>
       )}
-
-      {/* Plan/actual dates are intentionally hidden from the card to keep it
-          compact. Full dates are visible in the editor + Gantt + Calendar. */}
 
       <div className="task-card-footer">
         <div className="counters">

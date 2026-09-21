@@ -332,6 +332,7 @@ src/
 │   ├── askAi.js              ← Ask AI digest + narration
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
 │   ├── logTime.js            ← which task "Log time" means, and what it says
+│   ├── dueChip.js            ← the due date as a board card shows it
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -436,6 +437,7 @@ npm run dev          # local at http://localhost:5173/task-monitor/
                      # &nb=1 pretends a notebook is configured
                      # dev/log-time.html — every state of the Dashboard's
                      # "Log time" button and the form it opens
+                     # dev/due-chip.html — a board card at every due state
                      # dev/knowledge.html — harness for Settings → Knowledge base +
                      # NotebookPicker against the live bridge (no sign-in needed)
 npm run build        # produces dist/
@@ -464,6 +466,16 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Leaving a density decision in place after the thing got denser. The board
+  card hid its plan dates on purpose — a comment said so — from before it gained
+  assignees, custom fields, counters and a subtask bar, and all it kept was a bare
+  "Overdue" badge: true of a task one day late and one due last quarter alike, and
+  silent about the one due tomorrow. `dueChip(task, today)` in the pure
+  `services/dueChip.js` is the one rule ("Due today", "Due Fri" inside a week,
+  "Due Oct 12" beyond it, "3d late" when it has passed, and nothing at all on a
+  done card, where early-or-late is the fact that matters). Dates print
+  month-first, matching `fmtDay` — two date orders across two surfaces reads as
+  two different dates.
 - ❌ Naming a button's target only in its `title`. A touch device has no hover, so
   the Dashboard's "Log time" told nobody which task it had chosen until the modal
   was already open — and when nothing was overdue it fell through to `filtered[0]`,
