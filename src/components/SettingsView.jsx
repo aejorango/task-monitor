@@ -134,16 +134,22 @@ export default function SettingsView() {
     await signOutUser();
   };
 
-  // Send a test notification. This both diagnoses each failure mode
-  // explicitly and surfaces a confirmation toast so the user knows the
-  // click was handled even if the OS suppresses the actual notification
-  // (a common macOS Chrome scenario).
+  // Send a test notification. Every failure mode is diagnosed explicitly,
+  // because the OS often suppresses the banner without surfacing an error and
+  // the user thinks the button did nothing.
+  //
+  // Two audiences, two channels (BUG-019): `log` is the developer's trail and
+  // goes to console.debug; the user gets one plain sentence — green when it
+  // was sent, red only when something actually went wrong. Before this, every
+  // outcome including success came out as a red role="alert" toast with
+  // service-worker internals stapled to it.
   const handleTestNotification = async () => {
     const log = [];
-    const tellUser = (msg) => toast.error(msg + '\n\n— Diagnostic trail —\n' + log.join('\n'));
+    const trail = () => { if (log.length) console.debug('[notifications] test trail:', log.join(' · ')); };
+    const failed = (msg) => { trail(); toast.error(msg); };
 
     if (typeof Notification === 'undefined') {
-      tellUser('This browser does not support the Notifications API.');
+      failed('This browser cannot show notifications.');
       return;
     }
     log.push(`Initial permission: ${Notification.permission}`);
@@ -161,11 +167,11 @@ export default function SettingsView() {
     setNotifPerm(perm);
 
     if (perm === 'denied') {
-      tellUser('Notifications are blocked. Re-enable them in the browser\'s site settings (click the lock icon next to the URL → Site settings → Notifications → Allow).');
+      failed('Notifications are blocked for this site. Click the lock icon next to the address bar, then allow notifications, and try again.');
       return;
     }
     if (perm !== 'granted') {
-      tellUser('Notification permission was not granted.');
+      failed('Notifications were not allowed, so nothing can be sent yet.');
       return;
     }
 
@@ -233,19 +239,14 @@ export default function SettingsView() {
       }
     }
 
+    trail();
     if (sent) {
-      // Always surface a visible "Sent" message — on macOS, system Focus /
-      // DND settings often suppress the actual banner without surfacing an
-      // error, so the user thinks the button did nothing.
-      tellUser(
-        'Test notification dispatched.\n\n' +
-        'If you didn\'t see it, your OS is probably suppressing it:\n' +
-        '• macOS: System Settings → Notifications → find Chrome (or your browser) → set "Allow notifications" and "Banner" style.\n' +
-        '• Check Focus / Do Not Disturb is off.\n' +
-        '• Some browsers only show notifications when the app is in the background.'
-      );
+      // Green, and one sentence. The "why can't I see it" advice lives under
+      // the permission badge, where it can be read at leisure — not stapled to
+      // a toast that disappears.
+      toast.success('Test notification sent. If you did not see it, check your notification settings for this browser.');
     } else {
-      tellUser('Could not dispatch the notification — see diagnostic trail above.');
+      toast.error('Could not send the test notification. Try again in a moment.');
     }
   };
 
@@ -366,6 +367,14 @@ export default function SettingsView() {
             You’ll be pinged when a task with a plan-end date is due today or overdue (same rules as the
             in-app alert below, including snooze). Scanned on app load and every 5 min.
           </p>
+          {notifPerm === 'granted' && (
+            <p className="muted small" style={{ marginTop: 8 }}>
+              Not seeing them? Your computer can hide notifications even when this site is allowed to
+              send them — check that notifications are turned on for your browser in your system
+              settings, and that Focus or Do Not Disturb is off. Some browsers only show them while
+              you are looking at another window.
+            </p>
+          )}
         </section>
 
         <section id="settings-due-alerts" className="review-section htu-section">

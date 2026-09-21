@@ -122,3 +122,49 @@ test('nobody writes the operator test out by hand any more', () => {
   }
   assert.deepEqual(offenders, [], 'use isOperatorProfile() / useIsOperator() from hooks/useUserProfile');
 });
+
+// ─── T-0105 / BUG-019: a success is not an error ────────────────────────────
+
+test('no toast carries a diagnostic trail', () => {
+  const offenders = [];
+  for (const file of componentFiles()) {
+    for (const { n, l } of userFacingLines(file)) {
+      if (/toast\.(error|success|info)\(/.test(l) && /Diagnostic|scope=|— trail —/i.test(l)) {
+        offenders.push(`${file.name}:${n}: ${l.trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'a trail is for console.debug, not for a toast');
+});
+
+test('no component assembles a toast out of an internals log', () => {
+  const offenders = [];
+  for (const file of componentFiles()) {
+    const src = file.src;
+    // `toast.error(... log.join ...)` — the exact shape of BUG-019.
+    if (/toast\.(error|success|info)\([^;]*\blog\.join\(/s.test(src)) offenders.push(file.name);
+    if (/const tellUser = \(msg\) => toast\.error\(msg \+/.test(src)) offenders.push(file.name);
+  }
+  assert.deepEqual(offenders, [], 'split the user sentence from the developer trail');
+});
+
+test('the notification test reports success as a success', () => {
+  const src = fs.readFileSync(path.join(componentsDir, 'SettingsView.jsx'), 'utf8');
+  const handler = src.slice(
+    src.indexOf('const handleTestNotification'),
+    src.indexOf('\n  return (', src.indexOf('const handleTestNotification')),
+  );
+  assert.match(handler, /toast\.success\('Test notification sent\./,
+    'the happy path must be green, not a red role="alert"');
+  assert.match(handler, /console\.debug\('\[notifications\] test trail:'/,
+    'the trail still exists — for whoever is debugging it');
+  assert.doesNotMatch(handler, /Diagnostic trail/);
+  assert.doesNotMatch(handler, /System Settings → Notifications/,
+    'the OS advice belongs under the badge, not inside a toast that disappears');
+
+  // Every remaining message in the handler is one plain sentence.
+  for (const m of handler.matchAll(/toast\.(?:error|success)\('([^']+)'/g)) {
+    assert.ok(!m[1].includes('\\n'), `"${m[1]}" is a paragraph, not a sentence`);
+    assert.ok(/[.!]$/.test(m[1]), `"${m[1]}" should end as a sentence`);
+  }
+});
