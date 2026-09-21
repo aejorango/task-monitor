@@ -127,6 +127,9 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
    order, group by project / phase / status / priority / assignee, sort by any column,
    then save the whole arrangement as a saved view or export it. Logic lives in the pure
    `services/tableViews.js`; the saved view stores `{ columns, groupBy, sortBy, sortDir }`.
+   It is also the app's **editing** surface for many tasks at once: tick rows (shift-click
+   for a range, ⌘/Ctrl-click for individual ones) and the bulk bar sets status, priority,
+   assignee or due date, adds a tag, or deletes — one batched write, a toast with Undo.
 7. **Projects** — Project + phase CRUD. **Templates section** lists all saved task/project templates with delete + use actions.
 8. **Settings** — Per-device prefs: theme override, default project, week start. **Automations** section: rules as dropdowns, the run log, and the notices they raised for you. **Account section** with Google sign-in / sign-out. **Notifications section** with permission status + enable button. **Knowledge base (NotebookLM)** with setup / sign-in / empty / ready states, Re-check, notebook table, source add and per-notebook usage. Data export.
 
@@ -341,6 +344,7 @@ src/
 │   ├── dueAlerts.js          ← pure due-alert rules (tested by dueAlerts.test.mjs)
 │   ├── logTime.js            ← which task "Log time" means, and what it says
 │   ├── dueChip.js            ← the due date as a board card shows it
+│   ├── bulkTasks.js          ← "do this to the ten I picked": actions, plan, undo
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -446,6 +450,7 @@ npm run dev          # local at http://localhost:5173/task-monitor/
                      # dev/log-time.html — every state of the Dashboard's
                      # "Log time" button and the form it opens
                      # dev/due-chip.html — a board card at every due state
+                     # dev/bulk-tasks.html — row selection + the bulk bar
                      # dev/knowledge.html — harness for Settings → Knowledge base +
                      # NotebookPicker against the live bridge (no sign-in needed)
 npm run build        # produces dist/
@@ -474,6 +479,23 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Writing a bulk action one document at a time, or deciding what it writes inside
+  the component. `services/bulkTasks.js` is the one vocabulary (the six actions and
+  the kind of value each needs, so a picker is offered and an id is never typed),
+  the one per-task patch — status through `statusStamps()`, delete as `deleted: true`,
+  `plan.endDate` dotted so the rest of `plan` survives — and the one plan, which
+  carries an **inverse patch captured from each task before the write**: an Undo
+  derived from the action alone cannot know what the tasks were. `bulkUpdateTasks()`
+  only commits, in 400s, in series (`Promise.all` over batches puts hundreds of
+  writes in flight and cannot say how far it got; the error carries `committed`).
+  Permissions are **not** re-checked in the browser — `firestore.rules` is the
+  enforcement point and a batch touching one forbidden task is rejected whole, which
+  is the behaviour we want: a partial bulk edit driven by a client-side guess is worse.
+  Guarded by `tests/rules/bulkTasks.rules.test.mjs`.
+- ❌ Adding shift-click range selection to a table without turning off text selection.
+  Shift-click is also the browser's "extend the text selection" gesture, so the range
+  arrives with half the table highlighted behind it. Rows are `user-select: none` and
+  a shift `mousedown` calls `preventDefault()`.
 - ❌ Leaving a density decision in place after the thing got denser. The board
   card hid its plan dates on purpose — a comment said so — from before it gained
   assignees, custom fields, counters and a subtask bar, and all it kept was a bare

@@ -1709,6 +1709,44 @@ a:hover { text-decoration: underline; }
   color: var(--c-text);
 }
 
+/* Task-table bulk bar (T-0128). The bar itself is the accent block above; the
+   menus and the two small forms inside it are ordinary surface. */
+.bulk-bar .dropdown-menu .dropdown-item { color: var(--c-text); }
+.bulk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  min-width: 190px;
+}
+.bulk-field .label { margin: 0; }
+.bulk-field-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* The selection column. Narrow, and its checkbox is the only thing in the row
+   that does not open the task. */
+.tt-table th.tt-pick,
+.tt-table td.tt-pick {
+  width: 34px;
+  padding-left: 10px;
+  padding-right: 4px;
+  text-align: center;
+}
+.tt-table .tt-pick input { accent-color: var(--c-accent); cursor: pointer; }
+
+/* Shift-clicking a row to take a range is also the browser's gesture for
+   selecting TEXT, so without this the table fills with blue highlight behind
+   the selection you actually wanted. The cells stay readable and copyable —
+   only the drag-highlight goes. */
+.tt-table .tt-row { user-select: none; -webkit-user-select: none; }
+.tt-table .tt-row.is-selected > td {
+  background: var(--c-accent-soft);
+}
+
 /* ─── Swim lanes (Board) ────────────────────────────────────── */
 .swim-lanes {
   display: flex;
