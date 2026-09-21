@@ -230,3 +230,21 @@ for (const [name, View, entity, typed, placeholder] of PAGES) {
     ui.unmount();
   });
 }
+
+// ─── T-0101: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records the trap', () => {
+  const claude = read('CLAUDE.md');
+  assert.match(claude, /useQuickCreate` listener that ignores its argument/);
+  assert.match(claude, /newSeed\(\)/);
+});
+
+test('the README lists the new suite', () => {
+  assert.match(read('README.md'), /tests\/ui\/quickCreateSeed\.test\.mjs/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = read('CHANGELOG.md');
+  assert.match(log, /T-0099 — Quick create drops the name/);
+  assert.match(log, /T-0100 — Quick create drops the name/);
+});
