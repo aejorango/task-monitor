@@ -10,14 +10,15 @@
 // A harness is an entry point, not a module anything imports.
 /* eslint-disable react-refresh/only-export-components */
 
-import { StrictMode, useMemo, useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable,
   useSensor, useSensors,
 } from '@dnd-kit/core';
-import { buildMyWeek, clampOffset, weekTitle } from '../src/services/myWeek';
-import { moveTaskToDay, DAY_UNSCHEDULED } from '../src/services/workload';
+import { useMyWeek } from '../src/hooks/useMyWeek';
+import { weekTitle } from '../src/services/myWeek';
+import { DAY_UNSCHEDULED } from '../src/services/workload';
 import { todayLocal, addDaysISO } from '../src/services/recurrence';
 import '../src/App.css';
 
@@ -107,25 +108,14 @@ function Rail({ id, title, hint, tasks, tone }) {
 
 function Harness() {
   const [tasks, setTasks] = useState(SAMPLE);
-  const [offset, setOffset] = useState(0);
   const [weekStart, setWeekStart] = useState(1);
-  const [dragging, setDragging] = useState(null);
   const [log, setLog] = useState([]);
 
-  const week = useMemo(
-    () => buildMyWeek({ tasks, userId: ACE, workspaces: WORKSPACES, today: T, weekStart, offset }),
-    [tasks, weekStart, offset],
-  );
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const byId = useMemo(() => Object.fromEntries(tasks.map((t) => [t.id, t])), [tasks]);
-
-  const onDragEnd = ({ active, over }) => {
-    setDragging(null);
-    if (!over) return;
-    const task = byId[active.id];
-    const patch = moveTaskToDay(task, over.id);
-    if (!patch) return;
-    setTasks((list) => list.map((t) => (t.id !== task.id ? t : {
+  // The real hook, with the write replaced: the patch is applied locally so the
+  // grid visibly changes, and logged so you can see exactly what it would have
+  // written.
+  const commit = async (id, patch) => {
+    setTasks((list) => list.map((t) => (t.id !== id ? t : {
       ...t,
       plan: {
         startDate: 'plan.startDate' in patch ? patch['plan.startDate'] : t.plan.startDate,
@@ -133,9 +123,19 @@ function Harness() {
       },
     })));
     setLog((l) => [{
-      at: new Date().toLocaleTimeString(), title: task.title, patch: JSON.stringify(patch),
+      at: new Date().toLocaleTimeString(),
+      title: SAMPLE.find((t) => t.id === id)?.title || id,
+      patch: JSON.stringify(patch),
     }, ...l].slice(0, 8));
   };
+
+  const { week, goToWeek, dragging, onDragStart, onDragEnd, onDragCancel } = useMyWeek({
+    tasks, userId: ACE, workspaces: WORKSPACES, weekStart,
+    toast: { error: (t) => setLog((l) => [{ at: new Date().toLocaleTimeString(), title: '(failed)', patch: t }, ...l]) },
+    commit, today: () => T,
+  });
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   return (
     <div style={{ padding: 20 }}>
@@ -145,9 +145,9 @@ function Harness() {
           <p className="page-subtitle">Today is {T}. Drag a card to another day, or onto “No date yet”.</p>
         </div>
         <div className="page-actions myweek-nav">
-          <button className="btn btn-sm" onClick={() => setOffset((o) => clampOffset(o - 1))} aria-label="The week before this one">←</button>
+          <button className="btn btn-sm" onClick={() => goToWeek((o) => o - 1)} aria-label="The week before this one">←</button>
           <span className="myweek-title">{weekTitle(week.week, T)}</span>
-          <button className="btn btn-sm" onClick={() => setOffset((o) => clampOffset(o + 1))} aria-label="The week after this one">→</button>
+          <button className="btn btn-sm" onClick={() => goToWeek((o) => o + 1)} aria-label="The week after this one">→</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setWeekStart((w) => (w === 1 ? 0 : 1))}>
             Week starts {weekStart === 1 ? 'Monday' : 'Sunday'}
           </button>
@@ -156,9 +156,9 @@ function Harness() {
 
       <DndContext
         sensors={sensors}
-        onDragStart={({ active }) => setDragging(byId[active.id] || null)}
+        onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        onDragCancel={() => setDragging(null)}
+        onDragCancel={onDragCancel}
       >
         <div className="myweek-rails">
           <Rail id={DAY_UNSCHEDULED} title="No date yet" hint="Drag one onto a day to schedule it" tasks={week.unscheduled} />

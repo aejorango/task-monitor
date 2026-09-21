@@ -129,7 +129,9 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
    names its workspace, because the point is that they are mixed. Bucketing is the pure
    `services/myWeek.js`; a drop goes through `moveTaskToDay` in `services/workload.js`.
    Reads through `subscribeToMyTasksAcrossWorkspaces` — filtered at the server, because
-   this is a page people leave open.
+   this is a page people leave open. The week and the drop sequence are `hooks/useMyWeek.js`
+   (with an injectable `commit`), for the same reason `useBulkTasks` exists: the page needs
+   a live workspace before it renders, so anything left inside it can only be read, not run.
 6. **Task table** — every task as a configurable report: pick the columns and their
    order, group by project / phase / status / priority / assignee, sort by any column,
    then save the whole arrangement as a saved view or export it. Logic lives in the pure
@@ -342,6 +344,7 @@ src/
 │   ├── useInbox.js           ← one notices listener, however many components ask
 │   ├── useRecurrenceCatchUp.js ← makes a due occurrence appear without a tick-off
 │   ├── useBulkTasks.js       ← row selection + running one action over it
+│   ├── useMyWeek.js          ← the week you are looking at, and what a drop does
 │   ├── useKnowledgeStatus.js ← is the knowledge base usable + which notebooks
 │   ├── useNotifications.js   ← service worker, permission, browser-notification scan
 │   └── useSettings.js        ← localStorage-backed settings + theme application

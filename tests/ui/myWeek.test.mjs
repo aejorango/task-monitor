@@ -84,9 +84,14 @@ test('it reads the bounded, per-person subscription', () => {
 });
 
 test('the drop goes through the one module that decides what a drop means', () => {
-  assert.match(view(), /moveTaskToDay\(task, over\.id\)/);
-  assert.doesNotMatch(view(), /'plan\.endDate'/,
+  // The sequencing moved to hooks/useMyWeek.js for T-0132, so a test could
+  // actually perform a drop. The rule is unchanged: one module works out the
+  // patch, and nothing else writes plan dates by hand.
+  const hook = read('src', 'hooks', 'useMyWeek.js');
+  assert.match(hook, /moveTaskToDay\(task, over\.id\)/);
+  assert.doesNotMatch(hook, /'plan\.endDate'/,
     'a second place computing the patch is how a drop comes to mean two things');
+  assert.doesNotMatch(view(), /'plan\.endDate'/);
 });
 
 test('the Calendar was moved onto the same helper rather than left as a copy', () => {
@@ -172,7 +177,10 @@ test('an empty week says so in plain language, and says what fills it', () => {
 });
 
 test('a failed move is reported in a plain sentence, not an SDK one', () => {
-  assert.match(view(), /friendlyError\(err, 'Could not move that task\. Please try again\.'\)/);
+  const hook = read('src', 'hooks', 'useMyWeek.js');
+  assert.match(hook, /friendlyError\(err, 'Could not move that task\. Please try again\.'\)/);
+  assert.match(hook, /console\.error\('\[my-week\] reschedule failed:', err\)/,
+    "the operator's version goes to the console, not to the screen");
 });
 
 /* ── the card is the handle ────────────────────────────────────────────── */
@@ -201,4 +209,22 @@ test('the view mounts without a workspace and says it is loading', async () => {
   assert.match(text(ui.container), /Loading your week…|Nothing is assigned to you/,
     'it must not throw before the data arrives');
   ui.unmount();
+});
+
+/* ── T-0132: it is actually in the sidebar ─────────────────────────────── */
+
+test('My Week gets its own sidebar entry, not swallowed into a group', async () => {
+  const shell = read('src', 'components', 'AppShell.jsx');
+  // The sidebar builds itself from the registry: a view in no NAV_GROUP becomes
+  // a top-level item. What would break this is somebody adding 'my-week' to a
+  // group's childIds, which would bury a page whose whole point is being there.
+  assert.doesNotMatch(shell, /childIds: \[[^\]]*'my-week'/,
+    'My Week is a destination, not a sub-item of Board or Reports');
+  assert.match(shell, /const group = childToGroup\.get\(v\.id\);\s*\n\s*if \(!group\) \{ items\.push\(v\); return; \}/,
+    'that is what makes an ungrouped registry entry appear at all');
+});
+
+test('it sits next to Dashboard, which is where you look first thing', async () => {
+  const ids = VIEW_REGISTRY.map((v) => v.id);
+  assert.equal(ids[ids.indexOf('my-week') - 1], 'dashboard');
 });

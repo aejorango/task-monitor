@@ -9,17 +9,17 @@
 // `moveTaskToDay` in `services/workload.js` — the same module the Workload
 // grid uses, so a drop means one thing in this app.
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor,
   useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core';
 import { useMyTasksAcrossWorkspaces } from '../hooks/useTasks';
+import { useMyWeek } from '../hooks/useMyWeek';
 import { useSettings } from '../hooks/useSettings';
-import { updateTask, todayLocal } from '../services/firebase';
-import { buildMyWeek, weekTitle, clampOffset, UNSCHEDULED } from '../services/myWeek';
-import { moveTaskToDay, DAY_UNSCHEDULED } from '../services/workload';
-import { friendlyError } from '../services/access';
+import { todayLocal } from '../services/firebase';
+import { weekTitle, UNSCHEDULED } from '../services/myWeek';
+import { DAY_UNSCHEDULED } from '../services/workload';
 import { useToast } from './Toast';
 import TaskEditor from './TaskEditor';
 import Icon from './Icon';
@@ -31,18 +31,12 @@ export default function MyWeekView() {
   const { settings } = useSettings();
   const toast = useToast();
 
-  const [offset, setOffset] = useState(0);
   const [editing, setEditing] = useState(null);
-  const [dragging, setDragging] = useState(null);
 
-  const today = todayLocal();
-  const week = useMemo(
-    () => buildMyWeek({
-      tasks, userId, workspaces, today,
-      weekStart: settings.weekStart, offset,
-    }),
-    [tasks, userId, workspaces, today, settings.weekStart, offset],
-  );
+  // The week, and what a drag inside it does. In the hook so a test can drive
+  // it — this page needs a live workspace before it renders anything at all.
+  const { week, offset, goToWeek, dragging, onDragStart, onDragEnd, onDragCancel } =
+    useMyWeek({ tasks, userId, workspaces, weekStart: settings.weekStart, toast });
 
   const sensors = useSensors(
     // A card is also a button — a drag has to travel before it counts as one,
@@ -51,25 +45,9 @@ export default function MyWeekView() {
     useSensor(KeyboardSensor),
   );
 
-  const byId = useMemo(() => Object.fromEntries(tasks.map((t) => [t.id, t])), [tasks]);
-
-  const onDragEnd = async ({ active, over }) => {
-    setDragging(null);
-    if (!over) return;
-    const task = byId[active.id];
-    const patch = moveTaskToDay(task, over.id);
-    if (!patch) return;
-    try {
-      await updateTask(task.id, patch);
-    } catch (err) {
-      console.error('[my-week] reschedule failed:', err);
-      toast.error(friendlyError(err, 'Could not move that task. Please try again.'));
-    }
-  };
-
   if (loading) return <p className="muted">Loading your week…</p>;
 
-  const title = weekTitle(week.week, today);
+  const title = weekTitle(week.week, todayLocal());
 
   return (
     <div className="myweek">
@@ -84,17 +62,17 @@ export default function MyWeekView() {
         <div className="page-actions myweek-nav">
           <button
             className="btn btn-sm"
-            onClick={() => setOffset((o) => clampOffset(o - 1))}
+            onClick={() => goToWeek((o) => o - 1)}
             aria-label="The week before this one"
           >←</button>
           <span className="myweek-title">{title}</span>
           <button
             className="btn btn-sm"
-            onClick={() => setOffset((o) => clampOffset(o + 1))}
+            onClick={() => goToWeek((o) => o + 1)}
             aria-label="The week after this one"
           >→</button>
           {offset !== 0 && (
-            <button className="btn btn-sm btn-ghost" onClick={() => setOffset(0)}>Back to this week</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => goToWeek(0)}>Back to this week</button>
           )}
         </div>
       </div>
@@ -111,9 +89,9 @@ export default function MyWeekView() {
       ) : (
         <DndContext
           sensors={sensors}
-          onDragStart={({ active }) => setDragging(byId[active.id] || null)}
+          onDragStart={onDragStart}
           onDragEnd={onDragEnd}
-          onDragCancel={() => setDragging(null)}
+          onDragCancel={onDragCancel}
         >
           <div className="myweek-rails">
             <Rail

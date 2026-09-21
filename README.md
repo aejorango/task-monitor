@@ -544,6 +544,7 @@ run together.
 | `src/services/myWeek.test.mjs` | One person's week across workspaces, and what a drop on a day writes |
 | `tests/ui/myWeekApi.test.mjs` | The read is filtered at the server, and has its index |
 | `tests/ui/myWeek.test.mjs` | The page is registered, routed, and draws both rails |
+| `tests/ui/myWeekFlow.test.mjs` | Two workspaces → their days → a drop that keeps the duration |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
 
