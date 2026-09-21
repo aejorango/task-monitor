@@ -224,6 +224,9 @@ once as a list of blocks (`heading`, `paragraph`, `bullets`, `table`,
 ```
 services/exporters.js      ← the document model + all seven writers
 services/taskExport.js     ← a task list as a document (Board, Gantt, Projects)
+services/activityExport.js ← buildActivityLogDocument() (Activity Log, its bulk
+                             bar, the WBS activity modal, Projects) and
+                             buildWbsDocument() (the WBS modal)
 services/minutesExport.js  ← one set of minutes
 components/ExportButton.jsx← "Export ▾" — the menu, the spinner, the filename
 ```
@@ -436,6 +439,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 ## Common Pitfalls
 
 - ❌ Storing dates as JS `Date` objects in Firestore — use string `YYYY-MM-DD` for date-only fields
+- ❌ Building a CSV by hand in a component. Every export goes through `services/exporters.js`, so a page offers all the formats at once and every file is date-stamped by `downloadFile()`. Four pages kept their own writer and could only produce a CSV — the Activity Log, its bulk bar, the WBS and the per-project log, which are exactly the pages somebody sends to a client. `tests/ui/activityExportUi.test.mjs` fails the build if a component grows a CSV escaper again. Note the round-trip: a column this app **exports** must be an alias the import wizard **recognises**, or the app cannot read its own file back.
 - ❌ Importing `exceljs` / `jspdf` / `docx` at the top of a module — they are megabytes, and `await import()` inside the writer keeps them out of the eager bundle.
 - ❌ Naming a download with `new Date().toISOString().slice(0,10)` — that is the UTC day. Use `downloadFile(base, ext, content)` from `services/download.js`.
 - ❌ Reading the activities collection just for a count — use the denormalized counter

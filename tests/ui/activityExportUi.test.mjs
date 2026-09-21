@@ -135,3 +135,36 @@ test('build() runs only when a format is picked', () => {
     assert.match(src, /build: \(\) =>/, `${file} must not prepare an export nobody asked for`);
   }
 });
+
+// ─── T-0117: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records where these documents are built', () => {
+  const claude = read('CLAUDE.md');
+  assert.match(claude, /activityExport\.js/, 'the module belongs in the exports map');
+  assert.match(claude, /buildActivityLogDocument|buildWbsDocument/);
+});
+
+test('the README lists the new suites', () => {
+  const readme = read('README.md');
+  assert.match(readme, /src\/services\/activityExport\.test\.mjs/);
+  assert.match(readme, /tests\/ui\/activityExportUi\.test\.mjs/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = read('CHANGELOG.md');
+  assert.match(log, /T-0115 — Activity Log and WBS/);
+  assert.match(log, /T-0116 — Activity Log and WBS/);
+});
+
+test('no page in the app hand-rolls a CSV any more', () => {
+  const dir = path.join(root, 'src', 'components');
+  const offenders = [];
+  for (const name of fs.readdirSync(dir).filter((f) => f.endsWith('.jsx'))) {
+    const src = fs.readFileSync(path.join(dir, name), 'utf8');
+    // downloadFile() itself is fine (it is the one place a file is named);
+    // building CSV lines by hand beside it is not.
+    if (/const escape = \(v\) => \{[\s\S]{0,200}?replace\(\/"\/g/.test(src)) offenders.push(name);
+  }
+  assert.deepEqual(offenders, [],
+    'go through services/exporters.js so every page offers the same formats');
+});
