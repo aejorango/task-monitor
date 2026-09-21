@@ -69,8 +69,10 @@ test('the series the app reads is the same one the old on-completion path uses',
   const series = seriesOf([weekly]);
   assert.equal(series.get('t1').anchor.id, 't1');
   // Both paths key on recurrenceParentId + dates, which is what makes them safe
-  // to have running at the same time.
-  assert.match(firebase, /where\('recurrenceParentId', '==', parentId\)/);
+  // to have running at the same time. Since T-0088 the on-completion path
+  // applies that key through the shared pure rule rather than its own copy.
+  assert.match(firebase, /where\('recurrenceParentId', '==', payload\.recurrenceParentId\)/);
+  assert.match(firebase, /alreadySpawned\(payload,/);
   assert.match(module_, /!existingDates\.has\(occurrence\.end\)/);
 });
 
@@ -100,7 +102,10 @@ test('the instance belongs to the series’ owner, not to whoever ran the catch-
 
 test('the on-completion path still exists — this is a second way, not a replacement', () => {
   assert.match(firebase, /async function spawnNextRecurrence\(task\)/);
-  assert.match(firebase, /await spawnNextRecurrence\(task\)/);
+  // Since T-0088 every way of finishing a task reaches it through one helper,
+  // so the Board, the activities modal and the task editor cannot disagree.
+  assert.match(firebase, /export async function maybeSpawnRecurrence\(before, after\)/);
+  assert.match(firebase, /await spawnNextRecurrence\(after\)/);
 });
 
 // ─── when it runs ───────────────────────────────────────────────────────────

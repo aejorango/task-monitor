@@ -131,3 +131,45 @@ export function buildNextRecurrenceTask(task) {
     recurrenceParentId: task.recurrenceParentId || task.id,
   };
 }
+
+/**
+ * Has this save just finished a recurring task?
+ *
+ * There is more than one way to finish a task — dragging the card into Done,
+ * the status dropdown in the activities modal, and Save in the task editor —
+ * and all three must mean the same thing. They did not: only the first two
+ * went through setTaskStatus, so whether a weekly task came round depended on
+ * which button you happened to press (BUG-013). The rule lives here, once.
+ *
+ * `after` is the task as it is AFTER the save, so an occurrence created from
+ * the editor uses the dates and the rule the user just typed — not the ones
+ * they opened the modal with.
+ */
+export function shouldSpawnRecurrence(before, after) {
+  if (!after?.recurrence) return false;
+  if (after.status !== 'done') return false;
+  // Already done before this save: saving an edit to a finished task must not
+  // produce another occurrence every time.
+  if (before?.status === 'done') return false;
+  if (after.deleted || after.archived) return false;
+  return true;
+}
+
+/**
+ * Is this occurrence already on the board?
+ *
+ * A series is identified by `recurrenceParentId` and an occurrence within it by
+ * its plan dates — the same pair the scheduled catch-up pass keys on
+ * (services/recurrenceSchedule.js). That shared key is what makes the two paths
+ * safe to run at the same time: whichever gets there first, the other finds it
+ * and does nothing.
+ */
+export function alreadySpawned(payload, siblings = []) {
+  if (!payload) return false;
+  return siblings.some((t) => (
+    !t.deleted
+    && (t.recurrenceParentId || t.id) === payload.recurrenceParentId
+    && t.plan?.startDate === payload.plan.startDate
+    && t.plan?.endDate === payload.plan.endDate
+  ));
+}

@@ -17,6 +17,7 @@ import {
   todayLocal,
   auth,
   emitTaskDone,
+  maybeSpawnRecurrence,
   addActivity,
 } from '../services/firebase';
 import { useTasks, useAuth, useTaskComments, useActivities } from '../hooks/useTasks';
@@ -329,6 +330,30 @@ export default function TaskEditor({ task, projects, onClose }) {
         byName: memberLabel(userId, workspace?.memberProfiles || {}),
       });
       if (status === 'done' && task.status !== 'done') emitTaskDone({ ...task, title: title.trim() });
+      // Finishing a recurring task here must mean exactly what finishing it by
+      // dragging the card into Done means. The task as it is AFTER this save,
+      // so the next occurrence uses the dates and the rule just typed — not the
+      // ones the modal was opened with.
+      await maybeSpawnRecurrence(task, {
+        ...task,
+        title: title.trim(),
+        description: description.trim(),
+        projectId: projectId || null,
+        phaseId: phaseId || null,
+        priority,
+        status,
+        requestedBy: requestedBy.trim(),
+        category: selectedProject?.name || task.category,
+        tags,
+        subtasks,
+        links,
+        recurrence,
+        customValues,
+        assignedTo,
+        assignedToExternal,
+        plan:   { startDate: planStart       || null, endDate: planEnd        || null },
+        actual: { startDate: nextActualStart || null, endDate: nextActualEnd  || null },
+      });
       onClose();
     } catch (err) {
       console.error(err);

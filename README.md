@@ -494,6 +494,7 @@ run together.
 | `tests/ui/automations.test.mjs` | The rule editor: dropdowns only, the sentence, what cannot be saved |
 | `tests/ui/useModalDialog.test.mjs` | The hook that gives an existing modal those things, and stays quiet while closed |
 | `tests/ui/escapeKey.test.mjs` | Escape belongs to whatever is actually on screen, not to a hidden modal |
+| `tests/ui/recurrenceOnSave.test.mjs` | Finishing a recurring task means the same thing whichever button you press |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |

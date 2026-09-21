@@ -50,6 +50,8 @@ import {
   todayLocal,
   nextRecurrenceDates,
   buildNextRecurrenceTask,
+  shouldSpawnRecurrence,
+  alreadySpawned,
 } from './recurrence';
 export { todayLocal, nextRecurrenceDates };
 import {
@@ -1171,10 +1173,26 @@ export async function setTaskStatus(task, nextStatus) {
 
   if (nextStatus === 'done') emitTaskDone(task);
 
-  if (nextStatus === 'done' && task.recurrence) {
-    try { await spawnNextRecurrence(task); }
-    catch (err) { console.error('Failed to spawn next recurrence:', err); }
-  }
+  await maybeSpawnRecurrence(task, { ...task, status: nextStatus });
+}
+
+/**
+ * A task has just been saved. If that save finished a recurring one, make the
+ * next occurrence.
+ *
+ * Exported because finishing a task is not one code path: the Board's
+ * drag-and-drop and the activities modal go through setTaskStatus, and the task
+ * editor's Save writes the fields itself. Both call this, so both mean the same
+ * thing — which they did not before (BUG-013).
+ *
+ * Never throws. A failed spawn must not lose the save that caused it, and the
+ * catch-up pass creates the occurrence on the day it comes due anyway, keyed on
+ * the same recurrenceParentId + plan dates.
+ */
+export async function maybeSpawnRecurrence(before, after) {
+  if (!shouldSpawnRecurrence(before, after)) return null;
+  try { return await spawnNextRecurrence(after); }
+  catch (err) { console.error('Failed to spawn next recurrence:', err); return null; }
 }
 
 // ─── Recurrence ─────────────────────────────────────────────────────────────
@@ -1185,19 +1203,15 @@ async function spawnNextRecurrence(task) {
 
   // Idempotency: if a sibling task with the same recurrenceParentId already
   // exists with these dates, don't create a duplicate.
-  const parentId = payload.recurrenceParentId;
   const existing = await getDocs(query(
     tasksRef,
     where('userId', '==', task.userId),
-    where('recurrenceParentId', '==', parentId),
+    where('recurrenceParentId', '==', payload.recurrenceParentId),
     where('deleted', '==', false),
   ));
-  const dup = existing.docs.find((d) => {
-    const t = d.data();
-    return t.plan?.startDate === payload.plan.startDate
-        && t.plan?.endDate   === payload.plan.endDate;
-  });
-  if (dup) return null;
+  // alreadySpawned is the same rule the catch-up pass uses, so whichever path
+  // gets there first, the other finds the occurrence and does nothing.
+  if (alreadySpawned(payload, existing.docs.map((d) => ({ id: d.id, ...d.data() })))) return null;
 
   // Go through addTask rather than writing the document here. addTask is the
   // one place that knows the full task shape; a hand-rolled copy silently
