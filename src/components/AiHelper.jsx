@@ -3,11 +3,13 @@
 // generate a ready-to-paste Claude prompt to actually get it done.
 
 import { useState } from 'react';
-import { useTasks, useProjects } from '../hooks/useTasks';
+import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
 import { suggestTopTasks, generateClaudePrompt } from '../services/anthropic';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { todayLocal } from '../services/firebase';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { useIsOperator } from '../hooks/useUserProfile';
+import { describeAiFailure } from '../services/errorMessages';
 
 export default function AiHelper() {
   const [open, setOpen] = useState(false);
@@ -31,6 +33,8 @@ function AiHelperModal({ onClose }) {
   const { tasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { available: aiAvailable } = useAiStatus();
+  const { userId } = useAuth();
+  const { isOperator } = useIsOperator(userId);
 
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
@@ -45,8 +49,11 @@ function AiHelperModal({ onClose }) {
       const list = await suggestTopTasks({ tasks, projects, today: todayLocal(), count: 3 });
       setSuggestions(list);
     } catch (err) {
-      console.error(err);
-      setError(err?.message || 'Could not get suggestions.');
+      // One plain sentence on screen; the bridge address, the shell command and
+      // the raw upstream body stay in the console (BUG-020).
+      const { message, detail } = describeAiFailure(err, 'Could not get suggestions just now. Try again in a moment.', { isOperator });
+      console.error('[ai] suggest-top-tasks failed:', detail);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -65,8 +72,9 @@ function AiHelperModal({ onClose }) {
       });
       setPrompts((p) => ({ ...p, [s.id]: { loading: false, text, error: '' } }));
     } catch (err) {
-      console.error(err);
-      setPrompts((p) => ({ ...p, [s.id]: { loading: false, text: '', error: err?.message || 'Failed to generate prompt.' } }));
+      const { message, detail } = describeAiFailure(err, 'Could not write that prompt just now. Try again in a moment.', { isOperator });
+      console.error('[ai] generate-prompt failed:', detail);
+      setPrompts((p) => ({ ...p, [s.id]: { loading: false, text: '', error: message } }));
     }
   };
 

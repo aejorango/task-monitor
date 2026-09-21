@@ -8,6 +8,8 @@ import { useAuth } from '../hooks/useTasks';
 import { addTask } from '../services/firebase';
 import { useToast } from './Toast';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { useIsOperator } from '../hooks/useUserProfile';
+import { describeAiFailure } from '../services/errorMessages';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -75,6 +77,7 @@ export default function AiTaskGenerator({ project, onClose }) {
   const modal = useModalDialog({ onClose: () => { const f = creating ? undefined : onClose; if (typeof f === "function") f(); } });
   const toast = useToast();
   const { userId } = useAuth();
+  const { isOperator } = useIsOperator(userId);
   const { available: aiAvailable } = useAiStatus();
   const [count, setCount] = useState(8);
   const [planStart, setPlanStart] = useState('');  // '' → start on creation day
@@ -103,8 +106,11 @@ export default function AiTaskGenerator({ project, onClose }) {
       });
       setDrafts(list);
     } catch (err) {
-      console.error(err);
-      setError(err.message || String(err));
+      // One plain sentence on screen; the bridge address, the shell command and
+      // the raw upstream body stay in the console (BUG-020).
+      const { message, detail } = describeAiFailure(err, 'Could not draft those tasks just now. Try again in a moment.', { isOperator });
+      console.error('[ai] generate-tasks failed:', detail);
+      setError(message);
     } finally {
       setGenerating(false);
     }

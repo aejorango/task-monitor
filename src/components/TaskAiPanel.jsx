@@ -10,10 +10,15 @@ import {
 import { useAiStatus } from '../hooks/useAiStatus';
 import Markdown from './Markdown';
 import { useToast } from './Toast';
+import { useAuth } from '../hooks/useTasks';
+import { useIsOperator } from '../hooks/useUserProfile';
+import { describeAiFailure } from '../services/errorMessages';
 
 export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) {
   const toast = useToast();
   const { available: aiAvailable } = useAiStatus();
+  const { userId } = useAuth();
+  const { isOperator } = useIsOperator(userId);
   const [busy, setBusy]               = useState(null); // 'subtasks' | 'prompt' | null
   const [subtaskDrafts, setSubtaskDrafts] = useState(null);
   const [accepted, setAccepted]       = useState({});
@@ -50,8 +55,11 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
       setSubtaskDrafts(drafts);
       setAccepted(Object.fromEntries(drafts.map((d) => [d.id, true])));
     } catch (err) {
-      console.error(err);
-      setError(err.message || String(err));
+      // One plain sentence on screen; the bridge address, the shell command and
+      // the raw upstream body stay in the console (BUG-020).
+      const { message, detail } = describeAiFailure(err, 'Could not suggest subtasks just now. Try again in a moment.', { isOperator });
+      console.error('[ai] suggest-subtasks failed:', detail);
+      setError(message);
     } finally {
       setBusy(null);
     }
@@ -70,8 +78,11 @@ export default function TaskAiPanel({ task, project, subtasks, onAddSubtasks }) 
       });
       setPrompt(text);
     } catch (err) {
-      console.error(err);
-      setError(err.message || String(err));
+      // One plain sentence on screen; the bridge address, the shell command and
+      // the raw upstream body stay in the console (BUG-020).
+      const { message, detail } = describeAiFailure(err, 'Could not write that prompt just now. Try again in a moment.', { isOperator });
+      console.error('[ai] generate-prompt failed:', detail);
+      setError(message);
     } finally {
       setBusy(null);
     }

@@ -39,7 +39,7 @@ import {
   setUserRole,
   SUPERADMIN_EMAILS,
 } from '../services/firebase';
-import { useUserProfile } from '../hooks/useUserProfile';
+import { useUserProfile, isOperatorProfile } from '../hooks/useUserProfile';
 import {
   getNotificationPermission,
   requestNotificationPermission,
@@ -86,7 +86,7 @@ export default function SettingsView() {
   const currentUser = auth.currentUser;
   const displayName = currentUser?.displayName || currentUser?.email || 'Signed out';
   const photoURL = currentUser?.photoURL;
-  const isSuperadmin = profile?.role === 'superadmin' && profile?.status === 'approved';
+  const isSuperadmin = isOperatorProfile(profile);
   // Automations act on everybody's work in the workspace, so authoring one is
   // an admin's job.
   const settingsWorkspaceId = useActiveWorkspaceId();

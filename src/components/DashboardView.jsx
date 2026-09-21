@@ -19,6 +19,8 @@ import { buildDigest } from '../services/askAiCore';
 import { buildStatusReport, statusReportFileBase } from '../services/statusReport';
 import ExportButton from './ExportButton';
 import { useAiStatus } from '../hooks/useAiStatus';
+import { useIsOperator } from '../hooks/useUserProfile';
+import { describeAiFailure } from '../services/errorMessages';
 import Markdown from './Markdown';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
@@ -88,6 +90,7 @@ const PRIORITY_DOT = { high: 'var(--c-danger)', medium: 'var(--c-amber)', low: '
 
 export default function DashboardView({ projectFilter, navigate }) {
   const { userId } = useAuth();
+  const { isOperator } = useIsOperator(userId);
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { activities, loading: actsLoading } = useAllActivities();
@@ -297,8 +300,16 @@ export default function DashboardView({ projectFilter, navigate }) {
     try {
       setAiOutput(await suggestNextTask({ tasks: filtered, projects, today }));
     } catch (err) {
-      console.error(err);
-      setAiError(err.message || String(err));
+      // The error's own message is written for whoever has to fix it — a bridge
+      // address, a shell command, a raw upstream body. describeAiFailure keeps
+      // that for the console and hands back one plain sentence for the screen
+      // (BUG-020), unless the person reading it is the operator.
+      const { message, detail } = describeAiFailure(
+        err, 'The AI could not plan your day just now. Try again in a moment.',
+        { isOperator },
+      );
+      console.error('[ai] plan-my-day failed:', detail);
+      setAiError(message);
     } finally {
       setAiBusy(false);
     }

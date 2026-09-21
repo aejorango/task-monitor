@@ -22,6 +22,7 @@ import {
   bridgeOff, enableBridgeHere, localNetworkNote,
 } from '../services/knowledge';
 import { knowledgeCopy } from '../services/knowledgeCopy';
+import { describeAiFailure } from '../services/errorMessages';
 
 function CopyCmd({ cmd }) {
   const [ok, setOk] = useState(false);
@@ -265,7 +266,12 @@ function NotebookDetail({ notebook, dependents }) {
       setSources(rows);
       setError(null);
     } catch (err) {
-      setError(err.message || String(err));
+      // This whole section is operator-only, so the operator's version is the
+      // right thing to show here — but it still goes through the one function
+      // that decides that, rather than rendering a thrown message by hand.
+      const { message, detail } = describeAiFailure(err, 'Could not list that notebook’s sources just now.', { isOperator: true });
+      console.error('[knowledge] fetch-sources failed:', detail);
+      setError(message);
     }
   }, [notebook.id]);
 
@@ -300,7 +306,10 @@ function NotebookDetail({ notebook, dependents }) {
       await load();
     } catch (err) {
       setNote(null);
-      setError(err.message || String(err));   // the CLI's own words, verbatim
+      // Operator-only section, so the CLI's own words are the useful thing —
+      // but the decision to show them is made in one place, not here.
+      const { message } = describeAiFailure(err, 'Could not add that source just now.', { isOperator: true });
+      setError(message);
     } finally {
       setAdding(false);
     }

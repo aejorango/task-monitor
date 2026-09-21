@@ -8,7 +8,7 @@
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDueAlertQueue } from '../hooks/useDueAlertQueue';
-import { useProjects } from '../hooks/useTasks';
+import { useProjects, useAuth } from '../hooks/useTasks';
 import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { generateClaudePromptFull } from '../services/anthropic';
@@ -20,6 +20,8 @@ import {
 } from '../services/dueAlerts';
 import Markdown from './Markdown';
 import { useToast } from './Toast';
+import { useIsOperator } from '../hooks/useUserProfile';
+import { describeAiFailure } from '../services/errorMessages';
 
 const PROMPT_KEY_PREFIX = 'task-monitor.dueAlerts.prompt.v1.';
 // Per-device, like snooze/skip: one person grounding their prompts must not
@@ -352,6 +354,8 @@ const SnoozeButton = forwardRef(function SnoozeButton({ defaultMin, onSnooze }, 
 /* ── GenAI prompt: generate (cached) → edit → copy → run ───────────────── */
 
 function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
+  const { userId } = useAuth();
+  const { isOperator } = useIsOperator(userId);
   const toast = useToast();
   const knowledge = useKnowledgeStatus();
   const notebookId = resolveNotebookFor({ project, workspace });
@@ -395,8 +399,11 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
       setEntry(next);
       saveCachedPrompt(task, next);
     } catch (err) {
-      console.error(err);
-      setError(err.message || String(err));
+      // One plain sentence on screen; the bridge address, the shell command and
+      // the raw upstream body stay in the console (BUG-020).
+      const { message, detail } = describeAiFailure(err, 'Could not write that prompt just now. Try again in a moment.', { isOperator });
+      console.error('[ai] due-alert-prompt failed:', detail);
+      setError(message);
     } finally {
       setGenerating(false);
     }
@@ -435,9 +442,10 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
       });
       setSavingSource('saved');
     } catch (err) {
-      console.error(err);
+      const { message, detail } = describeAiFailure(err, 'Could not save that to your notebook just now. Try again in a moment.', { isOperator });
+      console.error('[knowledge] add-source failed:', detail);
       setSavingSource(null);
-      setError(err.message || String(err));
+      setError(message);
     }
   };
 

@@ -101,6 +101,14 @@ const AI_MESSAGE_BY_CODE = {
   'ai-refused':         'The AI could not answer that one. Try rewording it.',
 };
 
+/**
+ * Codes where a message we wrote ourselves beats the generic sentence.
+ * `noKeyMessage()` names the company and exactly who to ask, which is more use
+ * than "ask an administrator" — but only when it is safe to show (its
+ * superadmin variant names a shell command, and isPlainUserMessage rejects it).
+ */
+const PREFER_OWN_MESSAGE = new Set(['no-api-key']);
+
 /** HTTP status → which sentence above. */
 function codeForStatus(status) {
   if (status === 401 || status === 403) return 'ai-denied';
@@ -163,8 +171,15 @@ export function describeAiFailure(err, fallback = AI_FALLBACK_MESSAGE, { isOpera
   }
 
   const own = typeof err === 'string' ? err : String(err?.message || '');
-  const message = (looksWritten(own) && isPlainUserMessage(own) ? own : null)
-    || (code && AI_MESSAGE_BY_CODE[code])
+  const ownIsUsable = looksWritten(own) && isPlainUserMessage(own);
+  // Knowing what went wrong beats anything the thrower happened to say — "The
+  // AI service refused that request." is true of a 429, but "wait a few seconds
+  // and try again" is what the person needs. PREFER_OWN_MESSAGE is the
+  // exception: there, our own sentence is the more specific one.
+  const mapped = code ? AI_MESSAGE_BY_CODE[code] : null;
+  const message = (mapped && !PREFER_OWN_MESSAGE.has(code) ? mapped : null)
+    || (ownIsUsable ? own : null)
+    || mapped
     || fallback;
 
   return { code, message, detail, isOperatorMessage: false };

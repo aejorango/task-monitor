@@ -6,14 +6,17 @@ import { signInWithGoogle } from '../services/firebase';
 
 export default function LandingView() {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  // Not a caught error: signInWithGoogle() hands back a code and a sentence a
+  // person can act on, with the SDK's own text left in the console. Naming it
+  // `problem` keeps that clear — this is the one screen a stranger sees.
+  const [problem, setProblem] = useState(null);
 
   const handleGoogle = async () => {
-    setBusy(true); setError(null);
+    setBusy(true); setProblem(null);
     const res = await signInWithGoogle();
     setBusy(false);
     if (!res.ok && res.code !== 'popup-closed') {
-      setError({ code: res.code, message: res.message });
+      setProblem({ code: res.code, message: res.message });
     }
     // On success, App.jsx will re-render with the user signed in. The auth
     // gate routes to PendingApprovalView or the full app depending on the
@@ -64,18 +67,18 @@ export default function LandingView() {
           in, leave the page open — it lets you in as soon as someone does.
         </p>
 
-        {error && (
+        {problem && (
           <div className="auth-error" style={{ marginTop: 16 }}>
             <div className="auth-error-head">
               <span className="badge badge-soft-danger">Sign-in error</span>
-              <span className="mono small">{error.code}</span>
+              <span className="mono small">{problem.code}</span>
               <button
                 type="button"
                 className="link-danger"
-                onClick={() => setError(null)}
+                onClick={() => setProblem(null)}
                 style={{ marginLeft: 'auto' }} aria-label="Remove">✕</button>
             </div>
-            <p className="auth-error-msg">{error.message}</p>
+            <p className="auth-error-msg">{problem.message}</p>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 // src/components/ReviewView.jsx — weekly review with KPIs, charts, and lists.
 
 import { useState, useMemo } from 'react';
-import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
+import { useTasks, useProjects, useAllActivities, useAuth } from '../hooks/useTasks';
 import { todayLocal } from '../services/firebase';
 import {
   summarizeWeek,
@@ -14,6 +14,8 @@ import {
   bullets, heading, keyValues, paragraph, sheetFromRows, table,
 } from '../services/exporters';
 import { useAiStatus } from '../hooks/useAiStatus';
+import { useIsOperator } from '../hooks/useUserProfile';
+import { describeAiFailure } from '../services/errorMessages';
 
 const RANGES = [
   { id: '7',  label: 'This week (7d)',  days: 7 },
@@ -335,6 +337,8 @@ function KpiCard({ label, value, suffix, accent }) {
 }
 
 function ReviewAiPanel({ activities, tasks, projects }) {
+  const { userId } = useAuth();
+  const { isOperator } = useIsOperator(userId);
   const { available: aiAvailable } = useAiStatus();
   const [busy, setBusy] = useState(null);
   const [output, setOutput] = useState('');
@@ -370,8 +374,11 @@ function ReviewAiPanel({ activities, tasks, projects }) {
       }
       setOutput(text);
     } catch (err) {
-      console.error(err);
-      setError(err.message || String(err));
+      // One plain sentence on screen; the bridge address, the shell command and
+      // the raw upstream body stay in the console (BUG-020).
+      const { message, detail } = describeAiFailure(err, 'Could not write that just now. Try again in a moment.', { isOperator });
+      console.error('[ai] draft-review failed:', detail);
+      setError(message);
     } finally {
       setBusy(null);
     }

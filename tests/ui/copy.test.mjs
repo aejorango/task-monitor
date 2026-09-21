@@ -68,3 +68,57 @@ test('the webhooks panel describes what it does without naming the plumbing', ()
   assert.doesNotMatch(head, /Cloud Function|Firestore trigger|HMAC/,
     'that is an implementation detail');
 });
+
+// ─── T-0095 / BUG-020: an inline error is copy too ──────────────────────────
+//
+// The toast guard only ever inspected toasts. Inline error rendering —
+// `setError(err.message)` then `<p className="auth-error-msg">{error}</p>` —
+// slipped past it, and put "Start it with `npm run bridge`" on the Dashboard.
+
+/** Components that set an error from a caught value without cleaning it up. */
+test('no component puts a raw thrown message into its own error state', () => {
+  // `err` alone is fine — it is going to friendlyError or describeAiFailure.
+  // What is not fine is reaching into it for `.message` and rendering that.
+  const RAW = /set[A-Za-z]*(Error|Err)\s*\(\s*(err|e|error)\b[^)]*\.(message|toString)\b/;
+  const offenders = [];
+  for (const file of componentFiles()) {
+    for (const { n, l } of userFacingLines(file)) {
+      if (RAW.test(l)) offenders.push(`${file.name}:${n}: ${l.trim()}`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'route it through friendlyError() or describeAiFailure() — an SDK message is not copy');
+});
+
+test('no component renders a caught error object directly into JSX', () => {
+  const RAW_JSX = /\{\s*(err|error)(\?)?\.(message|toString\(\))\s*\}/;
+  const offenders = [];
+  for (const file of componentFiles()) {
+    for (const { n, l } of userFacingLines(file)) {
+      if (RAW_JSX.test(l)) offenders.push(`${file.name}:${n}: ${l.trim()}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test('the two AI surfaces go through describeAiFailure', () => {
+  for (const name of ['DashboardView.jsx', 'AiHelper.jsx']) {
+    const src = fs.readFileSync(path.join(componentsDir, name), 'utf8');
+    assert.match(src, /describeAiFailure\(/, `${name} still shows the raw message`);
+    assert.match(src, /isOperator/, `${name} must know who it is talking to`);
+    assert.match(src, /console\.error\([^)]*detail/,
+      `${name} must still put the operator's version in the console`);
+  }
+});
+
+test('nobody writes the operator test out by hand any more', () => {
+  const offenders = [];
+  for (const file of componentFiles()) {
+    for (const { n, l } of userFacingLines(file)) {
+      if (/role === 'superadmin' && .*status === 'approved'/.test(l)) {
+        offenders.push(`${file.name}:${n}: ${l.trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'use isOperatorProfile() / useIsOperator() from hooks/useUserProfile');
+});

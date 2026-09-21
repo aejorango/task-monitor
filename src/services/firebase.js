@@ -67,6 +67,8 @@ import { catchUpPlan } from './recurrenceSchedule';
 // What a status implies about progress and the actual dates — one rule, so a
 // task imported as Done cannot land in To Do (BUG-015).
 import { normalizeTaskStatus, statusStamps } from './taskStatus';
+// One sentence a person can act on — never the SDK's own text (see access.js).
+import { friendlyError } from './access';
 
 // ─── Firebase init ──────────────────────────────────────────────────────────
 
@@ -144,16 +146,23 @@ export async function signInWithGoogle() {
       return { ok: false, code: 'popup-blocked', message: 'Your browser blocked the popup. Allow popups for this site and try again.' };
     }
     if (err?.code === 'auth/unauthorized-domain') {
-      return { ok: false, code: 'unauthorized-domain', message: 'This domain isn’t authorized for sign-in. Add it in Firebase → Auth → Settings → Authorized domains.' };
+      // The sign-in page is the one screen a complete stranger sees. The
+      // console instruction is for whoever runs the project, not for them.
+      console.error('[auth] unauthorized domain — add it in Firebase → Auth → Settings → Authorized domains.', err);
+      return {
+        ok: false, code: 'unauthorized-domain',
+        message: 'Sign-in is not available from this address. Please use the official link, or tell whoever sent it to you.',
+      };
     }
     if (err?.code === 'auth/cancelled-popup-request') {
       return { ok: false, code: 'cancelled', message: 'Another sign-in popup is already open. Close it and try again.' };
     }
+    // The SDK's own message belongs in the console, not on the sign-in page.
     console.error('signInWithGoogle failed:', err);
     return {
       ok: false,
       code: err?.code || 'unknown',
-      message: err?.message || 'Unknown error during sign-in.',
+      message: friendlyError(err, 'Could not sign you in just now. Try again in a moment.'),
     };
   }
 }
