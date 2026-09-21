@@ -19,6 +19,7 @@ import {
   buildFallbackPrompt, overdueDays, formatClock, snoozeUntil, SNOOZE_PRESETS_MIN,
 } from '../services/dueAlerts';
 import Markdown from './Markdown';
+import AiOperatorHint from './AiOperatorHint';
 import { useToast } from './Toast';
 import { useIsOperator } from '../hooks/useUserProfile';
 import { describeAiFailure } from '../services/errorMessages';
@@ -395,6 +396,7 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
         edited: false,
         grounding: out.grounding || null,
         groundDegraded: out.degraded ? (out.reason || null) : null,
+        operatorHint: out.operatorHint || null,
       };
       setEntry(next);
       saveCachedPrompt(task, next);
@@ -461,7 +463,7 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
         ground: grounded ? { notebookId, projectId: task.projectId, taskId: task.id } : null,
       });
       setAnswer({
-        text: res.text, degraded: !!res.degraded, reason: res.reason,
+        text: res.text, degraded: !!res.degraded, reason: res.reason, operatorHint: res.operatorHint || null,
         provider: res.provider, grounding: res.grounding || null,
       });
     } catch (err) {
@@ -523,6 +525,7 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
           )}
 
           {entry?.groundDegraded && <p className="field-note is-warning">{entry.groundDegraded}</p>}
+          <AiOperatorHint hint={entry?.operatorHint} />
 
           <div className="due-alert-prompt-actions">
             {editing ? (
@@ -592,6 +595,7 @@ function PromptBlock({ task, project, workspace, aiAvailable, provider }) {
                 </div>
               </div>
               {answer.degraded && answer.reason && <p className="muted small due-alert-note">{answer.reason}</p>}
+              <AiOperatorHint hint={answer.operatorHint} />
               <div className="markdown-preview due-alert-answer-body">
                 <Markdown src={answer.text} />
               </div>

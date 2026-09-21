@@ -373,25 +373,40 @@ async function callApi(system, userPrompt, { maxTokens } = {}) {
 
 /* ── the mock provider ────────────────────────────────────────────────── */
 
+/**
+ * Placeholder text, for when nothing is connected.
+ *
+ * The body is for whoever is reading the screen, so it names no command, no
+ * package and no CLI: those reached every user whose provider resolved to the
+ * mock, rendered verbatim into the answer (BUG-028). The runbook is
+ * `MOCK_OPERATOR_HINT` below, which travels on the result and is shown only
+ * where `isOperator` is true — the same split knowledgeCopy() already makes.
+ */
 function mockReply(system, userPrompt) {
   const topic = String(userPrompt).split('\n').find((l) => l.trim()) || 'your request';
   return [
-    '[MOCK RESPONSE — no AI brain is connected, so this is placeholder text.]',
+    '[Placeholder text — no AI is connected, so this is not a real answer.]',
     '',
     `Asked about: ${topic.slice(0, 160)}`,
     '',
-    'To get a real answer, install and log into the Claude Code CLI:',
-    '  npm i -g @anthropic-ai/claude-code && claude',
-    'start the bridge with `npm run bridge`, then press "Re-check" in Settings → AI brain.',
+    'Ask an administrator to connect AI for this account, and try again afterwards.',
   ].join('\n');
 }
 
+/** The same thing said to the person who can actually fix it. */
+export const MOCK_OPERATOR_HINT =
+  'No AI brain is connected. Install and log into the Claude Code CLI '
+  + '(`npm i -g @anthropic-ai/claude-code && claude`), start the bridge with '
+  + '`npm run bridge`, then press "Re-check" in Settings → AI brain.';
+
+// Both of these are shown to anybody, so neither names a CLI or a provider id.
+// `providerLabel` exists precisely so a component never writes its own wording.
 const GROUND_UNAVAILABLE =
-  'Grounding needs the Claude Code bridge, so this answer is not grounded in your notebook.';
+  'This answer is not grounded in your notebook — the AI in use here cannot read it.';
 
 const WEB_UNAVAILABLE = (provider) =>
-  `Live web access was requested but the "${provider}" provider cannot browse. ` +
-  'This answer comes from training data and may be stale.';
+  `Live web access was asked for, but ${providerLabel(provider).split(' —')[0]} cannot browse. `
+  + 'This answer comes from training data and may be out of date.';
 
 const noBrain = () => {
   const err = new Error(noKeyMessage());
@@ -410,7 +425,9 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
   const provider = await detectProvider();
   const started = Date.now();
 
-  const finish = (text, prov, usage, degraded) => {
+  // `reason` is shown to anybody; `operatorHint` only where isOperator is true.
+  // One message for both audiences is how npm commands reached ordinary users.
+  const finish = (text, prov, usage, degraded, operatorHint) => {
     const ms = Date.now() - started;
     recordAiCall({
       provider: prov, ms, ...meta,
@@ -419,7 +436,11 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
       costUsd:      usage?.costUsd      ?? null,
       degraded: !!degraded,
     });
-    return { text, provider: prov, usage: usage || null, ms, ...(degraded ? { degraded: true, reason: degraded } : {}) };
+    return {
+      text, provider: prov, usage: usage || null, ms,
+      ...(degraded ? { degraded: true, reason: degraded } : {}),
+      ...(operatorHint ? { operatorHint } : {}),
+    };
   };
 
   if (provider === 'none') throw noBrain();
@@ -459,9 +480,9 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
           (ground ? ` ${GROUND_UNAVAILABLE}` : ''));
       }
       if (aiSettings().allowMock) {
-        return finish(`${mockReply(system, userPrompt)}\n\n[bridge error: ${why}]`, 'mock (fallback)', null,
-          `The Claude Code bridge failed (${why}) and no API key is available — ` +
-          'this is placeholder text, not a real AI response.');
+        return finish(mockReply(system, userPrompt), 'mock (fallback)', null,
+          'No AI is connected, so this is placeholder text rather than a real answer.',
+          `${MOCK_OPERATOR_HINT} The bridge failed with: ${why}`);
       }
       // The message is what a person may be shown; the operator's version —
       // the address, the cause, the command to start it — goes on `detail`,
@@ -489,7 +510,8 @@ export async function askAI(system, userPrompt, { meta = {}, web = false, maxTok
 
   return finish(mockReply(system, userPrompt), 'mock', null,
     web ? WEB_UNAVAILABLE('mock')
-        : 'No AI brain is connected — this is placeholder text, not a real AI response.');
+        : 'No AI is connected, so this is placeholder text rather than a real answer.',
+    MOCK_OPERATOR_HINT);
 }
 
 /* ── structured output ────────────────────────────────────────────────── */
