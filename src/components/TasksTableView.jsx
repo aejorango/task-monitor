@@ -395,7 +395,7 @@ export function TasksTableGrid({
               {group.tasks.map((task) => (
                 <tr
                   key={task.id}
-                  className={`tt-row${selected.has(task.id) ? ' is-selected' : ''}`}
+                  className={`tt-row${selected.has(task.id) ? ' is-selected' : ''}${task._depth ? ` is-child d${Math.min(task._depth, 4)}` : ''}`}
                   onClick={(e) => {
                     // Shift or ⌘/Ctrl extends the selection; a plain click still
                     // opens the task, which is what the row did before

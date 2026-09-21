@@ -11,6 +11,7 @@
 
 import { customFieldColumns } from './customFields';
 import { estimateOf, formatHours, formatVariance, variance } from './effort';
+import { asTree } from './taskTree';
 import { memberLabel } from './invites';
 
 const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
@@ -236,7 +237,19 @@ export function sortTasks(tasks, cfg, ctx = {}) {
 export function groupTasks(tasks, cfg, ctx = {}) {
   const { groupBy } = normalizeTableConfig(cfg, ctx);
   const sorted = sortTasks(tasks, cfg, ctx);
-  if (groupBy === 'none') return [{ key: 'all', label: null, tasks: sorted }];
+  if (groupBy === 'none') {
+    // Ungrouped, a promoted subtask sits under the task it came out of
+    // (T-0141). Only here: with a grouping applied, something else is already
+    // deciding the order, and an indent would be claiming a relationship the
+    // row order does not have. `depth` rides along on the task so a row can
+    // indent itself without a second lookup.
+    const rows = asTree(sorted);
+    return [{
+      key: 'all',
+      label: null,
+      tasks: rows.map(({ task, depth }) => (depth ? { ...task, _depth: depth } : task)),
+    }];
+  }
 
   const col = columnById(groupBy, ctx);
   const groups = new Map();

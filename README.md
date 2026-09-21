@@ -227,6 +227,12 @@ Whatever you pick is written in one go, and a message says what happened —
 puts them back exactly as they were. A plain click on a row still opens the
 task, as it always did.
 
+**A checklist item that grows up.** Promote a subtask and it becomes a real
+task — with dates, an owner and its own log — while staying *inside* the task it
+came from. The parent lists it with its status and hours, its progress still
+counts it (two ticked boxes and one finished task is 3/3, not 2/2), and the
+**Task table** indents it under its parent. Promoting used to cut the link.
+
 **Ask about one project.** Open a project and there is an **Ask about this
 project** panel. It answers from that project's tasks and activity only — not
 the whole workspace — and reads the project's NotebookLM notebook first (or the
@@ -576,6 +582,8 @@ run together.
 | `src/services/wipLimits.test.mjs` | What a column may hold, and when a card is too old |
 | `src/services/duplicate.test.mjs` | What a copy carries, what it drops, and how its dates move |
 | `src/services/projectAsk.test.mjs` | One project's digest, its notebook, and the three grounding states |
+| `src/services/taskTree.test.mjs` | The rollup, and that a link cycle cannot make it recurse |
+| `tests/ui/taskTree.test.mjs` | Promote keeps the parent; the editor and the table show it |
 | `tests/ui/projectAsk.test.mjs` | Citations shown when grounded; the answer still given when not |
 | `tests/ui/duplicate.test.mjs` | The write path, the Undo, and the three places it is offered |
 | `tests/ui/wipLimits.test.mjs` | Under, at and over the limit — and that a drop is never blocked |

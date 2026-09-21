@@ -38,6 +38,8 @@ import ActivityEditor from './ActivityEditor';
 import { usePresence } from '../hooks/usePresence';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import { formatHours, formatVariance, normalizeEstimate, variance } from '../services/effort';
+import { CHILD_OF, PARENT_OF, explainRollup, rollup } from '../services/taskTree';
+import { requestOpenTask } from '../services/openTask';
 import { useToast } from './Toast';
 import AddToNotebookButton from './AddToNotebookButton';
 import { friendlyError } from '../services/access';
@@ -153,8 +155,12 @@ export default function TaskEditor({ task, projects, onClose }) {
   const blocksTasks = allTasks.filter((t) => (t.dependsOn || []).includes(task.id));
 
   const doneSubtasks  = subtasks.filter((s) => s.done).length;
-  const completionPct = subtasks.length === 0 ? null :
-    Math.round(doneSubtasks / subtasks.length * 100);
+
+  // A promoted subtask is still part of this task (T-0141): the rollup counts
+  // the checklist AND the tasks that were promoted out of it, so promoting one
+  // does not silently move the parent's progress.
+  const tree = rollup({ ...task, subtasks }, allTasks);
+  const completionPct = tree.units === 0 ? null : tree.progress;
 
   // ── Derived health for the hero pills, KPI strip and tree bars ────────────
   const today = todayLocal();
@@ -252,7 +258,12 @@ export default function TaskEditor({ task, projects, onClose }) {
   const toggleSubtask = (id) => setSubtasks(subtasks.map((s) => s.id === id ? { ...s, done: !s.done } : s));
   const removeSubtask = (id) => setSubtasks(subtasks.filter((s) => s.id !== id));
   const promoteSubtask = async (s) => {
-    if (!await ask.confirm({ title: `Promote “${s.text}” to a full task?`, message: 'It inherits this task\u2019s project and phase, and is removed from the checklist.', confirmLabel: 'Promote' })) return;
+    if (!await ask.confirm({
+      title: `Promote “${s.text}” to a full task?`,
+      message: 'It inherits this task\u2019s project and phase, moves off the checklist, and '
+             + 'stays listed under this task — so it still counts towards this task\u2019s progress.',
+      confirmLabel: 'Promote',
+    })) return;
     try {
       await addTask(userId, {
         workspaceId: task.workspaceId,
@@ -264,7 +275,9 @@ export default function TaskEditor({ task, projects, onClose }) {
         priority,
         requestedBy: requestedBy.trim(),
         tags: [...new Set([...(tags || []), 'promoted'])],
-        links: [{ targetId: task.id, type: 'related-to' }],
+        // The link that keeps the hierarchy. It used to be 'related-to',
+        // which lost the parent at exactly the moment it started mattering.
+        links: [{ targetId: task.id, type: CHILD_OF }],
       });
       setSubtasks(subtasks.filter((x) => x.id !== s.id));
     } catch (err) {
@@ -588,9 +601,46 @@ export default function TaskEditor({ task, projects, onClose }) {
                   <div className="pe-tree-name">{title.trim() || 'Untitled task'}</div>
                   <div className="pe-tree-meta">
                     this task · {loggedHours.toFixed(1)}h logged · {priorityMeta.label.toLowerCase()}
+                    {explainRollup(tree) && <> · {explainRollup(tree)}</>}
                   </div>
                 </div>
                 <TreeBar pct={progressPct} color="var(--c-accent)" />
+
+                {tree.hasChildren && (
+                  <div className="pe-children">
+                    <div className="pe-children-head">
+                      <span className="pe-children-title">
+                        Inside this task · {tree.childrenDone}/{tree.childCount} done
+                      </span>
+                      <span className="muted small">
+                        {tree.hours.toFixed(1)}h logged across all of it
+                      </span>
+                    </div>
+                    <ul className="pe-children-list">
+                      {tree.children.map((c) => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            className="pe-child"
+                            // Close this editor and ask whatever is on screen
+                            // to open the child — the same two steps search
+                            // results and the inbox use, so all three behave
+                            // identically.
+                            onClick={() => { onClose(); requestOpenTask(c.id); }}
+                            title={`Open “${c.title}”`}
+                          >
+                            <span className={`pe-child-dot is-${c.status}`} aria-hidden="true" />
+                            <span className="pe-child-title">{c.title}</span>
+                            <span className="pe-child-meta">
+                              {STATUS_META[c.status]?.label || c.status}
+                              {c.totalHoursLogged > 0 && ` · ${c.totalHoursLogged}h`}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -1187,6 +1237,11 @@ const LINK_TYPES = [
   { value: 'blocks',       label: 'blocks',       badge: 'danger',  icon: '⛔' },
   { value: 'related-to',   label: 'related to',   badge: 'info',    icon: '↔' },
   { value: 'duplicate-of', label: 'duplicate of', badge: 'muted',   icon: '⎘' },
+  // A promoted subtask keeps its parent (T-0141). `child-of` is the one the
+  // tree is read from; `parent-of` is the same statement from the other end,
+  // offered so somebody can say it whichever way round they are thinking.
+  { value: CHILD_OF,       label: 'is part of',   badge: 'accent',  icon: '↳' },
+  { value: PARENT_OF,      label: 'contains',     badge: 'accent',  icon: '↴' },
 ];
 
 function LinksEditor({ links, onChange, candidates }) {

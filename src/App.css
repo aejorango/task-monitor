@@ -11230,3 +11230,58 @@ a:hover { text-decoration: underline; }
 }
 .pa-citations ul { margin: 4px 0 0 16px; }
 .pa-off { padding: 8px 0; }
+
+
+/* ─── A promoted subtask, still under its parent (T-0141) ────────────────── */
+.pe-children {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-border);
+}
+.pe-children-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.pe-children-title { font-size: 12px; font-weight: 640; }
+.pe-children-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pe-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--c-text);
+}
+.pe-child:hover { border-color: var(--c-border-strong); }
+.pe-child-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--c-text-muted); }
+.pe-child-dot.is-doing { background: var(--c-amber); }
+.pe-child-dot.is-done  { background: var(--c-success); }
+.pe-child-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe-child-meta { color: var(--c-text-3); font-size: 11px; flex-shrink: 0; }
+
+/* The task table indents a child under its parent — only when nothing else is
+   grouping the rows, so the indent never claims an order the table does not
+   actually have. */
+.tt-table .tt-row.is-child > td:nth-child(2) { position: relative; }
+.tt-table .tt-row.is-child.d1 > td:nth-child(2) { padding-left: 26px; }
+.tt-table .tt-row.is-child.d2 > td:nth-child(2) { padding-left: 42px; }
+.tt-table .tt-row.is-child.d3 > td:nth-child(2) { padding-left: 58px; }
+.tt-table .tt-row.is-child.d4 > td:nth-child(2) { padding-left: 74px; }
+.tt-table .tt-row.is-child > td:nth-child(2)::before {
+  content: '↳';
+  position: absolute;
+  left: 10px;
+  color: var(--c-text-muted);
+}
+.tt-table .tt-row.is-child.d2 > td:nth-child(2)::before { left: 26px; }
+.tt-table .tt-row.is-child.d3 > td:nth-child(2)::before { left: 42px; }
+.tt-table .tt-row.is-child.d4 > td:nth-child(2)::before { left: 58px; }

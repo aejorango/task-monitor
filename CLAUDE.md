@@ -375,6 +375,7 @@ src/
 │   ├── wipLimits.js          ← what a column may hold, and how long a card may sit
 │   ├── duplicate.js          ← "do that again": what a copy carries and what it drops
 │   ├── projectAsk.js         ← one project's digest, its notebook, its grounding badge
+│   ├── taskTree.js           ← a promoted subtask that is still part of its parent
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -509,6 +510,17 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ Losing the hierarchy when a subtask is promoted. `promoteSubtask` writes
+  `type: CHILD_OF` on the new task — it used to write `'related-to'`, which threw
+  the parent away at exactly the moment a checklist item started needing dates,
+  an owner or its own log. `services/taskTree.js` reads that back: `rollup()`
+  counts the checklist AND the promoted children as units of equal weight, so
+  promoting one does not move the parent's percentage, and a parent explicitly
+  marked done stays done whatever is underneath it. **Every walk is cycle-guarded**
+  — `seen` plus `MAX_DEPTH` — because A child-of B child-of A is data that should
+  not exist but must not take the editor down. `asTree` indents only when the
+  table is ungrouped: with a grouping applied something else is already deciding
+  the order, and an indent would claim a relationship the rows do not have.
 - ❌ Rendering a project answer as workspace-wide, or a failed grounding as a
   clean one. `services/projectAsk.js` scopes the digest to ONE project (its
   tasks, and the activities that reach it by project id *or* through one of its
