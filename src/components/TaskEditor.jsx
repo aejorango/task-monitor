@@ -1289,7 +1289,9 @@ function CommentsThread({ task, userId, members = [], memberProfiles = {} }) {
   );
 }
 
-function RecurrenceEditor({ value, onChange }) {
+// Exported so a test can read the note the way a user does — rendered — rather
+// than only as a string in this file (T-0124).
+export function RecurrenceEditor({ value, onChange }) {
   const enabled = !!value;
   const rule    = value?.rule || 'weekly';
   const interval = value?.interval || 1;
@@ -1364,8 +1366,16 @@ function RecurrenceEditor({ value, onChange }) {
         </div>
       )}
       {enabled && (
+        // Both paths, and the honest limit on the second. The old sentence
+        // named only the on-completion path, which told a reader that a weekly
+        // ritual nobody ticks off simply stops — the opposite of what a
+        // schedule is for, and exactly the note somebody reads when deciding
+        // whether to trust recurrence at all (T-0124 / POL-014). The catch-up
+        // runs in the app, not in the cloud, so "the next time somebody opens
+        // it" is the real behaviour and is better said than discovered.
         <p className="muted small" style={{ marginTop: 6 }}>
-          The next instance is auto-created when this task is marked done.
+          The next one is created when you mark this done — and if it is missed,
+          it appears on the day it is next due, the next time somebody opens the app.
         </p>
       )}
     </div>

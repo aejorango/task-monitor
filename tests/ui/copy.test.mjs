@@ -221,3 +221,73 @@ test('the history toggle is named after what it does, and says so', () => {
     'a screen-reader user heard "plus Log" and "Log" with nothing to tell them apart');
   assert.match(src, /aria-label=\{`Log activity on \$\{task\.title\}`\}/);
 });
+
+// ─── T-0124 / POL-014: a note that described half the feature ───────────────
+//
+// The recurrence note named only the on-completion path — "auto-created when
+// this task is marked done" — for as long as there have been two. Read
+// literally it says a weekly ritual nobody ticks off simply stops, which is the
+// opposite of what a schedule is for, and it is the sentence somebody reads
+// while deciding whether to trust recurrence at all.
+
+const recurrenceNote = () => {
+  const src = fs.readFileSync(path.join(componentsDir, 'TaskEditor.jsx'), 'utf8');
+  // Anchor on the component, not on `{enabled && (` — RecurrenceEditor has two
+  // of those, and taking the first one swallowed the controls as well as the
+  // note, so this guard would have passed on words the user never sees.
+  const fn = src.indexOf('function RecurrenceEditor(');
+  assert.ok(fn > 0, 'RecurrenceEditor moved — this guard needs its new home');
+  const open = src.indexOf('<p className="muted small"', fn);
+  assert.ok(open > 0, 'the recurrence note is no longer a paragraph');
+  const close = src.indexOf('</p>', open);
+  return src.slice(src.indexOf('>', open) + 1, close)
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+test('the guard reads the note itself, not the controls above it', () => {
+  const note = recurrenceNote();
+  // If the extraction ever widens again, these leak in and say so.
+  for (const control of ['select', 'option', 'onChange', 'className']) {
+    assert.ok(!note.includes(control), `the guard is reading markup: "${note.slice(0, 120)}"`);
+  }
+  assert.ok(note.length > 40 && note.length < 400, `unexpected note: ${JSON.stringify(note)}`);
+});
+
+test('the recurrence note describes both ways an occurrence appears', () => {
+  const note = recurrenceNote();
+  assert.match(note, /mark this done/i,
+    'the on-completion path: ticking one off creates the next');
+  assert.match(note, /if it is missed/i,
+    'the catch-up path: useRecurrenceCatchUp materialises what has come due');
+});
+
+test('the recurrence note states the limit rather than leaving it to be discovered', () => {
+  const note = recurrenceNote();
+  // The catch-up runs in the app, not on a cloud schedule: a workspace nobody
+  // opens for a month catches up when somebody opens it, not before. README
+  // and useRecurrenceCatchUp both say so; the user should not have to read
+  // either to find out.
+  assert.match(note, /next time somebody opens the app/i);
+  // HORIZON_DAYS is 0 — an occurrence appears on its own day, not a week early.
+  assert.match(note, /on the day it is next due/i);
+});
+
+test('the note no longer claims completion is the only path', () => {
+  const note = recurrenceNote();
+  assert.doesNotMatch(note, /The next instance is auto-created when this task is marked done\./);
+  assert.doesNotMatch(note, /\binstance\b/i, 'a user has tasks, not instances');
+});
+
+test('the catch-up path the note promises is actually wired up', () => {
+  // A promise in copy is only as good as the code behind it. Both halves of
+  // the sentence must have a caller.
+  const app = fs.readFileSync(path.join(componentsDir, '..', 'App.jsx'), 'utf8');
+  const hook = fs.readFileSync(
+    path.join(componentsDir, '..', 'hooks', 'useRecurrenceCatchUp.js'), 'utf8');
+  assert.match(app, /useRecurrenceCatchUp\(/, 'nothing runs the catch-up');
+  assert.match(hook, /materialiseRecurrences/);
+});
