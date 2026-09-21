@@ -1,11 +1,13 @@
 // src/components/CalendarView.jsx — month grid with drag-to-reschedule.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, DragOverlay,
 } from '@dnd-kit/core';
 import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
+import { tagFilterState } from '../services/tagFilter';
+import TagFilterBar from './TagFilterBar';
 import { useSettings } from '../hooks/useSettings';
 import { updateTask } from '../services/firebase';
 import TaskEditor from './TaskEditor';
@@ -24,7 +26,7 @@ function iso(d) {
 }
 const DAY = 24 * 60 * 60 * 1000;
 
-export default function CalendarView({ projectFilter }) {
+export default function CalendarView({ projectFilter, initialTagFilter }) {
   const toast = useToast();
   const { tasks, loading } = useTasks();
   const { projects, byId: projectById } = useProjects();
@@ -40,14 +42,22 @@ export default function CalendarView({ projectFilter }) {
   const [activeDrag, setActiveDrag] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'todo' | 'doing' | 'done'
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // A saved view stores the tag it was filtered by; the router hands it over
+  // here. The audit believed this page already honoured it — it did not
+  // (BUG-018), which is why the guard over App.jsx's props exists.
+  const [tagFilter, setTagFilter] = useState(initialTagFilter || null);
+  useEffect(() => { setTagFilter(initialTagFilter || null); }, [initialTagFilter]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const filtered = useMemo(() => {
-    return tasks
+  const inProject = useMemo(
+    () => tasks
       .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
-      .filter((t) => statusFilter === 'all' || t.status === statusFilter);
-  }, [tasks, projectFilter, statusFilter]);
+      .filter((t) => statusFilter === 'all' || t.status === statusFilter),
+    [tasks, projectFilter, statusFilter],
+  );
+  const tagState = useMemo(() => tagFilterState(inProject, tagFilter), [inProject, tagFilter]);
+  const filtered = tagState.filtered;
 
   const grid = useMemo(() => {
     const firstOfMonth = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -162,6 +172,8 @@ export default function CalendarView({ projectFilter }) {
           ))}
         </div>
       </div>
+
+      <TagFilterBar state={tagState} onChange={setTagFilter} />
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="calendar">

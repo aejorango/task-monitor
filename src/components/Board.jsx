@@ -31,6 +31,7 @@ import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
 import { useQuickCreate, newSeed } from '../hooks/useQuickCreate';
 import { filterByTag, tagFilterState } from '../services/tagFilter';
+import TagFilterBar from './TagFilterBar';
 import { useDialog } from './Dialog';
 
 const COLUMNS = [
@@ -224,22 +225,7 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
         </div>
       </div>
 
-      {availableTags.length > 0 && (
-        <div className="tag-filter-bar">
-          <span className="small muted" style={{ marginRight: 4 }}>Tags:</span>
-          <button
-            className={`chip ${!tagFilter ? 'active' : ''}`}
-            onClick={() => setTagFilter(null)}
-          >All</button>
-          {availableTags.map((tg) => (
-            <button
-              key={tg}
-              className={`chip ${tagFilter === tg ? 'active' : ''}`}
-              onClick={() => setTagFilter(tagFilter === tg ? null : tg)}
-            >#{tg}</button>
-          ))}
-        </div>
-      )}
+      <TagFilterBar state={tagState} onChange={setTagFilter} />
 
       <TaskForm projects={projects} projectFilter={projectFilter} seed={quickAddSeed} />
 

@@ -12,6 +12,8 @@ import CsvImporter from './CsvImporter';
 import ImportWizard from './ImportWizard';
 import { downloadFile } from '../services/download';
 import { useDialog } from './Dialog';
+import TagFilterBar from './TagFilterBar';
+import { tagFilterState } from '../services/tagFilter';
 
 const COLUMNS = [
   { key: 'project',     label: 'Project' },
@@ -33,7 +35,7 @@ const COMPLETION_OPTIONS = [
   { value: 'completed',   label: 'Completed' },
 ];
 
-export default function TableView({ projectFilter }) {
+export default function TableView({ projectFilter, initialTagFilter }) {
   const ask = useDialog();
   const { activities, loading, loadMore, hasMore, loadingMore } = useAllActivities();
   const { byId: projectById } = useProjects();
@@ -49,9 +51,22 @@ export default function TableView({ projectFilter }) {
   const [importerOpen, setImporterOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const filtered = useMemo(() => {
-    return activities.filter((a) => projectFilter === 'all' || a.projectId === projectFilter);
-  }, [activities, projectFilter]);
+  // A saved view stores the tag it was filtered by; the router hands it over
+  // here. An activity has no tags of its own — it borrows them from the task it
+  // was logged against, which is what tagFilterState's `taskById` is for.
+  const [tagFilter, setTagFilter] = useState(initialTagFilter || null);
+  useEffect(() => { setTagFilter(initialTagFilter || null); }, [initialTagFilter]);
+
+  const inProject = useMemo(
+    () => activities.filter((a) => projectFilter === 'all' || a.projectId === projectFilter),
+    [activities, projectFilter],
+  );
+  const tagState = useMemo(
+    () => tagFilterState(inProject, tagFilter, { taskById }),
+    [inProject, tagFilter, taskById],
+  );
+
+  const filtered = tagState.filtered;
 
   const sorted = useMemo(() => {
     const rows = filtered.map((a) => {
@@ -133,6 +148,8 @@ export default function TableView({ projectFilter }) {
         </div>
       </div>
 
+      <TagFilterBar state={tagState} onChange={setTagFilter} />
+
       {importerOpen && <CsvImporter onClose={() => setImporterOpen(false)} />}
       {wizardOpen && <ImportWizard initialKind="activities" onClose={() => setWizardOpen(false)} />}
 
@@ -149,8 +166,24 @@ export default function TableView({ projectFilter }) {
       {sorted.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">☰</div>
-          <p>No activities logged yet.</p>
-          <p className="small">Add a task on the Board, then click <strong>+ Log</strong> to record an activity.</p>
+          {tagState.active ? (
+            <>
+              <p>No activities against tasks tagged #{tagState.active}.</p>
+              <p className="small">
+                An activity takes its tags from the task it was logged against.{' '}
+                <button
+                  className="table-link"
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+                  onClick={() => setTagFilter(null)}
+                >Clear the tag filter</button>{' '}to see everything.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>No activities logged yet.</p>
+              <p className="small">Add a task on the Board, then click <strong>+ Log</strong> to record an activity.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="table-wrap">

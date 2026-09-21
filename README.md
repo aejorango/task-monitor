@@ -503,6 +503,7 @@ run together.
 | `tests/ui/aiErrorCopy.test.mjs` | An AI failure is one plain sentence; the operator's version is in the console |
 | `tests/ui/quickCreateSeed.test.mjs` | What you typed in ⌘K survives the trip to the form |
 | `src/services/tagFilter.test.mjs` | A saved view's tag filter, and where an activity's tags come from |
+| `tests/ui/tagFilterViews.test.mjs` | Every page the router filters by a tag actually honours it |
 | `tests/ui/copy.test.mjs` | No screen names a repo file or tells a user to open the console |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
@@ -579,6 +580,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 | `/dev/escape-key.html` | Who hears Escape: the real timer widget beside the five handlers it used to silence |
 | `/dev/gantt.html` | Gantt rows with every shape of plan (`?zoom=day\|week\|month`), and what a drag writes |
+| `/dev/tag-filter.html` | The tag chip strip and what it filters (`?tag=client`, `?tag=renamed-since`) |
 
 ## Working with Claude Code
 

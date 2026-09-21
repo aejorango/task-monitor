@@ -14,6 +14,8 @@ import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
+import { tagFilterState } from '../services/tagFilter';
+import TagFilterBar from './TagFilterBar';
 import { useToast } from './Toast';
 // The bar geometry and what a drag means live in a pure module, so a task with
 // only a due date is a one-day milestone here and in its tests alike (BUG-014).
@@ -79,7 +81,7 @@ function presetThisYear() {
   };
 }
 
-export default function GanttView({ projectFilter }) {
+export default function GanttView({ projectFilter, initialTagFilter }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const activeWorkspaceId = useActiveWorkspaceId();
@@ -89,6 +91,11 @@ export default function GanttView({ projectFilter }) {
     [workspaces, activeWorkspaceId],
   );
   const [zoom, setZoom] = useState('day');
+  // A saved view stores the tag it was filtered by, and the router hands it
+  // over here. Local state so the chip can be cleared, re-synced when the route
+  // changes — the same shape the Board uses (BUG-018).
+  const [tagFilter, setTagFilter] = useState(initialTagFilter || null);
+  useEffect(() => { setTagFilter(initialTagFilter || null); }, [initialTagFilter]);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
@@ -99,7 +106,7 @@ export default function GanttView({ projectFilter }) {
 
   const periodActive = !!(periodFrom || periodTo);
 
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     // Earliest date on a task (plan or actual start, then ends as fallback)
     const earliestOf = (t) => {
       const candidates = [t.plan?.startDate, t.actual?.startDate, t.plan?.endDate, t.actual?.endDate]
@@ -138,6 +145,13 @@ export default function GanttView({ projectFilter }) {
         return earliestOf(a).localeCompare(earliestOf(b));
       });
   }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo]);
+
+  // The chip strip offers the tags on the rows this page would otherwise show,
+  // and `rows` becomes the tag-filtered set. `missing` covers a saved view
+  // pointing at a tag nothing here carries: the chip still shows, so the filter
+  // is visible and clearable rather than an unexplained empty chart.
+  const tagState = tagFilterState(allRows, tagFilter);
+  const rows = tagState.filtered;
 
   // What the header's Export button hands over: the scheduled tasks currently
   // on the chart, with the same project filter and period window applied.
@@ -213,9 +227,22 @@ export default function GanttView({ projectFilter }) {
           from={periodFrom} to={periodTo}
           setFrom={setPeriodFrom} setTo={setPeriodTo}
         />
+        <TagFilterBar state={tagState} onChange={setTagFilter} />
         <div className="empty-state">
           <div className="empty-state-icon">▭</div>
-          {periodActive ? (
+          {tagState.active ? (
+            <>
+              <p>No scheduled tasks carry #{tagState.active}.</p>
+              <p className="small">
+                A task appears here once it has a plan or an actual date.{' '}
+                <button
+                  className="table-link"
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+                  onClick={() => setTagFilter(null)}
+                >Clear the tag filter</button>{' '}to see everything.
+              </p>
+            </>
+          ) : periodActive ? (
             <>
               <p>No tasks fall within the selected period.</p>
               <p className="small">
@@ -335,6 +362,7 @@ export default function GanttView({ projectFilter }) {
         setFrom={setPeriodFrom} setTo={setPeriodTo}
         visibleCount={rows.length}
       />
+      <TagFilterBar state={tagState} onChange={setTagFilter} />
 
       <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px`, position: 'relative' }}>
         <div className="gantt-row header" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px`, width: rowWidth }}>
