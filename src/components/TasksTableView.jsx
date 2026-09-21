@@ -208,19 +208,26 @@ export default function TasksTableView({ projectFilter = 'all', savedViewId = nu
                       {col.always && <span className="muted small"> (always shown)</span>}
                     </label>
                     {on && (
+                      // ← / → rather than ↑ / ↓: this is a vertical list of
+                      // columns that the TABLE lays out horizontally, and the
+                      // move is along the table. The glyph followed the list
+                      // while the label followed the table, so the two
+                      // contradicted each other (BUG-033).
                       <span className="tt-column-move">
                         <button
                           type="button" className="btn btn-sm btn-ghost"
                           aria-label={`Move ${col.label} left`}
+                          title={`Move ${col.label} left`}
                           disabled={pos <= 0}
                           onClick={() => moveColumn(col.id, -1)}
-                        >↑</button>
+                        >←</button>
                         <button
                           type="button" className="btn btn-sm btn-ghost"
                           aria-label={`Move ${col.label} right`}
+                          title={`Move ${col.label} right`}
                           disabled={pos === config.columns.length - 1}
                           onClick={() => moveColumn(col.id, 1)}
-                        >↓</button>
+                        >→</button>
                       </span>
                     )}
                   </div>

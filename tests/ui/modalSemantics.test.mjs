@@ -157,3 +157,91 @@ test('a label matches the title it sits next to, rather than contradicting it', 
   }
   assert.deepEqual(offenders, [], 'two different descriptions of one button');
 });
+
+// ─── T-0121 / BUG-033: the glyph must mean what the label says ──────────────
+//
+// The Task table's column reorder buttons drew ↑ / ↓ and were named "left" and
+// "right". The picker is a vertical list; the table it reorders is horizontal.
+// The glyph followed the list and the label followed the table.
+
+const ARROW_MEANS = {
+  '←': 'left', '→': 'right', '↑': 'up', '↓': 'down',
+  '▲': 'up', '▼': 'down', '‹': 'left', '›': 'right',
+};
+const DIRECTIONS = ['left', 'right', 'up', 'down'];
+
+// An accessible name is almost never a bare string: it is
+// `aria-label={`Move ${col.label} left`}`, and the direction word sits AFTER
+// the interpolation. A regex that stops at the first `}` reads "Move ${col"
+// and finds no direction at all — which is how this guard came within one
+// character of passing on the very bug it was written for. Read the whole
+// attribute value (one level of nesting is enough for JSX), then drop the
+// `${…}` holes and keep the literal words around them.
+function attrValue(attrs, name) {
+  const re = new RegExp(`\\b${name}=(?:"([^"]*)"|\\{((?:[^{}]|\\{[^{}]*\\})*)\\})`);
+  const m = re.exec(attrs);
+  if (!m) return null;
+  return (m[1] ?? m[2]).replace(/\$\{[^{}]*\}/g, ' ').replace(/[`'"]/g, ' ');
+}
+
+const directionIn = (text) =>
+  DIRECTIONS.find((w) => new RegExp(`\\b${w}\\b`, 'i').test(text || ''));
+
+// Every icon-only button whose visible glyph is an arrow, across all of
+// src/components — gathered once so a test can also prove it found some.
+function arrowButtons() {
+  const found = [];
+  for (const f of files) {
+    for (const m of read(f).matchAll(
+      /<button\b((?:[^<>]|\{(?:[^{}]|\{[^{}]*\})*\})*?)>\s*([←→↑↓▲▼‹›])\s*<\/button>/gs,
+    )) {
+      found.push({ file: f, attrs: m[1], glyph: m[2] });
+    }
+  }
+  return found;
+}
+
+test('the arrow-button guard has arrow buttons to look at', () => {
+  // Without this, deleting the last arrow button — or breaking the pattern
+  // above — turns the check below into a test that can never fail.
+  const buttons = arrowButtons();
+  assert.ok(buttons.length >= 2, `expected arrow buttons, found ${buttons.length}`);
+  assert.ok(
+    buttons.some((b) => directionIn(attrValue(b.attrs, 'aria-label'))),
+    'expected at least one arrow button whose accessible name names a direction',
+  );
+});
+
+test('a direction word in a button’s name matches the arrow it draws', () => {
+  const offenders = [];
+  for (const { file, attrs, glyph } of arrowButtons()) {
+    const name = attrValue(attrs, 'aria-label');
+    const said = directionIn(name);
+    if (!said) continue;                       // the name names no direction
+    // If both say a direction, they have to say the same one. Anything else
+    // tells a screen-reader user one thing and a sighted user another.
+    const means = ARROW_MEANS[glyph];
+    if (said !== means) {
+      offenders.push(`${file}: "${glyph}" means ${means}, but the name says ${said} — "${name.trim()}"`);
+    }
+    // The title is what a mouse user gets; it must not disagree either.
+    const title = attrValue(attrs, 'title');
+    const titleSaid = directionIn(title);
+    if (titleSaid && titleSaid !== said) {
+      offenders.push(`${file}: the name says ${said}, the tooltip says ${titleSaid}`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'a screen-reader user and a sighted user must be told the same thing');
+});
+
+test('the column picker moves columns along the table, and says so', () => {
+  const src = read('TasksTableView.jsx');
+  assert.match(src, /aria-label=\{`Move \$\{col\.label\} left`\}\s*\n\s*title=\{`Move \$\{col\.label\} left`\}/,
+    'the title must agree with the name');
+  assert.match(src, /onClick=\{\(\) => moveColumn\(col\.id, -1\)\}\s*\n\s*>←<\/button>/,
+    'left is ←, not ↑');
+  assert.match(src, /onClick=\{\(\) => moveColumn\(col\.id, 1\)\}\s*\n\s*>→<\/button>/);
+  assert.doesNotMatch(src, />↑<\/button>/);
+  assert.doesNotMatch(src, />↓<\/button>/);
+});
