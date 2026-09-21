@@ -9,7 +9,6 @@ import { useToast } from './Toast';
 import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function TimerWidget() {
-  const modal = useModalDialog({ onClose: () => { const f = () => setConfirmOpen(false); if (typeof f === "function") f(); } });
   const toast = useToast();
   const { running, state, elapsedMs, elapsedHours, stop } = useTimer();
   const { tasks } = useTasks();
@@ -17,6 +16,15 @@ export default function TimerWidget() {
   const [stopping, setStopping] = useState(false);
   const [comment, setComment] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // `open` matters here: this widget is mounted for the whole life of the app,
+  // but its stop dialog is on screen for a few seconds at a time. Without the
+  // flag the hook would hold a document-capture Escape handler the entire time
+  // and every other Escape in the app — search, Export, inbox, the tour — would
+  // never fire.
+  const modal = useModalDialog({
+    open: confirmOpen,
+    onClose: () => setConfirmOpen(false),
+  });
 
   if (!running || !state) return null;
 
