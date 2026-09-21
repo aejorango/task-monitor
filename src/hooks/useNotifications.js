@@ -1,7 +1,7 @@
 // src/hooks/useNotifications.js — service worker registration + permission +
 // overdue scan on app load (and every 5 min while open).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTasks } from './useTasks';
 import { useSettings } from './useSettings';
 import { todayLocal } from '../services/firebase';
@@ -71,23 +71,65 @@ async function fireOverdueNotification(task, today) {
   }
 }
 
+/**
+ * The current notification permission, kept fresh without polling.
+ *
+ * Settings used to re-read `Notification.permission` on a 1.5-second interval,
+ * which re-rendered the largest component in the app — workspaces, users,
+ * companies, webhooks, automations — every 1.5 s for as long as the page was
+ * open, with no user input (BUG-027).
+ *
+ * Two signals instead, both free when nothing changes:
+ *   - the Permissions API's `change` event, which fires when the user grants or
+ *     blocks from the browser's own UI, in another tab or in site settings;
+ *   - a window `focus` re-read, for Safari and anything else without that API,
+ *     since a permission is changed in browser chrome and coming back to the
+ *     page is the moment it matters.
+ *
+ * `refresh()` is for a component that has just asked for permission itself.
+ */
+export function useNotificationPermission() {
+  const [permission, setPermission] = useState(getNotificationPermission);
+  const refresh = useCallback(() => setPermission(getNotificationPermission()), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let status = null;
+    const onChange = () => { if (!cancelled) setPermission(getNotificationPermission()); };
+
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'notifications' })
+        .then((s) => {
+          if (cancelled) return;
+          status = s;
+          // Read from Notification.permission rather than `s.state`, so the two
+          // sources can never disagree about the same thing.
+          s.addEventListener?.('change', onChange);
+          if (!s.addEventListener) s.onchange = onChange;
+          onChange();
+        })
+        .catch(() => {});
+    }
+
+    // Works everywhere, including where the Permissions API does not list
+    // 'notifications' at all.
+    window.addEventListener('focus', onChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onChange);
+      status?.removeEventListener?.('change', onChange);
+      if (status && status.onchange === onChange) status.onchange = null;
+    };
+  }, []);
+
+  return { permission, refresh };
+}
+
 export function useOverdueScan() {
   const { tasks, userId } = useTasks();
   const { settings } = useSettings();
   const prefs = { ...DEFAULT_DUE_ALERT_SETTINGS, ...(settings.dueAlerts || {}) };
-  const [permission, setPermission] = useState(getNotificationPermission());
-
-  // Listen for permission changes (some browsers fire a 'change' event)
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.permissions?.query) return;
-    let cancelled = false;
-    navigator.permissions.query({ name: 'notifications' }).then((status) => {
-      if (cancelled) return;
-      const update = () => setPermission(status.state);
-      status.onchange = update;
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  const { permission, refresh } = useNotificationPermission();
 
   useEffect(() => {
     // The topbar switch is presented as the on/off control for due-task alerts,
@@ -122,5 +164,5 @@ export function useOverdueScan() {
     return () => { cancelled = true; clearInterval(id); };
   }, [tasks, permission, userId, prefs.enabled, prefs.leadDays]);
 
-  return { permission, refresh: () => setPermission(getNotificationPermission()) };
+  return { permission, refresh };
 }

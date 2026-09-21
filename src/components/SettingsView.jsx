@@ -41,7 +41,7 @@ import {
 } from '../services/firebase';
 import { useUserProfile, isOperatorProfile } from '../hooks/useUserProfile';
 import {
-  getNotificationPermission,
+  useNotificationPermission,
   requestNotificationPermission,
 } from '../hooks/useNotifications';
 import {
@@ -79,7 +79,10 @@ export default function SettingsView() {
   const { workspaces } = useWorkspaces();
   const { userId } = useAuth();
   const { profile } = useUserProfile(userId);
-  const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
+  // Kept fresh by the Permissions API and a window focus re-read, not by a
+  // 1.5-second interval that re-rendered this whole page for as long as it was
+  // open (BUG-027). `refreshNotifPerm` is for after we ask for it ourselves.
+  const { permission: notifPerm, refresh: refreshNotifPerm } = useNotificationPermission();
   const [anthroKey, setAnthroKey]     = useState(getAnthropicKey());
   const [anthroModel, setAnthroModel] = useState(getAnthropicModel());
   const [aiKeyVisible, setAiKeyVisible] = useState(false);
@@ -123,11 +126,6 @@ export default function SettingsView() {
     { id: 'about',    label: 'About' },
   ];
 
-  // Keep permission state fresh
-  useEffect(() => {
-    const id = setInterval(() => setNotifPerm(getNotificationPermission()), 1500);
-    return () => clearInterval(id);
-  }, []);
 
   const handleSignOut = async () => {
     if (!await ask.confirm({ title: 'Sign out of Task Monitor?', confirmLabel: 'Yes' })) return;
@@ -164,7 +162,7 @@ export default function SettingsView() {
         log.push(`requestPermission threw: ${e.message || e}`);
       }
     }
-    setNotifPerm(perm);
+    refreshNotifPerm();
 
     if (perm === 'denied') {
       failed('Notifications are blocked for this site. Click the lock icon next to the address bar, then allow notifications, and try again.');
