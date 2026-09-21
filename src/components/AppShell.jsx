@@ -44,6 +44,19 @@ const VIEWS = [
   { id: 'settings',       label: 'Settings',         icon: 'settings' },
 ];
 
+// Views that render inside the shell but have no sidebar entry of their own.
+const UNLISTED_VIEWS = [
+  { id: 'invite', label: 'Invitation' },
+];
+
+/** Every view the app can actually render inside the shell. */
+export const RENDERABLE_VIEWS = [...VIEWS, ...UNLISTED_VIEWS];
+
+/** Is this hash a page that exists? Used by the topbar and by the not-found card. */
+export function isKnownView(view) {
+  return RENDERABLE_VIEWS.some((v) => v.id === view);
+}
+
 // Sidebar-only grouping: some views collapse under a parent that toggles
 // open/closed on click — the parent isn't a view itself. Declarative so new
 // groups can be added without duplicating the group-building logic below.
@@ -114,7 +127,12 @@ export function useRoute() {
 
 export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget, userProfile }) {
   const online = useOnline();
-  const current = VIEWS.find((v) => v.id === route.view) || VIEWS[0];
+  // A neutral fallback, not VIEWS[0]. The list's order is cosmetic, so falling
+  // back to its first entry painted "Ask AI" over whatever was really on screen
+  // — an unrecognised hash, an invite, a saved view pointing at a removed page
+  // (BUG-025). The app's own name claims nothing.
+  const current = RENDERABLE_VIEWS.find((v) => v.id === route.view)
+    || { id: route.view, label: 'Task Monitor' };
   const activeWs = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
   const [sidebarOpen, setSidebarOpen] = useState(false);

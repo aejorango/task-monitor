@@ -12,7 +12,8 @@ import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import { useRecurrenceCatchUp } from './hooks/useRecurrenceCatchUp';
 import { useSettings } from './hooks/useSettings';
-import AppShell, { useRoute } from './components/AppShell';
+import AppShell, { useRoute, isKnownView } from './components/AppShell';
+import NotFoundView from './components/NotFoundView';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
 import DueTaskAlertModal from './components/DueTaskAlertModal';
@@ -224,6 +225,9 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'timesheet'      && <TimesheetView projectFilter={route.projectFilter} />}
         {route.view === 'trash'          && <TrashView />}
         {route.view === 'how-to-use'     && <HowToUseView />}
+        {/* A hash that names no page. Without this the content area is simply
+            blank, which reads as a crash rather than as a bad link. */}
+        {!isKnownView(route.view) && <NotFoundView view={route.view} navigate={navigate} />}
       </Suspense>
       </ErrorBoundary>
     </AppShell>
