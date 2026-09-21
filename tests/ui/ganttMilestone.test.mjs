@@ -209,3 +209,24 @@ test('a milestone stays visible and grabbable at month zoom', () => {
   assert.doesNotMatch(block.slice(0, 300), /transform: rotate/,
     'a rotated diamond moves the resize handles away from where a user reaches for them');
 });
+
+// ─── T-0091: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records the rule, so a future change does not undo it', () => {
+  const claude = read('CLAUDE.md');
+  assert.match(claude, /ganttGeometry/, 'the module belongs in the file map');
+  assert.match(claude, /one-day milestone/, 'the rule itself, in one line');
+});
+
+test('the README lists the two new suites and the harness', () => {
+  const readme = read('README.md');
+  assert.match(readme, /src\/services\/ganttGeometry\.test\.mjs/);
+  assert.match(readme, /tests\/ui\/ganttMilestone\.test\.mjs/);
+  assert.match(readme, /\/dev\/gantt\.html/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = read('CHANGELOG.md');
+  assert.match(log, /T-0089 — Gantt draws an empty row/);
+  assert.match(log, /T-0090 — Gantt draws an empty row/);
+});

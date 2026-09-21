@@ -323,6 +323,7 @@ src/
 │   ├── shareLinks.js         ← the read-only snapshot a client outside can open
 │   ├── recurrenceSchedule.js ← which occurrences are due, and which are missing
 │   ├── customFields.js       ← a project's own fields as chips, columns and labels
+│   ├── ganttGeometry.js      ← where a plan bar sits, and what a drag on it writes
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
 ├── App.jsx                   ← root: routes view based on URL hash
@@ -458,6 +459,7 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Adding an invite field without its flat twin. `pendingInvites` is an array of maps: rules cannot search it, so `pendingInviteEmails` (array-contains) and `pendingInviteRoles` (role lookup) must be written in the same update. `inviteFields()` / `revokeInviteFields()` do all three.
 - ❌ Persisting due-alert snooze/skip on the task document — tasks are shared across workspace members; one person's snooze must not silence a teammate. Keep it in per-device localStorage via `dueAlerts.js`.
 - ❌ Gating the due-alert prompt block on an API key — use `useAiStatus().available`; CLI users have no key. When AI is unavailable the block falls back to `buildFallbackPrompt` and labels it as a template.
+- ❌ Requiring both plan dates to draw a Gantt bar. The row filter admits a task with **any** one of its four dates, and the app's dominant create path — quick-add, and the natural-language parser behind it — writes only an end date, so the commonest task in the app used to get a row with a title and a blank track that dragging could not fix. `effectivePlan()` in `services/ganttGeometry.js` makes a one-date plan a **one-day milestone** on that date; `dragOrigin()` gives it a real origin, so dragging its left edge is how it gains the `plan.startDate` it never had. Geometry and drag arithmetic live in that pure module — not inline in the component, where they were untestable.
 - ❌ Gantt drag persistence: pointer events have to be on `window` for `pointermove`/`pointerup` (not just the bar element) — otherwise releases outside the bar leave the drag state stuck.
 - ❌ Showing a shell command, a bridge URL or a CLI name to anyone but the operator. `KnowledgeSection` takes `isOperator` (approved superadmin only); the wording for both audiences comes from `knowledgeCopy(status, { isOperator })` in `services/knowledgeCopy.js`, tested by `knowledgeCopy.test.mjs` and `tests/ui/KnowledgeSection.test.mjs`.
 - ❌ Spawning `notebooklm` anywhere but `bridge/notebooklm.mjs` — same rule as `claude` in `bridge/ai.mjs`. A component, a hook and `src/services/*` all reach it through `/knowledge/*`.
