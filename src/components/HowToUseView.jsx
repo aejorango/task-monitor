@@ -934,12 +934,13 @@ const WORKFLOWS = [
   {
     title: 'When a task comes due',
     steps: [
-      'On the due date (or earlier, per Settings → Due-task alerts) an alert opens on whatever view you are in. It shows one task at a time.',
+      'Due-task alerts are off until you ask for them: flick the alerts switch in the top bar (or Settings → Due-task alerts).',
+      'Once on, the alert opens on the due date (or earlier, per Settings → Due-task alerts) on whatever view you are in. It shows one task at a time.',
       'Read the ready-made GenAI prompt. Press Edit to tweak it, Copy to paste it into any GenAI tool, or Run to get the deliverable right there.',
       'Finished? Press Done (or D) — the task closes and the next due task appears, if any.',
       'Busy? Press Snooze (or Esc) for the default interval, or open the ▾ menu for 5 min to 2 h or a custom number of minutes. It comes back at that time.',
       'Not today? Press Skip (or S) — it stays quiet until tomorrow. Open task → jumps to the full editor.',
-      'Too many at once? The × in the corner closes every alert for the rest of the day. The 🔔 in the top bar shows how many are waiting and turns them back on.',
+      'Too many at once? The × in the corner closes every alert for the rest of the day. The alerts switch in the top bar shows how many are waiting, and turning it off and on again brings them straight back.',
     ],
   },
   {

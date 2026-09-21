@@ -117,7 +117,7 @@ export default function DueTaskAlertModal({ navigate }) {
   const onCloseAll = useCallback(() => {
     const n = remaining;
     muteAll();
-    showToast(`Closed ${n} alert${n === 1 ? '' : 's'} for today — resume from the 🔔 in the top bar`);
+    showToast(`Closed ${n} alert${n === 1 ? '' : 's'} for today — resume from the alerts switch in the top bar`);
   }, [remaining, muteAll, showToast]);
 
   const onOpen = useCallback(() => {
@@ -231,7 +231,7 @@ export function AlertDialog({
               className="due-alert-close"
               onClick={onCloseAll}
               aria-label={`Close all ${remaining} due-task alerts for today`}
-              title={`Close all alerts for today (${remaining}). Resume any time from the 🔔 in the top bar.`}
+              title={`Close all alerts for today (${remaining}). Resume any time from the alerts switch in the top bar.`}
             >×</button>
           </span>
         </div>
