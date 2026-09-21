@@ -214,3 +214,24 @@ test('the confirm behind the saved-view delete is written once', () => {
   const confirms = (shell.match(/Remove saved view "\$\{v\.name\}"\?/g) || []).length;
   assert.equal(confirms, 1, 'it used to be written once per input, and could drift');
 });
+
+// ─── T-0120: the docs carry it too ──────────────────────────────────────────
+
+test('CLAUDE.md records the contract and the input exception', () => {
+  const claude = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8');
+  assert.match(claude, /handles only Enter/);
+  assert.match(claude, /Space must `preventDefault`/);
+  assert.match(claude, /still correct on a \*\*text input\*\*/,
+    'the exception matters as much as the rule');
+  assert.match(claude, /useActivate\.js/, 'the hook belongs in the map');
+});
+
+test('the README lists the new suite', () => {
+  assert.match(fs.readFileSync(path.join(root, 'README.md'), 'utf8'), /tests\/ui\/activateProps\.test\.mjs/);
+});
+
+test('the changelog records both halves of the fix', () => {
+  const log = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+  assert.match(log, /T-0118 — Clickable rows respond to Enter/);
+  assert.match(log, /T-0119 — Clickable rows respond to Enter/);
+});
