@@ -13,6 +13,7 @@
 export const VIEW_REGISTRY = [
   { id: 'ask-ai',         label: 'Ask AI',         icon: 'sparkles',  words: ['ask', 'ai', 'question'] },
   { id: 'dashboard',      label: 'Dashboard',      icon: 'dashboard', words: ['home', 'today', 'overview'] },
+  { id: 'my-week',        label: 'My Week',        icon: 'calendar',  words: ['my week', 'mine', 'assigned to me', 'my tasks', 'plan', 'personal', 'week'] },
   { id: 'projects',       label: 'Projects',       icon: 'projects',  words: ['phases', 'templates'] },
   { id: 'board',          label: 'Kanban',         icon: 'board',     words: ['board', 'kanban', 'tasks', 'columns'] },
   { id: 'calendar',       label: 'Calendar',       icon: 'calendar',  words: ['month', 'due dates'] },

@@ -10,21 +10,18 @@ import { tagFilterState } from '../services/tagFilter';
 import TagFilterBar from './TagFilterBar';
 import { useSettings } from '../hooks/useSettings';
 import { updateTask } from '../services/firebase';
+import { moveTaskToDay } from '../services/workload';
 import TaskEditor from './TaskEditor';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
 
-function parseISO(str) {
-  if (!str) return null;
-  const [y, m, d] = str.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
+// The date arithmetic a drop needs now lives in services/workload.js, so all
+// this file still needs is a formatter for the grid it draws.
 function iso(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-const DAY = 24 * 60 * 60 * 1000;
 
 export default function CalendarView({ projectFilter, initialTagFilter }) {
   const toast = useToast();
@@ -106,23 +103,15 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
 
   const onDragEnd = async (e) => {
     setActiveDrag(null);
-    const taskId  = e.active.id;
     const newDate = e.over?.id;
     if (!newDate) return;
-    const task = filtered.find((t) => t.id === taskId);
-    if (!task) return;
-    const oldEnd = task.plan?.endDate;
-    if (!oldEnd || oldEnd === newDate) return;
-
-    // Compute date delta in days. If a startDate exists, shift it by the same amount
-    // to preserve the duration.
-    const updates = { 'plan.endDate': newDate };
-    if (task.plan?.startDate) {
-      const delta = Math.round((parseISO(newDate) - parseISO(oldEnd)) / DAY);
-      const newStart = new Date(parseISO(task.plan.startDate));
-      newStart.setDate(newStart.getDate() + delta);
-      updates['plan.startDate'] = iso(newStart);
-    }
+    const task = filtered.find((t) => t.id === e.active.id);
+    // `moveTaskToDay` is the one place that decides what a drop on a day means
+    // (T-0131). This used to be a second copy, and it returned early on a task
+    // with no end date — so the tasks most in need of a day were exactly the
+    // ones the calendar refused to give one.
+    const updates = moveTaskToDay(task, newDate);
+    if (!updates) return;
     try { await updateTask(task.id, updates); }
     catch (err) {
       console.error('Could not reschedule task:', err);

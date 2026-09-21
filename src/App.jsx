@@ -13,7 +13,7 @@ import { useOverdueScan } from './hooks/useNotifications';
 import { useRecurrenceCatchUp } from './hooks/useRecurrenceCatchUp';
 import { useSettings } from './hooks/useSettings';
 import AppShell, { useRoute } from './components/AppShell';
-import { isKnownView } from './services/views';
+import { isKnownView, RENDERABLE_VIEWS } from './services/views';
 import NotFoundView from './components/NotFoundView';
 import Board from './components/Board';   // eager: most common entry point
 import TimerWidget from './components/TimerWidget';
@@ -27,6 +27,7 @@ const TasksTableView    = lazy(() => import('./components/TasksTableView'));
 const TrashView         = lazy(() => import('./components/TrashView'));
 const TimesheetView     = lazy(() => import('./components/TimesheetView'));
 const WorkloadView      = lazy(() => import('./components/WorkloadView'));
+const MyWeekView        = lazy(() => import('./components/MyWeekView'));
 const SharedViewPage    = lazy(() => import('./components/SharedViewPage'));
 const GanttView         = lazy(() => import('./components/GanttView'));
 const CalendarView      = lazy(() => import('./components/CalendarView'));
@@ -47,14 +48,15 @@ const AskAiView         = lazy(() => import('./components/AskAiView'));
 
 // What each route is called in the sidebar — the error card says "We could not
 // show the Gantt page", not "view 'gantt' threw".
+// What the error boundary calls the page it caught. Derived from the registry
+// rather than listed again: this was a hand-kept copy and had already drifted —
+// Task table, Workload's neighbours and every page added since were missing, so
+// a crash on one of them was reported as a crash on "" (T-0131).
 const VIEW_NAMES = {
-  dashboard: 'Dashboard', board: 'Board', table: 'Activity Log', gantt: 'Gantt',
-  wbs: 'WBS', goals: 'Goals', messages: 'Messages', minutes: 'Minutes',
-  calendar: 'Calendar', review: 'Review', artifacts: 'Artifacts',
-  analytics: 'Analytics', projects: 'Projects', settings: 'Settings',
-  'work-performed': 'Work Performed', timesheet: 'Timesheet', workload: 'Workload',
-  'how-to-use': 'How to use',
-  'ask-ai': 'Ask AI', trash: 'Trash', invite: 'invite', shared: 'shared page',
+  ...Object.fromEntries(RENDERABLE_VIEWS.map((v) => [v.id, v.label])),
+  // `shared` is the public route; it renders outside the shell, so it is not in
+  // the registry and needs its own name here.
+  shared: 'shared page',
 };
 
 function ViewSpinner() {
@@ -213,6 +215,9 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
         {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} />}
         {route.view === 'workload'  && <WorkloadView projectFilter={route.projectFilter} />}
+        {/* No projectFilter: My Week spans every workspace on purpose, so a
+            one-project filter would be the opposite of what it is for. */}
+        {route.view === 'my-week'   && <MyWeekView />}
         {route.view === 'goals'     && <GoalsView />}
         {route.view === 'messages'  && <MessagesView />}
         {route.view === 'minutes'   && <MinutesView projectFilter={route.projectFilter} />}

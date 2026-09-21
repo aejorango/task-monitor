@@ -167,11 +167,18 @@ test('tasks with no due date are offered, with what to do about them', () => {
 
 // ─── wiring ─────────────────────────────────────────────────────────────────
 
-test('the page is routed, named and code-split like every other view', () => {
+test('the page is routed, named and code-split like every other view', async () => {
   const app = read('src', 'App.jsx');
   assert.match(app, /const WorkloadView\s+= lazy\(\(\) => import\('\.\/components\/WorkloadView'\)\)/);
-  assert.match(app, /workload: 'Workload'/);
   assert.match(app, /route\.view === 'workload'\s+&& <WorkloadView projectFilter=\{route\.projectFilter\} \/>/);
+
+  // The error boundary's name for the page used to be a hand-kept map in
+  // App.jsx, which had already drifted; it is derived from the registry now
+  // (T-0131), so what matters is that the registry names it.
+  const { RENDERABLE_VIEWS } = await import('../../src/services/views.js');
+  assert.equal(RENDERABLE_VIEWS.find((v) => v.id === 'workload')?.label, 'Workload');
+  assert.match(app, /RENDERABLE_VIEWS\.map\(\(v\) => \[v\.id, v\.label\]\)/,
+    'a second list of page names is how a crash gets reported on the wrong page');
 });
 
 test('it lives under Board in the sidebar, which is where the audit put it', async () => {

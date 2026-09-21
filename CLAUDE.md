@@ -123,6 +123,13 @@ links existing tasks to them. **Idempotent** — safe to call repeatedly.
 3. **Gantt** — Timeline. Plan bars are draggable (resize + move). SVG dependency arrows. Rows grouped by project, sorted by earliest start.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 9. **Review** — KPIs, hours-by-project, daily-hours strip, overdue/completed/bottleneck lists.
+5. **My Week** — everything assigned to *you*, from **every workspace you belong to**, in
+   seven day columns honouring the week-start preference, with a "No date yet" rail to drag
+   from and a "Still open from before" rail so last week's work cannot vanish. Each card
+   names its workspace, because the point is that they are mixed. Bucketing is the pure
+   `services/myWeek.js`; a drop goes through `moveTaskToDay` in `services/workload.js`.
+   Reads through `subscribeToMyTasksAcrossWorkspaces` — filtered at the server, because
+   this is a page people leave open.
 6. **Task table** — every task as a configurable report: pick the columns and their
    order, group by project / phase / status / priority / assignee, sort by any column,
    then save the whole arrangement as a saved view or export it. Logic lives in the pure
@@ -310,6 +317,7 @@ src/
 │   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
 │   ├── WorkloadView.jsx     ← Board → Workload: people × weeks, drag to rebalance
+│   ├── MyWeekView.jsx       ← My Week: my tasks from every workspace, by day
 │   ├── ShareLinksPanel.jsx  ← project editor: publish / refresh / turn off a link
 │   ├── SharedViewPage.jsx   ← the public route: fetches one snapshot, no sign-in
 │   ├── SharedSnapshot.jsx   ← renders it (board or timeline), fetches nothing
@@ -346,6 +354,7 @@ src/
 │   ├── logTime.js            ← which task "Log time" means, and what it says
 │   ├── dueChip.js            ← the due date as a board card shows it
 │   ├── bulkTasks.js          ← "do this to the ten I picked": actions, plan, undo
+│   ├── myWeek.js             ← my week across workspaces: day columns and two rails
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
 │   ├── workload.js           ← the people × weeks grid, and what a drop means
@@ -480,6 +489,18 @@ npm run deploy:pages # legacy: push dist/ to the gh-pages branch
 - ❌ Calling `useModalDialog` above the early return of a component that is always mounted. The hook installs a **document-capture** `keydown` listener whose Escape branch calls `stopPropagation()`, which kills the key before anything else in the app sees it — so one such call site made Escape dead for the ⌘K dropdown, the Export ▾ menu, the inbox panel, the Task-table column picker, the tutorial tour and the due-task alert all at once. A component that owns its modal's open/closed state passes `open: <that state>`; the hook then does nothing at all while closed — no listener, no focus moved in, no focus restored. The Escape branch also returns early unless the panel is really in the document, so a forgotten flag cannot resurrect the bug, and `tests/ui/escapeKey.test.mjs` fails the build if a new call site needs the flag and does not pass it.
 - ❌ A modal that is only a styled `div`. It needs `useModalDialog` (or the `Modal` component for a new one): without it there is no announcement, no Escape, and Tab walks straight out into the page behind. `tests/ui/modalSemantics.test.mjs` fails the build otherwise. `DueTaskAlertModal` is the one exception — it is `role="alertdialog"` with its own focus handling.
 - ❌ A `div` with `role="button"` that handles only Enter. The ARIA button pattern is a contract: Enter **and** Space both activate, and Space must `preventDefault` or the page scrolls instead. Every such row was made keyboard-reachable by hand and most got it half-right. Spread `activateProps()` from `hooks/useActivate.js` — it supplies `role`, `tabIndex`, `onClick` and `onKeyDown` as one set, so they cannot drift. Enter-only is still correct on a **text input**, where Enter submits and Space types a space; `tests/ui/activateProps.test.mjs` tells the two apart and fails the build on the second.
+- ❌ A second copy of what a drop means. `services/workload.js` owns both:
+  `moveTaskPlan` (a different WEEK, keeping the weekday) and `moveTaskToDay` (a
+  day column, keeping the duration). The Calendar had its own inline version and
+  it returned early on `!oldEnd` — so a task with no date could not be dropped on
+  a day, which is precisely the task that needs one. Dropping on `DAY_UNSCHEDULED`
+  clears the date, and the start date with it: a start with no end is a plan that
+  began and will never finish.
+- ❌ Keeping a second list of page NAMES either. `VIEW_NAMES` in App.jsx — what the
+  error boundary calls the page it caught — was hand-kept and had already drifted
+  (Task table and others were missing, so a crash there was reported on ""). It is
+  derived from `RENDERABLE_VIEWS` now; only `shared`, which renders outside the
+  shell, is named by hand.
 - ❌ Writing a bulk action one document at a time, or deciding what it writes inside
   the component. `services/bulkTasks.js` is the one vocabulary (the six actions and
   the kind of value each needs, so a picker is offered and an id is never typed),

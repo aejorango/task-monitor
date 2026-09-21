@@ -61,6 +61,7 @@ that gate is enforced in the security rules, not just on screen.
 | Page | What it does |
 | --- | --- |
 | Dashboard | Today's work, what's overdue, what moved |
+| My Week | Everything assigned to you, from every workspace, laid out by day |
 | Board | Kanban with drag-and-drop, swim-lanes by phase, tag filters, quick-add |
 | Task table | Every task as a report: pick the columns, group, sort, save the arrangement — and change many at once |
 | Activity Log | Every logged entry, sortable, with bulk actions and export |
@@ -540,6 +541,9 @@ run together.
 | `tests/ui/bulkTasksUi.test.mjs` | Select-all, shift-range, ⌘-click, and the bar's plain-language pickers |
 | `tests/ui/bulkTasksFlow.test.mjs` | Ten selected → High → one batch, a toast with Undo, selection cleared |
 | `tests/rules/bulkTasks.rules.test.mjs` | One task you may not write takes the whole batch down |
+| `src/services/myWeek.test.mjs` | One person's week across workspaces, and what a drop on a day writes |
+| `tests/ui/myWeekApi.test.mjs` | The read is filtered at the server, and has its index |
+| `tests/ui/myWeek.test.mjs` | The page is registered, routed, and draws both rails |
 | `tests/ui/*.test.mjs` | Components, rendered into a real DOM (jsdom) |
 | `tests/rules/*.test.mjs` | firestore.rules and storage.rules, against the emulators |
 
@@ -616,6 +620,7 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/due-chip.html` | A board card at every due state — overdue, today, this week, later, done |
 | `/dev/ai-off.html` | What each reader is told when AI is unavailable, operator and not |
 | `/dev/bulk-tasks.html` | The task table's row selection and bulk bar, against sample tasks |
+| `/dev/my-week.html` | My Week: the day grid, both rails, and what each drop writes |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 | `/dev/escape-key.html` | Who hears Escape: the real timer widget beside the five handlers it used to silence |
 | `/dev/gantt.html` | Gantt rows with every shape of plan (`?zoom=day\|week\|month`), and what a drag writes |
