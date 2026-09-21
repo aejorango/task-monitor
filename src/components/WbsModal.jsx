@@ -7,11 +7,13 @@
 
 import { useState } from 'react';
 import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import TaskQuickAdd from './TaskQuickAdd';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
-import { downloadFile } from '../services/download';
+import ExportButton from './ExportButton';
+import { buildWbsDocument } from '../services/activityExport';
 import { useModalDialog } from '../hooks/useModalDialog';
 
 export default function WbsModal({ project, tasks: tasksProp, projects: projectsProp, onClose }) {
@@ -22,6 +24,9 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
   // Callers may pass tasks explicitly (e.g. Goals links a project from another
   // workspace, whose tasks aren't in the active-workspace useTasks()).
   const tasks = tasksProp || wsTasks;
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const { workspaces } = useWorkspaces();
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const projects = projectsProp || wsProjects;
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -63,25 +68,14 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
   const PRIO_CLS     = { high: 'badge-soft-danger', medium: 'badge-soft-warn', low: 'badge-soft-muted' };
 
   // ── CSV export ──────────────────────────────────────────────────────────
-  const exportCsv = () => {
-    const escape = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const rows = [['WBS Code', 'Level', 'Name', 'Status', 'Priority', 'Due Date', 'Subtasks Done', 'Subtasks Total', 'Hours Logged'].join(',')];
-    rows.push([`1`, 'Project', project.name, '', '', '', '', '', ''].map(escape).join(','));
-    allPhaseGroups.forEach((ph, pi) => {
-      const phaseTasks = byPhase[ph.id] || [];
-      const pCode = `1.${pi + 1}`;
-      rows.push([pCode, 'Phase', ph.name, '', '', '', '', '', ''].map(escape).join(','));
-      phaseTasks.forEach((t, ti) => {
-        const tCode = `${pCode}.${ti + 1}`;
-        const doneS  = (t.subtasks || []).filter((s) => s.done).length;
-        const totalS = (t.subtasks || []).length;
-        rows.push([tCode, 'Task', t.title, t.status, t.priority || '', t.plan?.endDate || '', doneS, totalS, t.totalHoursLogged || 0].map(escape).join(','));
-        (t.subtasks || []).forEach((st, si) => {
-          rows.push([`${tCode}.${si + 1}`, 'Subtask', st.text, st.done ? 'done' : 'todo', '', '', '', '', ''].map(escape).join(','));
-        });
-      });
-    });
-    downloadFile(`${project.name}-WBS`, 'csv', rows.join('\n'));
+  // Export ▾ instead of a lone CSV button. buildWbsDocument keeps the project's
+  // own phase order — that order is the plan — and names a task whose phase was
+  // deleted rather than dropping it (BUG-031).
+  const exportProps = {
+    build: () => buildWbsDocument(project, tasks, { memberProfiles: activeWorkspace?.memberProfiles || {} }),
+    baseName: `${project.name}-WBS`,
+    kind: 'table',
+    title: 'Save this breakdown as a spreadsheet, a PDF or a CSV',
   };
 
   return (
@@ -233,9 +227,7 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
             </>
           )}
           <div style={{ flex: 1 }} />
-          <button className="btn btn-sm" onClick={exportCsv} disabled={totalTasks === 0}>
-            ⬇ Export CSV
-          </button>
+          <ExportButton {...exportProps} className="btn btn-sm" disabled={totalTasks === 0} />
           <button className="btn" onClick={onClose}>Close</button>
         </div>
       </div>

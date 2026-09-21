@@ -313,7 +313,7 @@ export const IMPORT_KINDS = {
       { key: 'date', label: 'Date', required: true, aliases: ['date', 'logged', 'day'], parse: (v) => (String(v || '').trim() ? normalizeDate(v) : '') },
       { key: 'project', label: 'Project', aliases: ['project'], parse: (v) => String(v || '').trim() },
       { key: 'phase', label: 'Phase', aliases: ['phase'], parse: (v) => String(v || '').trim() },
-      { key: 'comment', label: 'What was done', aliases: ['activity details', 'comment', 'details', 'description', 'work'], parse: (v) => String(v || '').trim() },
+      { key: 'comment', label: 'What was done', aliases: ['what was done', 'activity details', 'comment', 'details', 'description', 'work'], parse: (v) => String(v || '').trim() },
       { key: 'hours', label: 'Hours', aliases: ['hours', 'hours spent', 'duration', 'time'], parse: normalizeHours },
       { key: 'completion', label: 'Completion', aliases: ['completion', 'completion status', 'status'], parse: normalizeCompletion },
       { key: 'output', label: 'Output links', aliases: ['output link', 'output', 'attachments', 'links'], parse: parseAttachments },

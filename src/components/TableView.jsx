@@ -9,9 +9,10 @@ import {
 } from '../services/firebase';
 import ActivityEditor from './ActivityEditor';
 import ImportWizard from './ImportWizard';
-import { downloadFile } from '../services/download';
 import { useDialog } from './Dialog';
 import TagFilterBar from './TagFilterBar';
+import ExportButton from './ExportButton';
+import { buildActivityLogDocument } from '../services/activityExport';
 import { tagFilterState } from '../services/tagFilter';
 
 const COLUMNS = [
@@ -126,7 +127,11 @@ export default function TableView({ projectFilter, initialTagFilter }) {
     setSelected(new Set());
   };
 
-  const bulkExport = () => exportCsv(selectedRows);
+  // The same seven formats for a selection as for the whole log — a person who
+  // picked eight rows to send on wants a document, not a CSV (BUG-031).
+  const bulkExportProps = () => exportPropsFor(selectedRows, 'activity-log-selection', {
+    projectById, taskById, projectName: projectById[projectFilter]?.name || null,
+  });
 
   if (loading) return <p className="muted">Loading activity log…</p>;
 
@@ -146,7 +151,12 @@ export default function TableView({ projectFilter, initialTagFilter }) {
           <button className="btn" onClick={() => setWizardOpen(true)} title="Import tasks, projects or activities from a spreadsheet">
             Import
           </button>
-          <button className="btn" onClick={() => exportCsv(sorted)}>Export all CSV</button>
+          <ExportButton
+            {...exportPropsFor(sorted, 'activity-log', {
+              projectById, taskById, projectName: projectById[projectFilter]?.name || null,
+            })}
+            label="Export all"
+          />
         </div>
       </div>
 
@@ -160,7 +170,7 @@ export default function TableView({ projectFilter, initialTagFilter }) {
           onClear={() => setSelected(new Set())}
           onDelete={bulkDelete}
           onComplete={bulkComplete}
-          onExport={bulkExport}
+          exportProps={bulkExportProps()}
         />
       )}
 
@@ -302,7 +312,7 @@ export default function TableView({ projectFilter, initialTagFilter }) {
   );
 }
 
-function BulkBar({ count, onClear, onDelete, onComplete, onExport }) {
+function BulkBar({ count, onClear, onDelete, onComplete, exportProps }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="bulk-bar">
@@ -327,32 +337,22 @@ function BulkBar({ count, onClear, onDelete, onComplete, onExport }) {
           </div>
         )}
       </div>
-      <button className="btn btn-sm" onClick={onExport}>Export CSV</button>
+      <ExportButton {...exportProps} className="btn btn-sm" label="Export" />
       <button className="btn btn-sm btn-danger" onClick={onDelete}>Delete</button>
     </div>
   );
 }
 
-function exportCsv(rows) {
-  const headers = ['Project', 'Phase', 'Task', 'Activity details', 'Date', 'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
-  const escape = (v) => {
-    const s = String(v ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+/**
+ * What the Export ▾ menu hands over: exactly the rows on screen, in the order
+ * they are on screen. `build` runs only when a format is picked.
+ */
+function exportPropsFor(rows, baseName, { projectById, taskById, projectName } = {}) {
+  return {
+    build: () => buildActivityLogDocument(rows, { projectById, taskById, projectName }),
+    baseName,
+    kind: 'table',
+    title: 'Save these entries as a spreadsheet, a document, a PDF or a CSV',
   };
-  const lines = [headers.join(',')];
-  rows.forEach((r) => {
-    lines.push([
-      r._project,
-      r._phase,
-      r._task,
-      r.comment,
-      r.date,
-      r.completionStatus,
-      r.attachments?.map((a) => a.url).join(' | '),
-      r.bottleneckRemarks,
-      r.requestedBy,
-      r.hoursSpent || 0,
-    ].map(escape).join(','));
-  });
-  return downloadFile('task-monitor-activities', 'csv', lines.join('\n'));
 }
+

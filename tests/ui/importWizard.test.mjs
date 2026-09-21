@@ -168,20 +168,22 @@ test('the retired importer is gone, and nothing still reaches for it', () => {
 test('a file exported from the Activity Log maps itself, with nothing to do by hand', async () => {
   const { guessMapping, IMPORT_KINDS } = await import('../../src/services/csv.js');
   // The exact header row exportCsv writes — the old importer's whole reason to exist.
-  const exported = ['Project', 'Phase', 'Task', 'Activity details', 'Date',
-    'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
-  const mapping = guessMapping(exported, 'activities');
+  const { ACTIVITY_COLUMNS } = await import('../../src/services/activityExport.js');
+  const mapping = guessMapping(ACTIVITY_COLUMNS, 'activities');
   const unmapped = IMPORT_KINDS.activities.fields.filter((f) => mapping[f.key] === -1).map((f) => f.label);
   assert.deepEqual(unmapped, [],
     'the fast path the old importer offered is the wizard’s default behaviour');
 });
 
-test('the export header and the import aliases stay in step', () => {
-  const src = fs.readFileSync(path.join(root, 'src', 'components', 'TableView.jsx'), 'utf8');
-  const line = src.split('\n').find((l) => l.includes("const headers = ['Project'"));
-  assert.ok(line, 'exportCsv’s header row moved');
-  assert.match(line, /'Activity details'/);
-  assert.match(line, /'Output link'/,
+test('what the app exports, the app can import again', async () => {
+  // Since T-0116 the Activity Log exports through services/activityExport.js,
+  // so the round-trip is a property of two modules rather than of one inline
+  // header row: every exported column must be one the wizard recognises.
+  const { ACTIVITY_COLUMNS } = await import('../../src/services/activityExport.js');
+  const { guessMapping, IMPORT_KINDS } = await import('../../src/services/csv.js');
+  const mapping = guessMapping(ACTIVITY_COLUMNS, 'activities');
+  const unmapped = IMPORT_KINDS.activities.fields.filter((f) => mapping[f.key] === -1).map((f) => f.label);
+  assert.deepEqual(unmapped, [],
     'renaming an exported column without adding the alias breaks round-tripping');
 });
 

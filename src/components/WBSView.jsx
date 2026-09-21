@@ -12,7 +12,8 @@ import ActivityEditor from './ActivityEditor';
 import ActivityLogger from './ActivityLogger';
 import TaskEditor from './TaskEditor';
 import TaskQuickAdd from './TaskQuickAdd';
-import { downloadFile } from '../services/download';
+import ExportButton from './ExportButton';
+import { buildActivityLogDocument, buildWbsDocument } from '../services/activityExport';
 import { useModalDialog } from '../hooks/useModalDialog';
 
 const ZOOMS = [
@@ -829,20 +830,19 @@ function ScopedActivityLogModal({ scope, onClose }) {
     : scope.type === 'phase' ? 'phase'
     : 'task';
 
-  const exportCsv = () => {
-    const headers = ['Project', 'Phase', 'Task', 'Activity details', 'Date', 'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
-    const escape = (v) => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const lines = [headers.join(',')];
-    rows.forEach((r) => {
-      lines.push([
-        project.name, r._phase, r._task, r.comment, r.date, r.completionStatus,
-        r._outputs.map((a) => a.url).join(' | '), r.bottleneckRemarks, r.requestedBy, r.hoursSpent || 0,
-      ].map(escape).join(','));
-    });
-    downloadFile(`${scopeTitle}-activities`, 'csv', lines.join('\n'));
+  // Export ▾ instead of a lone CSV button: this modal is one of the pages
+  // somebody sends to a manager (BUG-031). `build` runs only when a format is
+  // picked, so opening the modal costs nothing.
+  const exportProps = {
+    build: () => buildActivityLogDocument(rows, {
+      projectById: { [project.id]: project },
+      taskById,
+      projectName: project.name,
+      title: `${scopeTitle} — activity log`,
+    }),
+    baseName: `${scopeTitle}-activities`,
+    kind: 'table',
+    title: 'Save these entries as a spreadsheet, a PDF or a CSV',
   };
 
   return (
@@ -927,7 +927,7 @@ function ScopedActivityLogModal({ scope, onClose }) {
 
           <div className="modal-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
             {rows.length > 0 && (
-              <button className="btn btn-sm" onClick={exportCsv}>⬇ Export CSV</button>
+              <ExportButton {...exportProps} className="btn btn-sm" />
             )}
             <div style={{ flex: 1 }} />
             {scope.type !== 'task' && scopeTasks.length > 0 && (

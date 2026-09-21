@@ -34,7 +34,8 @@ import NotebookPicker from './NotebookPicker';
 import TemplateGallery from './TemplateGallery';
 import ShareLinksPanel from './ShareLinksPanel';
 import { useToast } from './Toast';
-import { downloadFile } from '../services/download';
+import ExportButton from './ExportButton';
+import { buildActivityLogDocument, buildWbsDocument } from '../services/activityExport';
 import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
 import { useDialog } from './Dialog';
@@ -383,28 +384,16 @@ function ProjectActivityLogModal({ project, onClose }) {
 
   const totalHours = rows.reduce((sum, r) => sum + (r.hoursSpent || 0), 0);
 
-  const exportCsv = () => {
-    const headers = ['Project', 'Phase', 'Task', 'Activity details', 'Date', 'Completion', 'Output link', 'Bottlenecks', 'Requested by', 'Hours'];
-    const escape = (v) => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const lines = [headers.join(',')];
-    rows.forEach((r) => {
-      lines.push([
-        project.name,
-        r._phase,
-        r._task,
-        r.comment,
-        r.date,
-        r.completionStatus,
-        r._outputs.map((a) => a.url).join(' | '),
-        r.bottleneckRemarks,
-        r.requestedBy,
-        r.hoursSpent || 0,
-      ].map(escape).join(','));
-    });
-    downloadFile(`${project.name}-activities`, 'csv', lines.join('\n'));
+  const exportProps = {
+    build: () => buildActivityLogDocument(rows, {
+      projectById: { [project.id]: project },
+      taskById,
+      projectName: project.name,
+      title: `${project.name} — activity log`,
+    }),
+    baseName: `${project.name}-activities`,
+    kind: 'table',
+    title: 'Save these entries as a spreadsheet, a PDF or a CSV',
   };
 
   return (
@@ -496,9 +485,7 @@ function ProjectActivityLogModal({ project, onClose }) {
         <div className="modal-actions">
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" onClick={exportCsv} disabled={rows.length === 0}>
-            ⬇ Download CSV
-          </button>
+          <ExportButton {...exportProps} className="btn btn-primary" disabled={rows.length === 0} label="Export" />
         </div>
       </div>
     </div>
