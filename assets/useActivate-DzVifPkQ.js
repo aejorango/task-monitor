@@ -1,0 +1,1 @@
+function e(e,{disabled:t=!1,label:n}={}){return t?{role:`button`,"aria-disabled":`true`,tabIndex:-1,...n?{"aria-label":n}:{}}:{role:`button`,tabIndex:0,...n?{"aria-label":n}:{},onClick:t=>e?.(t),onKeyDown:t=>{t.key!==`Enter`&&t.key!==` `&&t.key!==`Spacebar`||(t.preventDefault(),t.stopPropagation(),e?.(t))}}}export{e as t};

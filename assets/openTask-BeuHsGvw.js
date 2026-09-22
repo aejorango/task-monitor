@@ -1,0 +1,1 @@
+var e=`task-monitor:open-task`;function t(t,{delay:n=50,target:r=globalThis}={}){if(!t||!r?.dispatchEvent)return;let i=()=>r.dispatchEvent(new CustomEvent(e,{detail:{taskId:t}}));n>0&&typeof r.setTimeout==`function`?r.setTimeout(i,n):i()}function n(e,n,r={}){e?.id&&(n?.({view:`board`,projectFilter:e.projectId||`all`}),t(e.id,r))}export{n,t as r,e as t};
