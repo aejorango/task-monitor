@@ -147,33 +147,3 @@ export function canParent(parent, candidate, allTasks = []) {
   return { ok: true, reason: null };
 }
 
-/**
- * Tasks arranged as a tree, for a table that indents them.
- *
- * Every task appears exactly once: a child whose parent is not in the list is
- * shown at the top level rather than dropped, because a filtered view should
- * hide nothing it was asked to show.
- */
-export function asTree(tasks = [], { maxDepth = MAX_DEPTH } = {}) {
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const out = [];
-  const placed = new Set();
-
-  const walk = (task, depth) => {
-    if (placed.has(task.id) || depth > maxDepth) return;
-    placed.add(task.id);
-    out.push({ task, depth });
-    for (const child of tasks) {
-      if (parentIdOf(child) === task.id) walk(child, depth + 1);
-    }
-  };
-
-  for (const task of tasks) {
-    const parentId = parentIdOf(task);
-    // A root is a task with no parent, or one whose parent is not on screen.
-    if (!parentId || !byId.has(parentId)) walk(task, 0);
-  }
-  // Anything left is inside a cycle. Show it rather than lose it.
-  for (const task of tasks) if (!placed.has(task.id)) out.push({ task, depth: 0 });
-  return out;
-}

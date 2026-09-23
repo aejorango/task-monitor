@@ -132,7 +132,7 @@ Answer the question from these facts.`;
 
 
 const PRIORITIES = ['low', 'medium', 'high'];
-const STATUSES   = ['todo', 'doing', 'done'];
+const STATUSES   = ['todo', 'doing', 'review', 'done'];
 const COMPLETIONS = ['not-started', 'in-progress', 'blocked', 'completed'];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 

@@ -11,6 +11,7 @@
 
 import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities, useAuth } from '../hooks/useTasks';
+import { displayStatus } from '../services/boardScope';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, auth } from '../services/firebase';
 import { suggestNextTask } from '../services/anthropic';
@@ -22,8 +23,9 @@ import { useAiStatus } from '../hooks/useAiStatus';
 import { useIsOperator } from '../hooks/useUserProfile';
 import { describeAiFailure } from '../services/errorMessages';
 import { activateProps } from '../hooks/useActivate';
+import { rateProjects, RAG_RANK, RAG_MEANING } from '../services/portfolio';
+import { PageActions, PageSubtitle } from './PageHeader';
 import Markdown from './Markdown';
-import TaskActivitiesModal from './TaskActivitiesModal';
 import LogTimeButton from './LogTimeButton';
 import TaskEditor from './TaskEditor';
 import TaskForm from './TaskForm';
@@ -32,6 +34,23 @@ import Icon from './Icon';
 
 // Targets behind the capacity dial and the team-load bars. They are yardsticks,
 // not data — labelled as such wherever they are shown.
+/**
+ * The three statuses as the board shows them. One list, so the legend across
+ * the top of the Main board and the badge on each row can never disagree —
+ * that is a `sbadge-<id>` class in App.css and nothing else.
+ */
+const STATUS_LEGEND = [
+  { id: 'todo',  label: 'To do' },
+  { id: 'doing', label: 'Working on it' },
+  { id: 'review', label: 'In review' },
+  { id: 'done',  label: 'Done' },
+];
+const STATUS_LABEL = Object.fromEntries(STATUS_LEGEND.map((s) => [s.id, s.label]));
+
+// An activity's own completion status, as the "Recent activity" rail reads it.
+const RUN_TONE  = { completed: 'green', blocked: 'red', 'in-progress': 'amber', 'not-started': 'navy' };
+const RUN_LABEL = { completed: 'Completed', blocked: 'Blocked', 'in-progress': 'In progress', 'not-started': 'Not started' };
+
 const DAILY_TARGET_H    = 8;
 const WEEKLY_CAPACITY_H = 35;
 
@@ -116,7 +135,6 @@ export default function DashboardView({ projectFilter, navigate }) {
     });
   };
 
-  const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [aiOutput, setAiOutput] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
@@ -212,32 +230,12 @@ export default function DashboardView({ projectFilter, navigate }) {
 
   // ───── Project health — done% against schedule elapsed% ─────────────────
   const projectsForFilter = projectFilter === 'all' ? projects : projects.filter((p) => p.id === projectFilter);
-  const projectHealth = useMemo(() => projectsForFilter.map((p) => {
-    const own     = tasks.filter((t) => t.projectId === p.id);
-    const done    = own.filter((t) => t.status === 'done').length;
-    const late    = own.filter((t) => t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today).length;
-    const starts  = own.map((t) => t.plan?.startDate).filter(Boolean).sort();
-    const ends    = own.map((t) => t.plan?.endDate).filter(Boolean).sort();
-    const start   = starts[0] || null;
-    const end     = ends[ends.length - 1] || null;
-    const span    = start && end ? daysBetween(start, end) : null;
-    const gone    = start ? daysBetween(start, today) : null;
-    const elapsed = span && span > 0 && gone != null
-      ? Math.max(0, Math.min(100, Math.round((gone / span) * 100)))
-      : end && end < today ? 100 : null;
-    const pct     = own.length ? Math.round((done / own.length) * 100) : 0;
-    const gap     = elapsed == null ? null : elapsed - pct;
-
-    let rag = 'GREEN';
-    if (!own.length)                                       rag = 'IDLE';
-    else if (late >= 3 || (gap != null && gap >= 20))      rag = 'RED';
-    else if (late >= 1 || (gap != null && gap >= 10))      rag = 'AMBER';
-
-    return { project: p, total: own.length, done, late, pct, elapsed, gap, rag };
-  }).sort((a, b) => {
-    const rank = { RED: 0, AMBER: 1, GREEN: 2, IDLE: 3 };
-    return rank[a.rag] - rank[b.rag] || (b.gap ?? -99) - (a.gap ?? -99);
-  }), [projectsForFilter, tasks, today]);
+  // The rating lives in services/portfolio.js since T-0142, so the Dashboard
+  // and the cross-workspace Portfolio can never disagree about what amber means.
+  const projectHealth = useMemo(
+    () => rateProjects(projectsForFilter, tasks, today),
+    [projectsForFilter, tasks, today],
+  );
 
   // ───── Recent activity ──────────────────────────────────────────────────
   const recentActivities = scopedActivities.slice(0, 5);
@@ -317,6 +315,163 @@ export default function DashboardView({ projectFilter, navigate }) {
     }
   };
 
+  // ───── The four tiles across the top ───────────────────────────────────
+  const flight = useMemo(() => {
+    const open = filtered.filter((t) => t.status !== 'done');
+    // "+4" against the same count a week ago — anything created in the last
+    // seven days that is still open. A delta with nothing behind it is left
+    // off rather than printed as a dash (see Tile).
+    const weekAgo = addDaysIso(today, -7);
+    const fresh = open.filter((t) => {
+      const created = t.createdAt?.toDate?.();
+      return created && isoOf(created) >= weekAgo;
+    }).length;
+    return {
+      total: open.length,
+      delta: fresh ? `+${fresh}` : null,
+      pct: filtered.length ? Math.round((open.length / filtered.length) * 100) : 0,
+      projects: new Set(open.map((t) => t.projectId).filter(Boolean)).size,
+    };
+  }, [filtered, today]);
+
+  const dueThisWeek = useMemo(() => {
+    const horizon = addDaysIso(today, 7);
+    const due = filtered.filter((t) => t.status !== 'done' && t.plan?.endDate && t.plan.endDate <= horizon);
+    return { total: due.length, unassigned: due.filter((t) => !(t.assignedTo || []).length).length };
+  }, [filtered, today]);
+
+  // ───── Main board — every item, grouped by its project ─────────────────
+  // The group header carries the project's RAG and its completion, which is
+  // what the separate "Project health" card used to carry; `rateProjects` is
+  // the same rating the Portfolio page uses, so two screens cannot disagree.
+  const [closedGroups, setClosedGroups] = useState({});
+  const toggleGroup = (id) => setClosedGroups((c) => ({ ...c, [id]: !c[id] }));
+
+  const boardGroups = useMemo(() => {
+    const healthOf = Object.fromEntries(projectHealth.map((h) => [h.project.id, h]));
+    const byProject = new Map();
+    filtered.forEach((t) => {
+      const key = t.projectId || '__none__';
+      if (!byProject.has(key)) byProject.set(key, []);
+      byProject.get(key).push(t);
+    });
+
+    const rank = { doing: 0, todo: 1, done: 2 };
+    return [...byProject.entries()]
+      .map(([id, own]) => {
+        const project = projectById[id] || null;
+        const h = healthOf[id] || null;
+        const done = own.filter((t) => t.status === 'done').length;
+        return {
+          id,
+          name: project?.name || 'No project',
+          color: project?.color || 'var(--c-text-muted)',
+          rag: h?.rag || 'IDLE',
+          pct: own.length ? Math.round((done / own.length) * 100) : 0,
+          rows: [...own]
+            // Overdue first, then what is being worked on, then the rest — the
+            // order the Action queue used to impose on its own smaller list.
+            .sort((a, b) => {
+              const lateA = a.status !== 'done' && a.plan?.endDate && a.plan.endDate < today ? 0 : 1;
+              const lateB = b.status !== 'done' && b.plan?.endDate && b.plan.endDate < today ? 0 : 1;
+              return lateA - lateB
+                || (rank[a.status] ?? 1) - (rank[b.status] ?? 1)
+                || String(a.plan?.endDate || '9999').localeCompare(String(b.plan?.endDate || '9999'));
+            })
+            .slice(0, 8)
+            .map((task) => {
+              const late = task.status !== 'done' && task.plan?.endDate && task.plan.endDate < today;
+              const ownerUid = (task.assignedTo || [])[0] || null;
+              return {
+                task,
+                done: task.status === 'done',
+                // Past its plan date a row reads Stuck, whatever column it
+                // is in — the same rule the board, the table, the WBS and the
+                // item page use (services/boardScope.js). The legend across
+                // the top still names the three real statuses.
+                ...(({ id, label }) => ({ statusId: id, statusLabel: label }))(
+                  displayStatus(task, blockedTaskIds, today),
+                ),
+                ownerUid,
+                ownerInitials: ownerUid ? initialsFor(memberProfiles[ownerUid], ownerUid) : '',
+                ownerFirst:    ownerUid ? firstNameFor(memberProfiles[ownerUid], ownerUid) : '',
+                late,
+                due: task.plan?.endDate
+                  ? (late ? `${daysBetween(task.plan.endDate, today)}d late` : shortDate(task.plan.endDate))
+                  : '—',
+                // A task's own percentage, not a guess: done is 100, and
+                // anything else uses the progress it actually carries.
+                pct: task.status === 'done' ? 100 : Math.max(0, Math.min(100, task.progress || 0)),
+              };
+            }),
+        };
+      })
+      // Worst project first, on the same ranking the Portfolio page uses.
+      .sort((a, b) => (RAG_RANK[a.rag] ?? 9) - (RAG_RANK[b.rag] ?? 9)
+        || String(a.name).localeCompare(String(b.name)));
+  }, [filtered, projectById, projectHealth, memberProfiles, blockedTaskIds, today]);
+
+  // ───── Delivery pipeline — five stages of real work ────────────────────
+  // Not a build pipeline: this app has no such thing, and inventing one would
+  // be a panel that means nothing. These are the five states an item is really
+  // in, and "healthy" is a stage that is neither blocked nor over its limit.
+  const pipeline = useMemo(() => {
+    const open      = filtered.filter((t) => t.status !== 'done');
+    const backlog   = open.filter((t) => t.status === 'todo' && !t.plan?.endDate).length;
+    const planned   = open.filter((t) => t.status === 'todo' && t.plan?.endDate).length;
+    const blockedN  = open.filter((t) => blockedTaskIds.has(t.id)).length;
+    const building  = open.filter((t) => t.status === 'doing' && !blockedTaskIds.has(t.id)).length;
+    const shipped   = filtered.filter((t) => t.status === 'done').length;
+    const stages = [
+      { name: 'Backlog',  count: backlog,  tone: 'navy',  state: 'unscheduled' },
+      { name: 'Planned',  count: planned,  tone: 'navy',  state: 'has a date' },
+      { name: 'Building', count: building, tone: building > 6 ? 'amber' : 'navy', state: building > 6 ? 'at limit' : 'steady' },
+      { name: 'Blocked',  count: blockedN, tone: blockedN ? 'red' : 'green', state: blockedN ? 'needs a decision' : 'clear' },
+      { name: 'Shipped',  count: shipped,  tone: 'green', state: 'done' },
+    ];
+    return { stages, healthy: stages.filter((st) => st.tone !== 'red' && st.tone !== 'amber').length };
+  }, [filtered, blockedTaskIds]);
+
+  // ───── Active alerts — the three things that are actually wrong ────────
+  // Built from the numbers already on this page rather than a second pass, so
+  // an alert cannot contradict the tile above it.
+  const alerts = useMemo(() => {
+    const out = [];
+    const worstLate = [...overdue].sort((a, b) => a.plan.endDate.localeCompare(b.plan.endDate))[0];
+    if (worstLate) {
+      const days = daysBetween(worstLate.plan.endDate, today) ?? 0;
+      out.push({
+        id: 'overdue', sev: 'Sev 1', tone: 'red',
+        title: worstLate.title,
+        meta: `${projectById[worstLate.projectId]?.name || 'No project'} · ${plural(days, 'day', 'days')} past due`
+            + (overdue.length > 1 ? ` · ${overdue.length - 1} more overdue` : ''),
+      });
+    }
+    if (blockers[0]) {
+      out.push({
+        id: 'blocked', sev: 'Sev 2', tone: 'red',
+        title: blockers[0].title,
+        meta: `Blocked ${plural(blockers[0].days, 'day', 'days')} · ${blockers[0].reason}`,
+      });
+    }
+    const over = teamLoad.find((m) => m.pct > 100);
+    if (over) {
+      out.push({
+        id: 'capacity', sev: 'Sev 3', tone: 'amber',
+        title: `${over.name} is over capacity`,
+        meta: `${over.hours.toFixed(1)}h logged against ${WEEKLY_CAPACITY_H}h · this week`,
+      });
+    }
+    return out;
+  }, [overdue, blockers, teamLoad, projectById, today]);
+
+  // An activity row names a task; clicking it opens that task, not the entry.
+  // The entry is one line of a log — the task is the thing you came to look at.
+  const openTaskOfActivity = (a) => {
+    const t = tasks.find((x) => x.id === a.taskId);
+    if (t) setEditingTask(t);
+  };
+
   const goToBoard = () => navigate?.({ view: 'board' });
 
   // Loading & no-workspace gates.
@@ -361,76 +516,76 @@ export default function DashboardView({ projectFilter, navigate }) {
 
   return (
     <>
-      {/* ══ ZONE 1 · Daily brief ══════════════════════════════════════════ */}
-      <section className="db-hero">
-        <span className="db-hero-glow" aria-hidden="true" />
-        <div className="db-hero-inner">
-          <div className="db-hero-lead">
-            <div className="db-hero-meta">
-              <span className="db-date">
-                {new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </span>
-              <span className="db-hero-sub">
-                {activeWorkspace.name} · {plural(memberUids.length || 1, 'member', 'members')} · {plural(projects.length, 'project', 'projects')}
-              </span>
-            </div>
-            <h1 className="db-greeting">{greeting}{userFirst ? `, ${userFirst}` : ''}.</h1>
-            <p className="db-brief">{brief}</p>
-            <div className="db-hero-actions">
-              <button className="db-btn db-btn-primary" onClick={() => setAddingTask((v) => !v)}>
-                <Icon name="plus" size={15} />{addingTask ? 'Close quick add' : 'Add task'}
-              </button>
-              {aiAvailable && (
-                <button className="db-btn db-btn-ghost" onClick={runAiSuggest} disabled={aiBusy}>
-                  <Icon name="sparkles" size={15} />{aiBusy ? 'Thinking…' : 'Plan my day with AI'}
-                </button>
-              )}
-              {/* Opens the logging FORM on the task it names — see
-                  LogTimeButton and services/logTime.js (T-0122). */}
-              <LogTimeButton
-                tasks={filtered}
-                actionQueue={actionQueue}
-                inProgress={inProgress}
-                projectById={projectById}
-                projectFilter={projectFilter}
-                userId={userId}
-              />
-              <ExportButton
-                build={buildStatusReportDoc}
-                baseName={statusReportFileBase(activeWorkspace?.name)}
-                kind="document"
-                label="Status report"
-                className="db-btn db-btn-ghost"
-                title="A PDF or Word report of where every project stands, what is overdue and what is blocked"
-              />
-            </div>
-          </div>
+      {/* ══ ZONE 1 · The numbers, on the title bar and five tiles ══════════
+          The hero this replaced was a greeting, a paragraph, a dial and four
+          pulse rows in a coloured slab that filled the fold before a single
+          task appeared. The Explorer mockup says the same things in a tile row
+          — and the greeting, the workspace and the commands belong to the page
+          chrome now, which every other page wears too. */}
+      <PageSubtitle>
+        {greeting}{userFirst ? `, ${userFirst}` : ''} · {activeWorkspace.name} ·{' '}
+        {plural(memberUids.length || 1, 'member', 'members')} · {plural(projects.length, 'project', 'projects')}
+      </PageSubtitle>
 
-          <div className="db-hero-pulse">
-            <div className="db-dial" role="img" aria-label={`${hoursToday.toFixed(1)} of ${DAILY_TARGET_H} hours logged today`}>
-              <svg viewBox="0 0 120 120" width="112" height="112">
-                <circle cx="60" cy="60" r="50" className="db-dial-track" />
-                <circle
-                  cx="60" cy="60" r="50"
-                  className="db-dial-fill"
-                  strokeDasharray="314"
-                  strokeDashoffset={314 - 314 * (dialPct / 100)}
-                />
-              </svg>
-              <div className="db-dial-center">
-                <div className="db-dial-value">{hoursToday.toFixed(1)}<span>h</span></div>
-                <div className="db-dial-label">of {DAILY_TARGET_H}h today</div>
-              </div>
-            </div>
-            <ul className="db-pulse">
-              <PulseRow color="var(--c-danger)"  value={overdue.length}      label="overdue" />
-              <PulseRow color="var(--c-accent)"  value={tasksDueToday.length} label="due today" />
-              <PulseRow color="var(--c-teal)"      value={inProgress.length}    label="in progress" />
-              <PulseRow color="var(--c-emerald)" value={doneThisWeek.length}  label="done this week" />
-            </ul>
-          </div>
-        </div>
-      </section>
+      <PageActions>
+        <button className="cmd" onClick={() => setAddingTask((v) => !v)}>
+          <span className="cmd-icon"><Icon name="plus" size={14} /></span>
+          {addingTask ? 'Close quick add' : 'New task'}
+        </button>
+        {aiAvailable && (
+          <button className="cmd" onClick={runAiSuggest} disabled={aiBusy}>
+            <span className="cmd-icon"><Icon name="sparkles" size={14} /></span>
+            {aiBusy ? 'Thinking…' : 'Plan my day'}
+          </button>
+        )}
+        {/* Opens the logging FORM on the task it names — see LogTimeButton and
+            services/logTime.js (T-0122). */}
+        <LogTimeButton
+          tasks={filtered}
+          actionQueue={actionQueue}
+          inProgress={inProgress}
+          projectById={projectById}
+          projectFilter={projectFilter}
+          userId={userId}
+          className="cmd"
+        />
+        <ExportButton
+          build={buildStatusReportDoc}
+          baseName={statusReportFileBase(activeWorkspace?.name)}
+          kind="document"
+          label="Status report"
+          className="cmd"
+          title="A PDF or Word report of where every project stands, what is overdue and what is blocked"
+        />
+      </PageActions>
+
+      <div className="tiles">
+        <Tile
+          tone="navy" icon="◈" label="Items in flight" value={flight.total}
+          delta={flight.delta} bar={flight.pct}
+          sub={`across ${plural(flight.projects, 'project', 'projects')}`}
+        />
+        <Tile
+          tone="red" icon="!" label="Blocked" value={blockers.length}
+          bar={filtered.length ? Math.round((blockers.length / filtered.length) * 100) : 0}
+          sub={blockers.length ? `oldest ${plural(blockers[0].days, 'day', 'days')}` : 'nothing blocked'}
+        />
+        <Tile
+          tone="amber" icon="◷" label="Due this week" value={dueThisWeek.total}
+          bar={flight.total ? Math.round((dueThisWeek.total / flight.total) * 100) : 0}
+          sub={dueThisWeek.unassigned ? `${dueThisWeek.unassigned} unassigned` : 'all assigned'}
+        />
+        <Tile
+          tone="green" icon="✓" label="Throughput" value={doneThisWeek.length}
+          delta={`${hoursToday.toFixed(1)}h today`}
+          bar={Math.min(100, doneThisWeek.length * 10)}
+          sub="completed in the last 7 days"
+        />
+      </div>
+
+      {/* The brief is one sentence written from those very numbers — worth
+          keeping, not worth a slab. */}
+      {brief && <p className="db-brief-line">{brief}</p>}
 
       {aiOutput && (
         <div className="dash-card db-ai">
@@ -474,197 +629,120 @@ export default function DashboardView({ projectFilter, navigate }) {
 
       {hasAnyData && (
         <>
-          {/* ══ ZONE 2 · Needs you now ═══════════════════════════════════ */}
-          <ZoneLabel tone="red" title="Needs you now"
-            note={needsCount ? `${plural(needsCount, 'item', 'items')} · overdue first` : 'nothing on fire'} />
-          <div className="db-grid">
-            <section className="dash-card db-flush">
-              <div className="db-head">
-                <h2 className="dash-card-title">Action queue</h2>
-                {overdue.length > 0 && <span className="db-chip db-chip-red">{overdue.length} overdue</span>}
-                {tasksDueToday.length > 0 && <span className="db-chip db-chip-amber">{tasksDueToday.length} due today</span>}
-                <button className="db-link" onClick={goToBoard}>Open board →</button>
+          {/* ══ Main board — every item, grouped by project ══════════════════
+              The Dashboard Explorer's centre panel. It replaced four separate
+              cards (Action queue, What's blocking us, Project health, Next 5
+              days) that each showed a slice of the same list: one table shows
+              the lot, and the group header carries the health the "Project
+              health" card used to carry on its own. */}
+          <section className="mboard">
+            <div className="mboard-head">
+              <h2 className="mboard-title">Main board</h2>
+              <span className="mboard-chip">grouped by project</span>
+              <div className="mboard-legend">
+                {STATUS_LEGEND.map((s) => (
+                  <span key={s.id} className={`sbadge sbadge-${s.id}`}>{s.label}</span>
+                ))}
               </div>
-              {actionQueue.length === 0 ? (
-                <p className="db-empty">Nothing overdue and nothing due today. Enjoy it.</p>
-              ) : actionQueue.map(({ task, isLate, due, flag, project }) => (
+            </div>
+
+            <div className="mboard-cols">
+              <span />
+              <span>Item</span><span>Status</span><span>Owner</span><span>Due</span><span>Progress</span>
+            </div>
+
+            {boardGroups.length === 0 ? (
+              <p className="db-empty" style={{ padding: '26px 18px' }}>Nothing matches the current filter.</p>
+            ) : boardGroups.map((g) => (
+              <div key={g.id}>
                 <div
-                  key={task.id}
-                  className={`db-queue-row${isLate ? ' is-late' : ''}`}
-                  {...activateProps(() => setViewingTask(task))}
+                  className="mboard-group"
+                  {...activateProps(() => toggleGroup(g.id))}
+                  aria-expanded={!closedGroups[g.id]}
                 >
-                  <span className="db-queue-rail" aria-hidden="true" />
-                  <span className="db-prio" style={{ background: PRIORITY_DOT[task.priority] || PRIORITY_DOT.medium }} />
-                  <div className="db-queue-body">
-                    <div className="db-queue-title">{task.title}</div>
-                    <div className="db-queue-meta">
-                      {project && (
-                        <span className="db-queue-proj">
-                          <span className="proj-dot" style={{ background: project.color }} />{project.name}
-                        </span>
-                      )}
-                      {flag && <span className={`db-flag db-flag-${flag.tone}`}>{flag.text}</span>}
-                    </div>
+                  <span className={`mboard-chev${closedGroups[g.id] ? '' : ' open'}`} aria-hidden="true">▸</span>
+                  <span className="mboard-group-name" style={{ color: g.color }}>{g.name}</span>
+                  <span className="mboard-group-count">{plural(g.rows.length, 'item', 'items')}</span>
+                  <span className={`ragchip ragchip-${g.rag.toLowerCase()}`} title={RAG_MEANING[g.rag]}>{g.rag}</span>
+                  <span className="mboard-group-pct">{g.pct}% complete</span>
+                </div>
+                {!closedGroups[g.id] && g.rows.map(({ task, ...r }, i) => (
+                  <div
+                    key={task.id}
+                    className={`mboard-row${i % 2 ? ' alt' : ''}`}
+                    {...activateProps(() => setEditingTask(task))}
+                  >
+                    <span className="mboard-rail" style={{ background: g.color }} aria-hidden="true" />
+                    <span className="mboard-cell">
+                      <span className={`mboard-check${r.done ? ' on' : ''}`} aria-hidden="true">{r.done ? '✓' : ''}</span>
+                    </span>
+                    <span className={`mboard-item${r.done ? ' done' : ''}`}>{task.title}</span>
+                    <span className="mboard-cell">
+                      <span className={`sbadge sbadge-${r.statusId}`}>{r.statusLabel}</span>
+                    </span>
+                    <span className="mboard-cell mboard-owner">
+                      {r.ownerUid
+                        ? <>
+                            <span className="mboard-av" style={{ background: avatarColorFor(r.ownerUid) }}>{r.ownerInitials}</span>
+                            <span className="mboard-owner-name">{r.ownerFirst}</span>
+                          </>
+                        : <span className="mboard-owner-none">Unassigned</span>}
+                    </span>
+                    <span className={`mboard-due${r.late ? ' late' : ''}`}>{r.due}</span>
+                    <span className="mboard-cell mboard-prog">
+                      <span className="mboard-track">
+                        <span
+                          className="mboard-fill"
+                          style={{ width: `${r.pct}%`, background: r.pct === 100 ? 'var(--c-done)' : g.color }}
+                        />
+                      </span>
+                      <span className="mboard-pct">{r.pct}%</span>
+                    </span>
                   </div>
-                  <span className={`db-due${isLate ? ' is-late' : ''}`}>{due}</span>
-                  <span className="db-log">+ Log</span>
-                </div>
-              ))}
-            </section>
-
-            <section className="dash-card">
-              <div className="db-head">
-                <span className="db-head-icon db-head-icon-red"><Icon name="alert" size={15} /></span>
-                <h2 className="dash-card-title">What's blocking us</h2>
+                ))}
               </div>
-              {blockers.length === 0 ? (
-                <p className="db-empty">No blockers logged in the last 30 days.</p>
-              ) : (
-                <div className="db-blockers">
-                  {blockers.map((b) => (
-                    <button key={b.act.id} type="button" className="db-blocker" onClick={() => {
-                      const t = tasks.find((x) => x.id === b.act.taskId);
-                      if (t) setViewingTask(t);
-                    }}>
-                      <div className="db-blocker-head">
-                        <span className="proj-dot" style={{ background: b.color }} />
-                        <strong className="db-blocker-title">{b.title}</strong>
-                        <span className="db-blocker-age">{plural(b.days, 'day', 'days')}</span>
-                      </div>
-                      <p className="db-blocker-why">{b.reason}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {topTheme && (
-                <div className="db-theme">
-                  <span className="db-theme-label">Top theme this month</span>
-                  <span className="db-theme-tag">{topTheme.word.toUpperCase()} · {topTheme.n}</span>
-                </div>
-              )}
-            </section>
-          </div>
+            ))}
+          </section>
 
-          {/* ══ ZONE 3 · Momentum ════════════════════════════════════════ */}
-          <ZoneLabel tone="accent" title="Momentum" note="pace vs. schedule · sorted by risk" />
-          <div className="db-grid">
-            <section className="dash-card">
-              <div className="db-head">
-                <h2 className="dash-card-title">Project health</h2>
-                <span className="db-chip">{plural(projectHealth.length, 'active', 'active')}</span>
-                <button className="db-link" onClick={() => navigate?.({ view: 'projects' })}>All projects →</button>
+          {/* ══ Delivery pipeline + the right rail ═══════════════════════════ */}
+          <div className="db-split">
+            <section className="dcard">
+              <div className="dcard-head">
+                <h2 className="dcard-title">Delivery pipeline</h2>
+                <span className={`pipe-chip${pipeline.healthy === pipeline.stages.length ? ' ok' : ''}`}>
+                  {pipeline.healthy} of {pipeline.stages.length} stages healthy
+                </span>
               </div>
-              <p className="db-note">
-                The notch marks how much of the schedule is gone — bar behind the notch means falling behind.
-              </p>
-              {projectHealth.length === 0 ? (
-                <p className="db-empty">
-                  No projects yet.{' '}
-                  <a className="table-link" href="#" onClick={(e) => { e.preventDefault(); navigate?.({ view: 'projects' }); }}>
-                    Create your first project →
-                  </a>
-                </p>
-              ) : (
-                <div className="db-health">
-                  {projectHealth.slice(0, 6).map((h) => (
-                    <div
-                      key={h.project.id}
-                      className="db-health-row"
-                      {...activateProps(() => navigate?.({ view: 'board', projectFilter: h.project.id }), {
-                        label: `Open ${h.project.name} on the board`,
-                      })}
-                    >
-                      <span className="proj-dot" style={{ background: h.project.color }} />
-                      <div className="db-health-id">
-                        <div className="db-health-name">{h.project.name}</div>
-                        <div className="db-health-meta">
-                          {h.total === 0 ? 'No tasks yet' : `${h.done}/${h.total} done · ${plural(h.late, 'overdue', 'overdue')}`}
-                        </div>
-                      </div>
-                      <div className="db-track">
-                        <span className="db-track-fill" style={{ width: `${h.pct}%`, background: h.project.color }} />
-                        {h.elapsed != null && <span className="db-notch" style={{ left: `${h.elapsed}%` }} />}
-                      </div>
-                      <span className="db-health-pct">{h.pct}%</span>
-                      <span className={`db-rag db-rag-${h.rag.toLowerCase()}`}>{h.rag}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+              <p className="dcard-sub">Items flowing through {activeWorkspace.name} right now.</p>
 
-            <section className="dash-card">
-              <div className="db-head">
-                <h2 className="dash-card-title">Next 5 days</h2>
-                <button className="db-link" onClick={() => navigate?.({ view: 'gantt' })}>Gantt →</button>
+              <div className="stage-flow">
+                {pipeline.stages.map((st) => (
+                  <div key={st.name} className={`stage stage-${st.tone}`}>
+                    <div className="stage-name">{st.name}</div>
+                    <div className="stage-count">{st.count}</div>
+                    <div className="stage-state">{st.state}</div>
+                  </div>
+                ))}
               </div>
-              {upcoming.length === 0 ? (
-                <p className="db-empty">Nothing scheduled for the next five days.</p>
-              ) : (
-                <div className="db-upcoming">
-                  {Object.keys(upcomingByDate).sort().map((d) => (
-                    <div key={d}>
-                      <div className="db-day">
-                        {friendlyDate(d)}
-                        <span className="db-day-count">{plural(upcomingByDate[d].length, 'task', 'tasks')}</span>
-                      </div>
-                      {upcomingByDate[d].map((t) => {
-                        const proj = projectById[t.projectId];
-                        const who  = (t.assignedTo || [])[0]
-                          ? firstNameFor(memberProfiles[t.assignedTo[0]], t.assignedTo[0])
-                          : (t.assignedToExternal || [])[0] || null;
-                        return (
-                          <div key={t.id} className="db-up-row" {...activateProps(() => setViewingTask(t))}>
-                            <span className="proj-dot" style={{ background: proj?.color || 'var(--c-border-strong)' }} />
-                            <span className="db-up-title">{t.title}</span>
-                            {who && <span className="db-who">{who}</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
 
-          {/* ══ ZONE 4 · Context ═════════════════════════════════════════ */}
-          <ZoneLabel tone="muted" title="Context" />
-          <div className="db-grid">
-            <section className="dash-card">
-              <div className="db-head">
-                <h2 className="dash-card-title">Recent activity</h2>
-                <span className="db-chip">{hours7.toFixed(1)}h · 7 days</span>
-                <button className="db-link" onClick={() => navigate?.({ view: 'table' })}>View log →</button>
-              </div>
+              <div className="dcard-label">Recent activity</div>
               {recentActivities.length === 0 ? (
-                <p className="db-empty">No activity logged yet.</p>
+                <p className="db-empty">Nothing logged yet.</p>
               ) : (
-                <div className="db-feed">
-                  {recentActivities.map((a, i) => {
-                    const tone = a.bottleneckRemarks?.trim() || a.completionStatus === 'blocked' ? 'red'
-                      : a.completionStatus === 'completed' ? 'green'
-                      : a.completionStatus === 'in-progress' ? 'amber' : 'navy';
-                    const icon = tone === 'red' ? '!' : tone === 'green' ? '✓' : tone === 'amber' ? '◐' : '•';
+                <div className="runs">
+                  {recentActivities.map((a) => {
+                    const tone = RUN_TONE[a.completionStatus] || 'navy';
                     return (
-                      <div key={a.id} className="db-feed-item">
-                        <div className="db-feed-rail">
-                          <span className={`db-feed-dot db-tone-${tone}`}>{icon}</span>
-                          {i < recentActivities.length - 1 && <span className="db-feed-line" />}
-                        </div>
-                        <div className="db-feed-body">
-                          <div className="db-feed-head">
-                            <strong>{a.taskTitle || '(task)'}</strong>
-                            {(a.hoursSpent || 0) > 0 && (
-                              <span className={`db-feed-hours db-tone-${tone}`}>{Number(a.hoursSpent).toFixed(1)}h</span>
-                            )}
-                            <span className="db-feed-date">{shortDate(a.date)}</span>
-                          </div>
-                          {a.comment && <p className="db-feed-text">{a.comment}</p>}
-                          {a.bottleneckRemarks?.trim() && (
-                            <p className="db-feed-block">⚠ {a.bottleneckRemarks.trim()}</p>
-                          )}
-                        </div>
+                      <div
+                        key={a.id}
+                        className="run"
+                        {...activateProps(() => openTaskOfActivity(a))}
+                      >
+                        <span className={`run-dot tone-${tone}`} aria-hidden="true" />
+                        <span className="run-name">{a.taskTitle || '(task)'}</span>
+                        <span className={`run-state tone-${tone}`}>{RUN_LABEL[a.completionStatus] || 'Logged'}</span>
+                        <span className="run-dur">{a.hoursSpent ? `${a.hoursSpent}h` : '—'}</span>
+                        <span className="run-when">{shortDate(a.date)}</span>
                       </div>
                     );
                   })}
@@ -672,69 +750,95 @@ export default function DashboardView({ projectFilter, navigate }) {
               )}
             </section>
 
-            <div className="db-stack">
-              <section className="dash-card">
-                <div className="db-head">
-                  <h2 className="dash-card-title">Team load</h2>
-                  <button className="db-link" onClick={() => navigate?.({ view: 'settings' })}>Manage →</button>
+            <div className="db-rail">
+              <section className="dcard">
+                <div className="dcard-head">
+                  <h2 className="dcard-title">Active alerts</h2>
+                  <span className={`alert-count${alerts.length ? '' : ' quiet'}`}>{alerts.length}</span>
                 </div>
-                {teamLoad.length === 0 ? (
-                  <p className="db-empty">No members yet.</p>
+                {alerts.length === 0 ? (
+                  <p className="db-empty">Nothing is on fire.</p>
                 ) : (
-                  <div className="db-team">
-                    {teamLoad.map((m) => (
-                      <div key={m.uid} className="db-member" title={`${m.hours.toFixed(1)}h logged · ${plural(m.open, 'open task', 'open tasks')}`}>
-                        <span className="db-avatar" style={{ background: avatarColorFor(m.uid) }}>{m.initials}</span>
-                        <div className="db-member-body">
-                          <div className="db-member-name">{m.name}</div>
-                          <div className="db-member-track">
-                            <span className={`db-member-fill db-tone-${m.tone}`} style={{ width: `${Math.min(m.pct, 100)}%` }} />
-                          </div>
+                  <div className="alerts">
+                    {alerts.map((a) => (
+                      <div key={a.id} className={`alert alert-${a.tone}`}>
+                        <div className="alert-top">
+                          <span className={`alert-sev tone-${a.tone}`}>{a.sev}</span>
+                          <span className="alert-title">{a.title}</span>
                         </div>
-                        <span className={`db-member-pct db-tone-${m.tone}`}>{m.pct}%</span>
+                        <div className="alert-meta">{a.meta}</div>
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="db-cap">
-                  Capacity {WEEKLY_CAPACITY_H}h/week ·{' '}
-                  {overCapacity > 0
-                    ? <strong className="db-cap-over">{plural(overCapacity, 'person', 'people')} over</strong>
-                    : <span>nobody over</span>}
-                </div>
               </section>
 
-              <section className="dash-card db-ws">
-                <div className="db-ws-icon" style={{ background: activeWorkspace.color || 'var(--c-blue-deep)' }}>
-                  {activeWorkspace.icon || activeWorkspace.name?.[0]?.toUpperCase() || '◆'}
-                </div>
-                <div className="db-ws-body">
-                  <div className="db-ws-name">{activeWorkspace.name}</div>
-                  <div className="db-ws-meta"><span className="db-ws-role">{wsRole}</span> · private · {plural(tasks.length, 'task', 'tasks')}</div>
-                </div>
-                <button className="db-link" onClick={() => navigate?.({ view: 'settings' })}>Settings →</button>
+              <section className="dcard">
+                <h2 className="dcard-title">Team utilization</h2>
+                <p className="dcard-sub">Against {WEEKLY_CAPACITY_H}h weekly capacity</p>
+                {teamLoad.length === 0 ? (
+                  <p className="db-empty">No members yet.</p>
+                ) : (
+                  <div className="util">
+                    {teamLoad.map((m) => (
+                      <div key={m.uid} className="util-row" title={`${m.hours.toFixed(1)}h logged · ${plural(m.open, 'open task', 'open tasks')}`}>
+                        <span className="util-av" style={{ background: avatarColorFor(m.uid) }}>{m.initials}</span>
+                        <span className="util-name">{firstNameFor(memberProfiles[m.uid], m.uid)}</span>
+                        <span className="util-track">
+                          <span className={`util-fill tone-${m.tone}`} style={{ width: `${Math.min(m.pct, 100)}%` }} />
+                        </span>
+                        <span className={`util-pct tone-${m.tone}`}>{m.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
             </div>
           </div>
         </>
       )}
 
-      {viewingTask && !editingTask && (
-        <TaskActivitiesModal
-          task={viewingTask}
-          userId={userId}
-          onClose={() => setViewingTask(null)}
-          onEditTask={(t) => setEditingTask(t)}
-        />
-      )}
+      {/* Clicking a task opens the EDITOR, not the read-only activity list.
+          One click, one destination — the activity log is that editor's
+          Activity tab now, so the list is not lost, it just stopped being
+          a second modal in front of the thing you actually wanted. */}
       {editingTask && (
         <TaskEditor
           task={editingTask}
           projects={projects}
-          onClose={() => { setEditingTask(null); setViewingTask(null); }}
+          onClose={() => setEditingTask(null)}
         />
       )}
     </>
+  );
+}
+
+/**
+ * One resource tile, exactly as the Explorer mockups draw it: a coloured top
+ * edge, a tinted icon badge beside an uppercase label, the number with a delta
+ * chip beside it, a 5px rail, and one line of context underneath.
+ *
+ * `bar` is a percentage; omit it and no rail is drawn, which is a different
+ * thing from passing 0 (a rail at empty). `delta` is omitted rather than shown
+ * as "—" when there is nothing to compare against — an em dash in a delta slot
+ * reads as "no change", which is a claim.
+ */
+export function Tile({ tone, icon, label, value, delta, bar, sub }) {
+  return (
+    <div className={`tile tile-${tone}`}>
+      <div className="tile-head">
+        {icon ? <span className="tile-icon" aria-hidden="true">{icon}</span> : <span className="tile-dot" />}
+        <span className="tile-label">{label}</span>
+      </div>
+      <div className="tile-value-row">
+        <span className="tile-value">{value}</span>
+        {delta != null && delta !== '' && <span className="tile-delta">{delta}</span>}
+      </div>
+      {bar != null && (
+        <div className="tile-bar"><span style={{ width: `${Math.max(0, Math.min(100, bar))}%` }} /></div>
+      )}
+      {sub && <div className="tile-sub">{sub}</div>}
+    </div>
   );
 }
 
@@ -749,12 +853,3 @@ function ZoneLabel({ tone, title, note }) {
   );
 }
 
-function PulseRow({ color, value, label }) {
-  return (
-    <li className="db-pulse-row">
-      <span className="db-pulse-dot" style={{ background: color }} />
-      <span className="db-pulse-value">{value}</span>
-      <span className="db-pulse-label">{label}</span>
-    </li>
-  );
-}

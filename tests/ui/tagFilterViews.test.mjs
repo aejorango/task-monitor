@@ -1,121 +1,58 @@
-// T-0103 / BUG-018 — a saved view's tag filter, on the Gantt and the Activity Log.
+// T-0103 / BUG-018 / T-0148 — a saved view's tag filter, now that the chip
+// strip is gone.
 //
-//   1. Given a saved view with tagFilter=client pointing at the Gantt page
-//   2. When the user opens it from the sidebar
-//   3. Then only tasks carrying #client are on the chart and a clearable
-//      "#client" chip is visible
+// The STRIP was removed from every page in T-0148 (Ace asked for it). The
+// FILTER was not: a saved view still carries `tagFilter`, the router still
+// hands it down as `initialTagFilter`, and every page that receives it must
+// still apply it. What changed is how a reader finds out — the page names the
+// active tag in its subtitle and offers a way out, instead of drawing a row
+// of chips.
 //
-// The arithmetic is in src/services/tagFilter.test.mjs. This renders the real
-// pages and the real chip strip.
-import { test, before, after } from 'node:test';
+// That distinction is the whole point of this suite. "Removed the strip" and
+// "quietly stopped filtering" look identical in a screenshot, and the second
+// makes one saved view mean two different things depending on which page it
+// opens.
+//
+// The arithmetic is in src/services/tagFilter.test.mjs; this one reads the
+// real pages.
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import React, { act } from 'react';
-import { setupDom, teardownDom, mount, muteConsoleError } from './dom.mjs';
 
-const window = setupDom();
-
-const { default: TagFilterBar } = await import('../../src/components/TagFilterBar.jsx');
-const { tagFilterState } = await import('../../src/services/tagFilter.js');
-
-const h = React.createElement;
 const root = path.resolve(import.meta.dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
 
-let quiet;
-before(() => { quiet = muteConsoleError(); });
-after(() => { quiet?.restore(); teardownDom(); });
+// Every page the router can hand a tag to.
+const FILTERABLE = ['Board.jsx', 'GanttView.jsx', 'CalendarView.jsx', 'TableView.jsx'];
 
-const TASKS = [
-  { id: 't1', title: 'Client kickoff', tags: ['client'], plan: { endDate: '2026-09-25' } },
-  { id: 't2', title: 'Fix the build', tags: ['internal'], plan: { endDate: '2026-09-26' } },
-];
+// ─── the strip is gone, everywhere ──────────────────────────────────────────
 
-const chips = (ui) => [...ui.container.querySelectorAll('.tag-filter-bar .chip')]
-  .map((b) => b.textContent.trim());
-const activeChip = (ui) => ui.container.querySelector('.tag-filter-bar .chip.active')?.textContent.trim();
-
-// ─── the strip itself ───────────────────────────────────────────────────────
-
-test('the strip offers every tag, with All selected when nothing is filtering', async () => {
-  const ui = await mount(h(TagFilterBar, { state: tagFilterState(TASKS, null), onChange() {} }));
-  assert.deepEqual(chips(ui), ['All', '#client', '#internal']);
-  assert.equal(activeChip(ui), 'All');
-  ui.unmount();
+test('no page renders a tag chip strip any more', () => {
+  const dir = path.join(root, 'src', 'components');
+  const offenders = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.jsx'))
+    .filter((f) => /<TagFilterBar/.test(read('src', 'components', f)));
+  assert.deepEqual(offenders, [],
+    'the tag strip was removed from every page in T-0148');
 });
 
-test('the filtered tag is the one shown as selected — the chip is visible', async () => {
-  const ui = await mount(h(TagFilterBar, { state: tagFilterState(TASKS, 'client'), onChange() {} }));
-  assert.equal(activeChip(ui), '#client', 'the acceptance criterion: a visible #client chip');
-  ui.unmount();
+test('and nobody hand-rolled a replacement', () => {
+  const dir = path.join(root, 'src', 'components');
+  const offenders = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.jsx'))
+    .filter((f) => /className="tag-filter-bar"/.test(read('src', 'components', f)));
+  assert.deepEqual(offenders, [],
+    'a page growing its own chip strip is how the three copies started');
 });
 
-test('clicking the selected chip clears the filter', async () => {
-  const calls = [];
-  const ui = await mount(h(TagFilterBar, {
-    state: tagFilterState(TASKS, 'client'), onChange: (t) => calls.push(t),
-  }));
-  const chip = [...ui.container.querySelectorAll('.chip')].find((b) => b.textContent.trim() === '#client');
-  await act(async () => { chip.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })); });
-  assert.deepEqual(calls, [null], 'the acceptance criterion: clearable');
-  ui.unmount();
+test('the component itself is gone, not merely unmounted', () => {
+  assert.equal(fs.existsSync(path.join(root, 'src', 'components', 'TagFilterBar.jsx')), false,
+    'an unmounted component is dead code that still has to be maintained');
+  assert.equal(fs.existsSync(path.join(root, 'dev', 'tag-filter.html')), false);
 });
 
-test('All clears it too', async () => {
-  const calls = [];
-  const ui = await mount(h(TagFilterBar, {
-    state: tagFilterState(TASKS, 'client'), onChange: (t) => calls.push(t),
-  }));
-  const all = [...ui.container.querySelectorAll('.chip')].find((b) => b.textContent.trim() === 'All');
-  await act(async () => { all.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })); });
-  assert.deepEqual(calls, [null]);
-  ui.unmount();
-});
-
-test('a saved view naming a tag nothing here carries still shows its chip', async () => {
-  const ui = await mount(h(TagFilterBar, { state: tagFilterState(TASKS, 'renamed'), onChange() {} }));
-  assert.equal(activeChip(ui), '#renamed', 'otherwise the page is empty for no visible reason');
-  assert.match(ui.container.textContent, /Nothing here carries #renamed/);
-  ui.unmount();
-});
-
-test('the chips say which one is pressed, for a screen reader', async () => {
-  const ui = await mount(h(TagFilterBar, { state: tagFilterState(TASKS, 'client'), onChange() {} }));
-  const pressed = [...ui.container.querySelectorAll('.chip')]
-    .filter((b) => b.getAttribute('aria-pressed') === 'true')
-    .map((b) => b.textContent.trim());
-  assert.deepEqual(pressed, ['#client']);
-  ui.unmount();
-});
-
-test('no tags and no filter means no strip at all', async () => {
-  const ui = await mount(h(TagFilterBar, { state: tagFilterState([{ id: 'x' }], null), onChange() {} }));
-  assert.equal(ui.container.querySelector('.tag-filter-bar'), null, 'an empty row helps nobody');
-  ui.unmount();
-});
-
-// ─── the pages honour the prop ──────────────────────────────────────────────
-
-test('the Gantt declares and applies the prop the router passes it', () => {
-  const src = read('src', 'components', 'GanttView.jsx');
-  assert.match(src, /export default function GanttView\(\{ projectFilter, initialTagFilter \}\)/,
-    'the prop was passed and never declared — that is the whole bug');
-  assert.match(src, /useState\(initialTagFilter \|\| null\)/);
-  assert.match(src, /useEffect\(\(\) => \{ setTagFilter\(initialTagFilter \|\| null\); \}, \[initialTagFilter\]\);/,
-    'opening a second saved view must re-apply, not keep the first one');
-  assert.match(src, /const rows = tagState\.filtered;/, 'the chart must actually be filtered');
-  assert.match(src, /<TagFilterBar state=\{tagState\} onChange=\{setTagFilter\} \/>/);
-});
-
-test('the Activity Log declares and applies it too, through its tasks', () => {
-  const src = read('src', 'components', 'TableView.jsx');
-  assert.match(src, /export default function TableView\(\{ projectFilter, initialTagFilter \}\)/);
-  assert.match(src, /tagFilterState\(inProject, tagFilter, \{ taskById \}\)/,
-    'an activity has no tags of its own');
-  assert.match(src, /const filtered = tagState\.filtered;/);
-  assert.match(src, /<TagFilterBar state=\{tagState\} onChange=\{setTagFilter\} \/>/);
-});
+// ─── but the filter still works, and still says so ──────────────────────────
 
 test('every page the router hands initialTagFilter to declares it', () => {
   const app = read('src', 'App.jsx');
@@ -130,10 +67,46 @@ test('every page the router hands initialTagFilter to declares it', () => {
     'nothing fails when a prop is simply unused — which is why this guard exists');
 });
 
+test('a filter with no chip is still NAMED, on every page that can carry one', () => {
+  for (const name of FILTERABLE) {
+    const src = read('src', 'components', name);
+    assert.match(src, /Filtered to <strong>#\{tagState\.active\}<\/strong>/,
+      `${name}: a filter nobody can see is a silent one`);
+  }
+});
+
+test('…and clearable, or it is a trap', () => {
+  for (const name of FILTERABLE) {
+    const src = read('src', 'components', name);
+    assert.match(src, /show all<\/button>/,
+      `${name}: there must be a way back to everything`);
+  }
+});
+
+test('the Gantt still filters the rows it draws', () => {
+  const src = read('src', 'components', 'GanttView.jsx');
+  assert.match(src, /export default function GanttView\(\{ projectFilter, initialTagFilter, route = \{\} \}\)/,
+    'the prop was passed and never declared — that is the whole bug');
+  assert.match(src, /useState\(initialTagFilter \|\| null\)/);
+  assert.match(src, /useEffect\(\(\) => \{ setTagFilter\(initialTagFilter \|\| null\); \}, \[initialTagFilter\]\);/,
+    'opening a second saved view must re-apply, not keep the first one');
+  assert.match(src, /const rows = tagState\.filtered;/, 'the chart must actually be filtered');
+});
+
+test('the Activity Log borrows its tags from the task, and applies them', () => {
+  const src = read('src', 'components', 'TableView.jsx');
+  assert.match(src, /export default function TableView\(\{ projectFilter, initialTagFilter \}\)/);
+  assert.match(src, /tagFilterState\(inProject, tagFilter, \{ taskById \}\)/,
+    'an activity has no tags of its own');
+  assert.match(src, /const filtered = tagState\.filtered;/);
+});
+
 test('an empty page explains the filter rather than looking broken', () => {
   const gantt = read('src', 'components', 'GanttView.jsx');
-  assert.match(gantt, /No scheduled tasks carry #\{tagState\.active\}/);
-  assert.match(gantt, /Clear the tag filter/);
+  // The chart's empty state keeps the period switch, because a window that is
+  // too narrow is the usual reason it is empty.
+  assert.match(gantt, /<PeriodSwitch/);
+  assert.match(gantt, /Widen the date range/);
 
   const table = read('src', 'components', 'TableView.jsx');
   assert.match(table, /No activities against tasks tagged #\{tagState\.active\}/);
@@ -141,29 +114,13 @@ test('an empty page explains the filter rather than looking broken', () => {
     'the one thing a user would not guess');
 });
 
-test('there is one chip strip, not three', () => {
-  for (const name of ['Board.jsx', 'GanttView.jsx', 'TableView.jsx']) {
-    const src = read('src', 'components', name);
-    assert.match(src, /<TagFilterBar /, `${name} must use the shared strip`);
-    assert.doesNotMatch(src, /<div className="tag-filter-bar">/,
-      `${name} must not hand-roll its own`);
-  }
-});
-
-// ─── T-0104: the docs carry it too ──────────────────────────────────────────
+// ─── the docs carry it too ──────────────────────────────────────────────────
 
 test('CLAUDE.md records the trap and the activity subtlety', () => {
   const claude = read('CLAUDE.md');
   assert.match(claude, /Passing a filter prop the receiving view never declares/);
   assert.match(claude, /activity has no tags of its own/);
   assert.match(claude, /tagFilter\.js/, 'the module belongs in the file map');
-});
-
-test('the README lists the new suites and the harness', () => {
-  const readme = read('README.md');
-  assert.match(readme, /src\/services\/tagFilter\.test\.mjs/);
-  assert.match(readme, /tests\/ui\/tagFilterViews\.test\.mjs/);
-  assert.match(readme, /\/dev\/tag-filter\.html/);
 });
 
 test('the changelog records both halves of the fix', () => {

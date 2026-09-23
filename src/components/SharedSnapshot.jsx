@@ -8,8 +8,8 @@
 import { useMemo } from 'react';
 import { buildBars, shareStatus } from '../services/shareLinks';
 
-const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
-const STATUS_ORDER = ['todo', 'doing', 'done'];
+const STATUS_LABEL = { todo: 'To do', doing: 'In progress', review: 'In review', done: 'Done' };
+const STATUS_ORDER = ['todo', 'doing', 'review', 'done'];
 const PRIORITY_LABEL = { low: 'Low', medium: 'Medium', high: 'High' };
 
 const DAY = 86400000;

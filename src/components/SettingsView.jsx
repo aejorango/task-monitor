@@ -65,8 +65,30 @@ import { useDialog } from './Dialog';
 import { versionLine } from '../services/appVersion';
 import { downloadFile } from '../services/download';
 import { friendlyError } from '../services/access';
+import { PageActions, PageSubtitle } from './PageHeader';
+import Avatar from './Avatar';
+import { ROLES, accessTiles, lastLogged, roleCounts, roleOf, scopeOf } from '../services/accessControl';
 
-export default function SettingsView() {
+/**
+ * Settings is six pages over one component (T-0144, Settings Explorer).
+ *
+ * Each key is a route; each value is the blocks that route draws. The blocks
+ * are only MOUNTED when their tab is open, rather than rendered and hidden:
+ * several of them subscribe (webhooks, users) or probe the local bridge
+ * (knowledge), and paying for all six every time somebody opens Preferences
+ * is how a settings page comes to spam a CLI.
+ */
+const SETTINGS_SECTIONS = {
+  preferences:   ['appearance', 'account', 'defaults'],
+  notifications: ['notifications', 'due-alerts'],
+  workspaces:    ['workspaces'],
+  users:         ['companies', 'users'],
+  'ai-data':     ['knowledge', 'ai-brain', 'ai', 'ai-fallback', 'webhooks', 'data', 'about'],
+  // `tutorial` moved to the Dashboard hub in T-0158 and became
+  // components/TutorialView.jsx — a two-column page, not a band here.
+};
+
+export default function SettingsView({ section = 'preferences' }) {
   const toast = useToast();
   const ask = useDialog();
   const { settings, update, reset } = useSettings();
@@ -96,35 +118,10 @@ export default function SettingsView() {
   const activeWorkspace = workspaces.find((w) => w.id === settingsWorkspaceId);
   const myWorkspaceRole = activeWorkspace?.acl?.[userId];
   const isWorkspaceOwnerOrAdmin = myWorkspaceRole === 'owner' || myWorkspaceRole === 'admin';
-  const [activeId, setActiveId] = useState('workspaces');
-  const scrollTo = (id) => {
-    setActiveId(id);
-    const el = document.getElementById(`settings-${id}`);
-    if (!el) return;
-    if (el.tagName === 'DETAILS') el.open = true;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  const tocSections = [
-    { id: 'workspaces',    label: 'Workspaces' },
-    { id: 'appearance',    label: 'Appearance' },
-    { id: 'account',       label: 'Account' },
-    { id: 'notifications', label: 'Notifications' },
-    { id: 'due-alerts',    label: 'Due-task alerts' },
-    { id: 'defaults',      label: 'Defaults' },
-    { id: 'knowledge',     label: 'Knowledge base' },
-    { id: 'data',          label: 'Your data on this device' },
-    ...(isSuperadmin ? [
-      { id: 'companies', label: 'Companies' },
-      { id: 'users',     label: 'User Management' },
-      { id: 'ai-brain',  label: 'AI brain' },
-    ] : [
-      { id: 'ai', label: 'AI access' },
-    ]),
-    ...(isSuperadmin ? [{ id: 'ai-fallback', label: 'AI — superadmin fallback' }] : []),
-    { id: 'webhooks', label: 'Webhooks' },
-    { id: 'automations', label: 'Automations' },
-    { id: 'about',    label: 'About' },
-  ];
+  // Which blocks this route draws. An unknown section falls back to
+  // Preferences rather than rendering an empty page.
+  const wanted = SETTINGS_SECTIONS[section] || SETTINGS_SECTIONS.preferences;
+  const show = (id) => wanted.includes(id);
 
 
   const handleSignOut = async () => {
@@ -250,31 +247,22 @@ export default function SettingsView() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">{SETTINGS_SUBTITLE}</p>
-        </div>
-      </div>
+      {/* The "On this page" rail is gone: the hub's tab strip names the very
+          same sections, and a rail of six under a strip of six is the same
+          list twice. */}
+      <PageSubtitle>{SETTINGS_SUBTITLE}</PageSubtitle>
 
-      <div className="htu-layout">
-        <aside className="htu-toc">
-          <div className="htu-toc-label">On this page</div>
-          {tocSections.map((s) => (
-            <button
-              key={s.id}
-              className={`htu-toc-link ${activeId === s.id ? 'active' : ''}`}
-              onClick={() => scrollTo(s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </aside>
+      <div className="settings-page">
 
-        <div className="htu-content">
+      {show('workspaces') && <WorkspacesSection currentUser={currentUser} isSuperadmin={isSuperadmin} />}
 
-      <WorkspacesSection currentUser={currentUser} isSuperadmin={isSuperadmin} />
+      {/* The Members TAB was removed: it rendered `WorkspaceMembers`, which the
+          Workspaces tab already opens in a modal from each workspace card. Two
+          doors to one room, and the tab's version could only ever show the
+          ACTIVE workspace. The component itself is untouched — `#/members` now
+          forwards to Workspaces (services/views.js → MOVED_VIEWS). */}
 
+      {show('appearance') && (
       <section id="settings-appearance" className="settings-hero htu-section">
         <div className="settings-hero-head">
           <div>
@@ -302,8 +290,10 @@ export default function SettingsView() {
           with it. It is the default.
         </p>
       </section>
+      )}
 
       <div className="review-2col">
+{show('account') && (
         <section id="settings-account" className="review-section htu-section">
           <h2 className="review-h2-accent">Account</h2>
           <div className="account-row">
@@ -364,7 +354,9 @@ export default function SettingsView() {
             Your data syncs across any device where you sign in with this Google account.
           </p>
         </section>
+        )}
 
+{show('notifications') && (
         <section id="settings-notifications" className="review-section htu-section">
           <h2 className="review-h2-accent">Notifications</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -395,7 +387,9 @@ export default function SettingsView() {
             </p>
           )}
         </section>
+        )}
 
+{show('due-alerts') && (
         <section id="settings-due-alerts" className="review-section htu-section">
           <h2 className="review-h2-accent">Due-task alerts</h2>
           <p className="muted small" style={{ marginTop: 0 }}>
@@ -404,38 +398,60 @@ export default function SettingsView() {
           </p>
           <DueAlertSettings settings={settings} update={update} />
         </section>
+        )}
 
-        <section id="settings-defaults" className="review-section htu-section">
-          <h2 className="review-h2-accent">Defaults</h2>
+        {/* The Settings Explorer's group card: a name and a one-line hint on
+            the left, the control on the right, one setting per row. It replaced
+            a two-column grid of bare <select>s where the label said what the
+            field was and nothing said what it did. */}
+{show('defaults') && (
+        <section id="settings-defaults" className="sgroup htu-section">
+          <div className="sgroup-head">
+            <span className="sgroup-icon" aria-hidden="true">◧</span>
+            <h2 className="sgroup-title">Defaults</h2>
+            <span className="sgroup-count">2 settings</span>
+          </div>
 
-          <div className="field-row">
-            <div className="field">
-              <label className="label">Default project for quick-add</label>
-              <select
-                className="select"
-                value={settings.defaultProject || ''}
-                onChange={(e) => update({ defaultProject: e.target.value || null })}
-              >
-                <option value="">— First available —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+          <div className="srow">
+            <div className="srow-text">
+              <div className="srow-name">Default project for quick-add</div>
+              <div className="srow-hint">Where a task goes when you do not pick one</div>
             </div>
-            <div className="field">
-              <label className="label">Week starts on</label>
-              <select
-                className="select"
-                value={settings.weekStart}
-                onChange={(e) => update({ weekStart: Number(e.target.value) })}
-              >
-                <option value={0}>Sunday</option>
-                <option value={1}>Monday</option>
-              </select>
+            <select
+              className="select srow-select"
+              aria-label="Default project for quick-add"
+              value={settings.defaultProject || ''}
+              onChange={(e) => update({ defaultProject: e.target.value || null })}
+            >
+              <option value="">— First available —</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="srow">
+            <div className="srow-text">
+              <div className="srow-name">Week starts on</div>
+              <div className="srow-hint">Affects My Week, Timesheet and every calendar</div>
+            </div>
+            {/* Two choices, both visible: a dropdown to pick between Monday and
+                Sunday hides one of two options behind a click. */}
+            <div className="sseg" role="group" aria-label="Week starts on">
+              {[[1, 'Mon'], [0, 'Sun']].map(([value, label]) => (
+                <button
+                  key={label}
+                  className={`sseg-opt${settings.weekStart === value ? ' active' : ''}`}
+                  aria-pressed={settings.weekStart === value}
+                  onClick={() => update({ weekStart: value })}
+                >{label}</button>
+              ))}
             </div>
           </div>
         </section>
+        )}
 
+{show('data') && (
         <section id="settings-data" className="review-section htu-section">
           <h2 className="review-h2-accent">Your data on this device</h2>
           <p className="muted small">
@@ -458,18 +474,31 @@ export default function SettingsView() {
             >Reset settings</button>
           </div>
         </section>
+        )}
       </div>
 
-      {isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
-      {isSuperadmin && <UserManagementSection currentUid={userId} />}
+      {show('companies') && isSuperadmin && <CompaniesManagementSection currentUid={userId} />}
+      {show('users') && isSuperadmin && <UserManagementSection currentUid={userId} />}
+      {show('users') && !isSuperadmin && (
+        <div className="empty-state">
+          <div className="empty-state-icon">◔</div>
+          <p>Nothing here for your role.</p>
+          <p className="small">Approving accounts and managing companies is a superadmin job. Your own workspace&rsquo;s people are behind the Members button on its card, on the Workspaces tab.</p>
+        </div>
+      )}
 
-      <KnowledgeSection isOperator={isSuperadmin} />
+      {show('knowledge') && <KnowledgeSection isOperator={isSuperadmin} />}
 
-      {isSuperadmin && <AiBrainSection />}
+      {show('ai-brain') && isSuperadmin && <AiBrainSection />}
 
-      {!isSuperadmin && <MyCompanyAiStatus profile={profile} />}
+      {show('ai') && !isSuperadmin && <MyCompanyAiStatus profile={profile} />}
 
-      {isSuperadmin ? (
+      {/* Gated, like every other band on this page. Without a show() this pair
+          rendered on EVERY settings tab — Preferences, Notifications,
+          Workspaces — because the ternary sat outside the section map. Both ids
+          live only in `ai-data`, so one gate covers the fallback and the
+          webhooks alike. */}
+      {show('webhooks') && (isSuperadmin ? (
         <div className="review-2col">
           <CollapsibleSection id="settings-ai-fallback" title="AI — superadmin fallback">
             <p className="muted small" style={{ marginTop: 0 }}>
@@ -522,10 +551,14 @@ export default function SettingsView() {
         </div>
       ) : (
         <WebhooksSection userId={userId} />
-      )}
+      ))}
 
-      <AutomationsSection userId={userId} isAdmin={isWorkspaceOwnerOrAdmin} />
+      {/* Automations left Settings for a page of their own (Dashboard →
+          Automations). They are the one thing here that changes your data
+          while you are not looking, which is a poor fit for the bottom of
+          a preferences scroll. */}
 
+      {show('about') && (
       <section id="settings-about" className="review-section review-section-plain htu-section">
         <h2 className="review-h2">About</h2>
         <p className="muted small">
@@ -540,8 +573,7 @@ export default function SettingsView() {
           which build you are on.
         </p>
       </section>
-
-        </div>
+      )}
       </div>
     </>
   );
@@ -1199,8 +1231,60 @@ function WorkspacesSection({ currentUser, isSuperadmin = false }) {
   );
 }
 
+/**
+ * The members modal is now a wrapper. Everything inside it — the list, the
+ * roles, the invite form, the pending invites — is `WorkspaceMembers`, which
+ * the Settings → Members PAGE renders too (T-0144). One implementation, so
+ * inviting somebody from the page and from the modal cannot drift apart, and
+ * `inviteFields()`'s three-fields-in-one-write rule is only written once.
+ */
 function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = false, onClose }) {
   const modal2 = useModalDialog({ onClose });
+  return (
+    <div className="modal-backdrop" {...modal2.backdropProps}>
+      {/* Twice the standard modal, because what is inside it is the
+          Access-control card: a five-column table whose name/email column is
+          the only one that flexes, beside the role definitions. At 540 the
+          names ellipsised and the two panels fought over the width. `.modal`
+          is `width: 100%`, so a narrow screen still clamps this to the
+          viewport rather than overflowing it. */}
+      <div className="modal" style={{ maxWidth: 1080 }} {...modal2.dialogProps}>
+        <h3 className="modal-title" id={modal2.titleId}>{workspace.name} — members</h3>
+        <WorkspaceMembers
+          workspace={workspace}
+          currentUid={currentUid}
+          isAdmin={isAdmin}
+          isSuperadmin={isSuperadmin}
+        />
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ROLE_TITLE = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: 'Viewer' };
+
+/**
+ * Settings → Members, rebuilt to the Dashboard Explorer's Access-control card
+ * (T-0155). Four tiles, a Role-assignments table, what each role can do, and
+ * the invitations nobody has claimed.
+ *
+ * The two mockups disagree about where this belongs — Dashboard Explorer draws
+ * it as "Access control", Settings Explorer as "Members". It stayed in
+ * Settings: one surface, at the address the team already knows. What changed
+ * is only how it looks.
+ *
+ * `projects` and `activities` are passed in because the Settings page already
+ * subscribes to both; they make Scope and Last logged real rather than
+ * decorative. Neither is required — the table degrades to "Workspace" and a
+ * dash, which is the truth when nothing is known.
+ */
+export function WorkspaceMembers({
+  workspace, currentUid, isAdmin, isSuperadmin = false, projects = [], activities = [],
+}) {
   const toast = useToast();
   const ask = useDialog();
   const [newEmail, setNewEmail] = useState('');
@@ -1270,98 +1354,164 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
     finally { setBusy(false); }
   };
 
-  return (
-    <div className="modal-backdrop" {...modal2.backdropProps}>
-      <div className="modal" style={{ maxWidth: 540 }} {...modal2.dialogProps}>
-        <h3 className="modal-title" id={modal2.titleId}>{workspace.name} — members</h3>
-        <p className="modal-sub">
-          Members can see and edit everything in this workspace. Admins can invite
-          people, remove them and change their role. Invite someone by their email
-          address — they join automatically the next time they open the app.
-        </p>
+  const tiles = accessTiles(workspace, pendingInvites);
+  const counts = roleCounts(workspace);
 
-        <div className="ws-members-list">
-          {(workspace.members || []).map((uid) => {
-            const role = workspace.acl?.[uid] || 'editor';
+  return (
+    <>
+      {/* ── the four tiles ── */}
+      <div className="ac-tiles">
+        {tiles.map((t) => (
+          <div key={t.id} className={`ac-tile tone-${t.tone}`}>
+            <div className="ac-tile-label">{t.label}</div>
+            <div className="ac-tile-value">{t.value}</div>
+            <div className="ac-tile-sub">{t.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="ac-split">
+        {/* ── Role assignments ── */}
+        <section className="ac-panel">
+          <div className="ac-panel-head">
+            <span className="bx-h">Role assignments</span>
+            {isAdmin && (
+              <button
+                type="button"
+                className="ac-invite-btn"
+                onClick={() => document.getElementById('ac-invite-email')?.focus()}
+              >+ Invite member</button>
+            )}
+          </div>
+
+          <div className="ac-thead">
+            <span>Member</span><span>Role</span><span>Scope</span><span>Last logged</span>
+          </div>
+
+          {(workspace.members || []).map((uid, i) => {
+            const role = roleOf(workspace, uid);
             const isMe = uid === currentUid;
             const prof = profOf(uid);
             const primary = memberLabel(uid, workspace.memberProfiles || {}, { selfUid: currentUid })
               || memberLabel(uid, { [uid]: prof || {} }, { selfUid: currentUid });
             const secondary = memberSubLabel(uid, { [uid]: prof || {} });
+            const scope = scopeOf(uid, projects);
+            const seen = lastLogged(uid, activities);
             return (
-              <div key={uid} className="ws-member-row">
-                {prof?.photoURL ? (
-                  <img src={prof.photoURL} alt="" className="account-avatar" style={{ width: 28, height: 28 }} />
-                ) : (
-                  <span className="account-avatar fallback" style={{ width: 28, height: 28, fontSize: 12 }}>
-                    {(primary[0] || '?').toUpperCase()}
+              <div key={uid} className={`ac-row${i % 2 ? ' alt' : ''}`}>
+                <span className="ac-who">
+                  <Avatar id={uid} name={primary} photo={prof?.photoURL} size={30} />
+                  <span className="ac-who-text">
+                    <span className="ac-name">
+                      {primary}{isMe && <span className="ac-you"> (you)</span>}
+                    </span>
+                    <span className="ac-email">
+                      {secondary || (isSuperadmin ? uid : '—')}
+                    </span>
                   </span>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {primary}{isMe && <span className="muted"> (you)</span>}
-                  </div>
-                  {secondary && (
-                    <div className="muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {secondary}
-                    </div>
+                </span>
+
+                <span className="ac-cell">
+                  {isAdmin && role !== 'owner' ? (
+                    <select
+                      className="ac-role-select"
+                      value={role}
+                      onChange={(e) => changeRole(uid, e.target.value)}
+                      disabled={busy}
+                      aria-label={`Role for ${primary}`}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="editor">Editor</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  ) : (
+                    <span className={`ac-role role-${role}`}>{ROLE_TITLE[role] || role}</span>
                   )}
-                  {isSuperadmin && (
-                    <div className="mono muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title="Account ID">
-                      {uid}
-                    </div>
-                  )}
-                </div>
-                {isAdmin && role !== 'owner' ? (
-                  <select
-                    className="select select-sm"
-                    value={role}
-                    onChange={(e) => changeRole(uid, e.target.value)}
-                    disabled={busy}
-                    style={{ width: 104, flexShrink: 0 }}
-                  >
-                    <option value="admin">admin</option>
-                    <option value="editor">editor</option>
-                    <option value="viewer">viewer</option>
-                  </select>
-                ) : (
-                  <span className="badge badge-soft-muted">{role}</span>
-                )}
+                </span>
+
+                <span className="ac-cell ac-scope" title={scope.count
+                  ? `Named directly on ${scope.label}`
+                  : 'Access comes from the workspace, not from a single project'}>{scope.label}</span>
+
+                <span className="ac-cell ac-seen" title={seen
+                  ? 'Newest activity of theirs in the entries loaded'
+                  : 'Nothing of theirs in the entries loaded — not necessarily never'}>
+                  {seen || '—'}
+                </span>
+
                 {isAdmin && role !== 'owner' && (
-                  <button className="btn btn-sm btn-ghost link-danger" onClick={() => remove(uid)} disabled={busy} aria-label="Remove">✕</button>
+                  <button
+                    className="ac-remove"
+                    onClick={() => remove(uid)}
+                    disabled={busy}
+                    title={`Remove ${primary}`}
+                    aria-label={`Remove ${primary}`}
+                  >✕</button>
                 )}
               </div>
             );
           })}
-        </div>
 
-        {pendingInvites.length > 0 && (
-          <div className="field" style={{ marginTop: 12 }}>
-            <label className="label">Invited — waiting for them to sign in</label>
-            <div className="ws-members-list">
-              {pendingInvites.map((inv) => (
-                <div key={inv.email} className="ws-member-row">
-                  <span className="account-avatar fallback" style={{ width: 28, height: 28, fontSize: 12 }}>
-                    {(inv.email[0] || '?').toUpperCase()}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {inv.email}
-                    </div>
-                    <div className="muted small">Joins as {inv.role} when they next open the app</div>
+          <p className="ac-foot">
+            Last logged is read from the activity entries currently loaded, so a
+            dash means nothing of theirs is in that window — not that they have
+            never been here.
+          </p>
+        </section>
+
+        <div className="ac-side">
+          {/* ── Role definitions ── */}
+          <section className="ac-card">
+            <div className="bx-h-sm">Role definitions</div>
+            <p className="ac-card-sub">What each role can do in this workspace.</p>
+            <div className="ac-roles">
+              {ROLES.map((r) => (
+                <div key={r.id} className="ac-roledef">
+                  <div className="ac-roledef-top">
+                    <span className={`ac-role role-${r.id}`}>{r.label}</span>
+                    <span className="ac-roledef-count">
+                      {counts[r.id]} member{counts[r.id] === 1 ? '' : 's'}
+                    </span>
                   </div>
-                  {isAdmin && (
-                    <button
-                      className="btn btn-sm btn-ghost link-danger"
-                      onClick={() => withdraw(inv.email)}
-                      disabled={busy}
-                      title="Withdraw this invitation" aria-label="Withdraw this invitation">✕</button>
-                  )}
+                  <p className="ac-roledef-perms">{r.perms}</p>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          </section>
+
+          {/* ── Pending invites ── */}
+          <section className="ac-card">
+            <div className="bx-h-sm">Pending invites</div>
+            {pendingInvites.length === 0 ? (
+              <p className="ac-card-sub" style={{ margin: 0 }}>Nobody is waiting to join.</p>
+            ) : (
+              <div className="ac-invites">
+                {pendingInvites.map((inv) => (
+                  <div key={inv.email} className="ac-invite">
+                    <div className="ac-invite-text">
+                      <div className="ac-invite-email">{inv.email}</div>
+                      {/* No email is sent and an invitation carries no expiry —
+                          neither is claimed here. */}
+                      <div className="ac-invite-meta">
+                        Joins as {ROLE_TITLE[inv.role] || inv.role} when they next sign in
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        className="ac-withdraw"
+                        onClick={() => withdraw(inv.email)}
+                        disabled={busy}
+                        title={`Withdraw the invitation to ${inv.email}`}
+                        aria-label={`Withdraw the invitation to ${inv.email}`}
+                      >Withdraw</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
 
         {isAdmin && (
           <div className="field" style={{ marginTop: 12 }}>
@@ -1369,6 +1519,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
             <div style={{ display: 'flex', gap: 6 }}>
               <input
                 className="input input-sm"
+                id="ac-invite-email"
                 type="email"
                 value={newEmail}
                 onChange={(e) => { setNewEmail(e.target.value); setInviteError(null); }}
@@ -1423,12 +1574,7 @@ function WorkspaceMembersModal({ workspace, currentUid, isAdmin, isSuperadmin = 
           </div>
         )}
 
-        <div className="modal-actions">
-          <div style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 

@@ -1,7 +1,6 @@
 // src/hooks/useMyWeek.js — the week, and what dragging inside it does.
 //
-// Lifted out of MyWeekView for T-0132, for the same reason useBulkTasks was
-// lifted out of the task table: the page cannot render without a live
+// Lifted out of MyWeekView for T-0132: the page cannot render without a live
 // workspace, so anything left inside it can only be checked by reading the
 // source. The acceptance criteria for NEW-020 end in "dragging one to another
 // day writes plan.endDate while preserving its duration" — that is a sentence

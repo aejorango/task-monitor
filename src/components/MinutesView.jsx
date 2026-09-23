@@ -10,7 +10,6 @@ import {
   restoreDeleted,
 } from '../services/firebase';
 import Icon from './Icon';
-import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
@@ -20,6 +19,7 @@ import { useToast } from './Toast';
 import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 function PriorityIcon() {
   // Clean monochrome flag/pin — inherits currentColor.
@@ -128,15 +128,12 @@ export default function MinutesView({ projectFilter = 'all' }) {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Minutes</h1>
-          <p className="page-subtitle">Meeting minutes — attendees, notes, decisions and action items.</p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ New minutes</button>
-        </div>
-      </div>
+      <PageSubtitle>Attendees, notes, decisions and action items</PageSubtitle>
+      <PageActions>
+        <button className="cmd cmd-primary" onClick={() => setEditing('new')}>
+          <span className="cmd-icon">+</span>New minutes
+        </button>
+      </PageActions>
 
       <div className="minutes-layout">
         {/* Project panel */}
@@ -215,6 +212,10 @@ export default function MinutesView({ projectFilter = 'all' }) {
         </div>
       </div>
 
+      {/* Clicking a task opens the EDITOR, not the read-only activity list.
+          One click, one destination — the activity log is that editor's
+          Activity tab now, so the list is not lost, it just stopped being
+          a second modal in front of the thing you actually wanted. */}
       {editing && (
         <MinuteEditor
           minute={editing === 'new' ? null : editing}
@@ -269,7 +270,6 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
   const workspaceId = useActiveWorkspaceId();
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState(null); // action-item id currently syncing to a task
-  const [viewingTask, setViewingTask] = useState(null); // → TaskActivitiesModal
   const [editingTask, setEditingTask] = useState(null); // → TaskEditor
   const items = minute.actionItems || [];
   const doneCount = items.filter((i) => i.done).length;
@@ -405,7 +405,7 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
                             className="icon-btn minute-action-open"
                             title={tasksById[it.taskId] ? 'Open task — log activity / edit' : 'Linked task not found in this workspace'}
                             disabled={!tasksById[it.taskId]}
-                            onClick={() => { const t = tasksById[it.taskId]; if (t) setViewingTask(t); }}
+                            onClick={() => { const t = tasksById[it.taskId]; if (t) setEditingTask(t); }}
                           ><Icon name="board" size={15} /></button>
                           <button
                             className="icon-btn link-danger"
@@ -470,20 +470,15 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
         </div>
       )}
 
-      {viewingTask && !editingTask && (
-        <TaskActivitiesModal
-          task={viewingTask}
-          userId={userId}
-          onClose={() => setViewingTask(null)}
-          onEditTask={(t) => setEditingTask(t)}
-        />
-      )}
-
+      {/* Clicking a task opens the EDITOR, not the read-only activity list.
+          One click, one destination — the activity log is that editor's
+          Activity tab now, so the list is not lost, it just stopped being
+          a second modal in front of the thing you actually wanted. */}
       {editingTask && (
         <TaskEditor
           task={editingTask}
           projects={projects}
-          onClose={() => { setEditingTask(null); setViewingTask(null); }}
+          onClose={() => setEditingTask(null)}
         />
       )}
     </div>

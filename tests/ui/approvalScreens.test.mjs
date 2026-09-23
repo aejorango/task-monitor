@@ -49,9 +49,33 @@ test('a profile still arriving is not reported as a rejection', async () => {
   ui.unmount();
 });
 
-test('the waiting screen still names who can approve you', async () => {
+// The card used to echo your account (avatar, name, email), show a status pill
+// and list the superadmins who could approve you. All three were removed on
+// request. This replaces the old "still names who can approve you" guard, which
+// asserted the list was there.
+//
+// NOTE the cost, which is deliberate and not a bug: a waiting user is no longer
+// told WHICH administrator to chase. The copy says to ask one; it can no longer
+// say who. If that turns out to matter, the fix is a contact line in
+// approvalCopy — not bringing the email list back onto a pre-auth screen.
+test('the waiting screen no longer echoes the account or lists superadmins', async () => {
   const ui = await mount(h(PendingApprovalView, { profile: { status: 'pending' } }));
-  assert.match(text(ui.container), /@/, 'an email address to contact');
+  const html = ui.container.innerHTML;
+  for (const cls of ['pending-account', 'pending-status', 'pending-admin-list', 'pending-avatar']) {
+    assert.ok(!html.includes(cls), `${cls} was removed from the card`);
+  }
+  assert.doesNotMatch(text(ui.container), /Superadmins who can approve you/);
+  ui.unmount();
+});
+
+// The one thing that had to SURVIVE that removal: `waitNote` was rendered only
+// inside the status pill, and it is the sentence saying no email is coming.
+test('removing the status pill did not take the no-email sentence with it', async () => {
+  const ui = await mount(h(PendingApprovalView, { profile: { status: 'pending' } }));
+  const shown = text(ui.container);
+  assert.match(shown, /No email is sent/);
+  assert.match(shown, /Leave this page open/);
+  assert.doesNotMatch(shown, PROMISES_EMAIL, shown);
   ui.unmount();
 });
 

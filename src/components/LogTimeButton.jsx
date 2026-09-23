@@ -22,7 +22,7 @@ export default function LogTimeButton({
   projectById = {},
   projectFilter = 'all',
   userId,
-  className = 'db-btn db-btn-ghost',
+  className = 'btn btn-sm',
 }) {
   const [loggingTask, setLoggingTask] = useState(null);
   const [pickerOpen, setPickerOpen]   = useState(false);

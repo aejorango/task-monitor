@@ -49,14 +49,14 @@ const renderRow = (task) => mount(h(ToastProvider, null, h(GanttRow, {
   task,
   onSavePlan: (id, patch) => { writes.push([id, patch]); },
   project: { id: 'p1', name: 'Bridged', color: '#4f46e5' },
-  phaseName: 'Discovery',
   range: RANGE,
-  zoomConf: { id: 'day', dayWidth: DAY_WIDTH },
-  totalWidth: 31 * DAY_WIDTH, phaseWidth: 120, taskWidth: 200, rowWidth: 1400,
+  // The chart is fluid now: the row is handed the measured day width rather
+  // than a zoom preset. The drag arithmetic is the same either way.
+  dayWidth: DAY_WIDTH,
   today: TODAY,
 })));
 
-const barOf = (ui) => ui.container.querySelector('.gantt-bar.plan');
+const barOf = (ui) => ui.container.querySelector('.gc-bar');
 
 /** A real pointer drag on `el`, from x0 to x1, in window-level events. */
 const drag = async (el, x0, x1) => {
@@ -90,7 +90,7 @@ test('the bar is exactly one day column wide, on the due date', async () => {
 
 test('it is marked as a milestone so it reads as a marker, not a range', async () => {
   const ui = await renderRow(dueOnly);
-  assert.ok(barOf(ui).classList.contains('milestone'));
+  assert.ok(barOf(ui).classList.contains('is-milestone'));
   ui.unmount();
 });
 
@@ -130,7 +130,7 @@ test('a real range says what it is', async () => {
 test('dragging the left edge of a due-only task gives it a start date', async () => {
   writes.length = 0;
   const ui = await renderRow(dueOnly);
-  const handle = ui.container.querySelector('.gantt-handle-left');
+  const handle = ui.container.querySelector('.gc-handle-l');
   assert.ok(handle, 'the milestone has a left handle to grab');
 
   // Three day columns to the left.
@@ -146,7 +146,7 @@ test('dragging the left edge of a due-only task gives it a start date', async ()
 test('the left edge cannot be dragged past the due date', async () => {
   writes.length = 0;
   const ui = await renderRow(dueOnly);
-  await drag(ui.container.querySelector('.gantt-handle-left'), 500, 500 + 5 * DAY_WIDTH);
+  await drag(ui.container.querySelector('.gc-handle-l'), 500, 500 + 5 * DAY_WIDTH);
   assert.deepEqual(writes.at(-1)[1], { 'plan.startDate': '2026-09-25', 'plan.endDate': '2026-09-25' });
   ui.unmount();
 });
@@ -171,7 +171,7 @@ test('the bar follows the pointer while the drag is still going', async () => {
   const ui = await renderRow(dueOnly);
   const bar = barOf(ui);
   await act(async () => {
-    ui.container.querySelector('.gantt-handle-left')
+    ui.container.querySelector('.gc-handle-l')
       .dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 500 }));
   });
   await act(async () => {
@@ -206,9 +206,9 @@ test('the geometry is the pure module, not a second copy in the component', () =
     'the inline geometry that needed both dates is gone');
 });
 
-test('a milestone stays visible and grabbable at month zoom', () => {
-  const block = css.slice(css.indexOf('.gantt-bar.plan.milestone {'));
-  assert.match(block, /min-width: \d+px/, 'a six-pixel day column would otherwise be unclickable');
+test('a milestone stays visible and grabbable however wide the window is', () => {
+  const block = css.slice(css.indexOf('.gc-bar.is-milestone {'));
+  assert.match(block, /min-width: \d+px/, 'on a six-month window one day is a couple of pixels');
   assert.doesNotMatch(block.slice(0, 300), /transform: rotate/,
     'a rotated diamond moves the resize handles away from where a user reaches for them');
 });

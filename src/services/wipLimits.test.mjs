@@ -43,7 +43,7 @@ test('what the editor stores', () => {
 test('the stored map keeps only real limits, and only real columns', () => {
   assert.deepEqual(normalizeLimits({ todo: 5, doing: 0, done: '', nonsense: 9 }), { todo: 5 });
   assert.deepEqual(normalizeLimits(), {});
-  assert.deepEqual(WIP_STATUSES, ['todo', 'doing', 'done']);
+  assert.deepEqual(WIP_STATUSES, ['todo', 'doing', 'review', 'done']);
 });
 
 /* ── the acceptance case ───────────────────────────────────────────────── */

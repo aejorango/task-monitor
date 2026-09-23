@@ -10,7 +10,7 @@ const read = (f) => fs.readFileSync(path.join(root, 'src', 'components', f), 'ut
 
 test('the Gantt page can export the tasks it is showing', () => {
   const src = read('GanttView.jsx');
-  assert.match(src, /<ExportButton \{\.\.\.exportProps\} \/>/);
+  assert.match(src, /<ExportButton \{\.\.\.exportProps\} className="cmd" \/>/);
   assert.match(src, /build: \(\) => buildTaskListDocument\(rows,/,
     'it must export the rows on the chart, not every task');
   assert.match(src, /kind: 'table'/, 'a task list is a spreadsheet, not a report');

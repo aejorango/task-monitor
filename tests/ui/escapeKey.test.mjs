@@ -158,7 +158,6 @@ test('the five Escape consumers still listen where the bug affected them', () =>
   for (const [file, hint] of [
     ['ExportButton.jsx', 'the Export ▾ menu'],
     ['InboxBell.jsx', 'the inbox panel'],
-    ['TasksTableView.jsx', 'the Task-table column picker'],
   ]) {
     const src = read('src', 'components', file);
     assert.match(src, /if \(e\.key === 'Escape'\)/, `${hint} closes on Escape`);

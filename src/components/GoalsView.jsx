@@ -1,8 +1,20 @@
-// src/components/GoalsView.jsx — Strategic-plan "Goals". Each goal renders as a
-// one-pager card matching the SP3 template: title banner, INITIATIVES, KPI, and
-// three aligned columns — CHANGE AGENDA (FROM→TO pairs), DELIVERABLES (numbered),
-// and TARGET DATE (target + status per deliverable). Create / edit / delete via
-// a modal editor.
+// src/components/GoalsView.jsx — Dashboard → Goals, rebuilt to
+// `Dashboard Explorer.dc.html` (T-0154).
+//
+// Three cards across: a conic ring carrying the goal's completion, the title,
+// its owner and its date, a Target / Now band, the key results as named bars,
+// and the projects it touches as chips.
+//
+// What this replaced: a full-width SP3 one-pager per goal — a coloured banner
+// over INITIATIVES, KPI, and three aligned columns (CHANGE AGENDA's FROM→TO
+// pairs, numbered DELIVERABLES, TARGET DATE). None of that data was deleted:
+// the change agenda and each deliverable's own target date and status are
+// still edited in the modal, and **Export ▾** still writes the full one-pager
+// out through `buildGoalsDocument` — which is what people actually send.
+//
+// The arithmetic, and the honesty rule it turns on, is the pure
+// `services/goalProgress.js`: a deliverable nobody linked to a project has NO
+// percentage rather than 0%.
 
 import { useState, useMemo, useCallback } from 'react';
 import { useGoals, useAllWorkspaceProjects, useAllWorkspaceTasks, useAuth } from '../hooks/useTasks';
@@ -16,16 +28,12 @@ import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { PageActions, PageSubtitle } from './PageHeader';
+import Avatar from './Avatar';
+import { atRiskCount, goalProgress, deliverableProjectIds } from '../services/goalProgress';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
-
-// Normalize a deliverable's linked projects to an array of ids, accepting the
-// legacy single `projectId` shape.
-function deliverableProjectIds(d) {
-  if (Array.isArray(d.projectIds)) return d.projectIds.filter(Boolean);
-  return d.projectId ? [d.projectId] : [];
-}
 
 const emptyGoal = () => ({
   code: '',
@@ -76,6 +84,15 @@ export default function GoalsView() {
     return m;
   }, [workspaces]);
 
+  // Who owns a goal is its `userId`. Goals span workspaces, so the profiles of
+  // every workspace this person is in are merged — a goal in one workspace can
+  // be owned by somebody you only share another with.
+  const memberProfiles = useMemo(() => {
+    const m = {};
+    workspaces.forEach((w) => Object.assign(m, w.memberProfiles || {}));
+    return m;
+  }, [workspaces]);
+
   // Completion per project: average of its tasks' % complete. Keyed by project
   // id (globally unique), so cross-workspace links resolve too.
   const projectStats = useMemo(() => {
@@ -102,27 +119,29 @@ export default function GoalsView() {
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
   }, [projects, wsNameById]);
 
+  // "3 goals · 1 at risk" — the mockup's own count line. At risk is the red
+  // tone, and a goal nothing in which is measured is NOT red: see
+  // services/goalProgress.js.
+  const atRisk = useMemo(() => atRiskCount(goals, projectStats), [goals, projectStats]);
+
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Goals</h1>
-          <p className="page-subtitle">
-            Strategic-plan one-pagers — initiatives, KPI, change agenda, deliverables and target dates.
-          </p>
-        </div>
-        <div className="page-actions">
-          <ExportButton
-            build={() => buildGoalsDocument(goals, { projectStats, deliverableProjectIds })}
-            baseName="goals"
-            kind="document"
-            title="Save these goals as a PDF, Word document or web page"
-          />
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>
-            + New goal
-          </button>
-        </div>
-      </div>
+      <PageSubtitle>
+        <strong>{goals.length}</strong> goal{goals.length === 1 ? '' : 's'}
+        {atRisk > 0 && <> · {atRisk} at risk</>}
+      </PageSubtitle>
+      <PageActions>
+        <ExportButton
+          build={() => buildGoalsDocument(goals, { projectStats, deliverableProjectIds })}
+          baseName="goals"
+          kind="document"
+          className="cmd"
+          title="Save these goals as a PDF, Word document or web page"
+        />
+        <button className="cmd cmd-primary" onClick={() => setEditing('new')}>
+          <span className="cmd-icon">+</span>New goal
+        </button>
+      </PageActions>
 
       {loading ? (
         <p className="muted">Loading goals…</p>
@@ -133,12 +152,13 @@ export default function GoalsView() {
           <p className="small">Click <strong>+ New goal</strong> to build your first strategic-plan card.</p>
         </div>
       ) : (
-        <div className="goals-list">
+        <div className="gl-grid">
           {goals.map((g) => (
             <GoalCard
               key={g.id}
               goal={g}
               projectStats={projectStats}
+              memberProfiles={memberProfiles}
               onEdit={() => setEditing(g)}
               onOpenWbs={setWbsProjectId}
             />
@@ -170,113 +190,98 @@ export default function GoalsView() {
 
 // ─── Display card (matches the SP3 template) ────────────────────────────────
 
-function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs }) {
-  const agenda = goal.changeAgenda || [];
-  const deliverables = goal.deliverables || [];
+function GoalCard({ goal, projectStats = {}, onEdit, onOpenWbs, memberProfiles = {} }) {
+  const g = goalProgress(goal, projectStats);
+  const owner = memberProfiles[goal.userId];
 
   return (
-    <div className="goal-card">
-      <div className="goal-banner" style={{ backgroundColor: goal.color || '#1e2a52' }}>
-        {goal.code && <span className="goal-code-badge">{goal.code}</span>}
-        <h2 className="goal-banner-title">{goal.title || 'Untitled goal'}</h2>
-        <button className="goal-edit-btn" onClick={onEdit} title="Edit goal">
-          <GoalIcon name="pencil" size={14} /> Edit
-        </button>
-      </div>
-
-      <div className="goal-body" style={{ backgroundColor: goal.bgColor || goal.color || '#1e2a52' }}>
-        {/* INITIATIVES */}
-        <div className="goal-srow">
-          <div className="goal-chip"><GoalIcon name="initiatives" /> INITIATIVES</div>
-          <div className="goal-panel">{goal.initiative || <span className="goal-muted">—</span>}</div>
-        </div>
-
-        {/* KPI */}
-        <div className="goal-srow">
-          <div className="goal-chip"><GoalIcon name="kpi" /> KPI</div>
-          <div className="goal-panel">{goal.kpi || <span className="goal-muted">—</span>}</div>
-        </div>
-
-        {/* Three-column headers */}
-        <div className="goal-cols-head">
-          <div className="goal-chip goal-chip-head"><GoalIcon name="change" /> CHANGE AGENDA</div>
-          <div className="goal-chip goal-chip-head"><GoalIcon name="deliver" /> DELIVERABLES</div>
-          <div className="goal-chip goal-chip-head"><GoalIcon name="calendar" /> TARGET DATE</div>
-        </div>
-
-        {/* Three-column bodies */}
-        <div className="goal-cols-body">
-          {/* Change agenda: FROM → TO pairs */}
-          <div className="goal-panel goal-col">
-            {agenda.length === 0 ? <span className="goal-muted">—</span> : agenda.map((a, i) => (
-              <div key={a.id || i} className="goal-fromto">
-                {i > 0 && <div className="goal-divider" />}
-                <div className="goal-ft-label">FROM</div>
-                <div className="goal-ft-text">{a.from || <span className="goal-muted">—</span>}</div>
-                <div className="goal-ft-label" style={{ marginTop: 8 }}>TO</div>
-                <div className="goal-ft-text">{a.to || <span className="goal-muted">—</span>}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Deliverables: numbered, with a per-project progress pill */}
-          <div className="goal-panel goal-col">
-            {deliverables.length === 0 ? <span className="goal-muted">—</span> : deliverables.map((d, i) => {
-              const linkedProjects = deliverableProjectIds(d)
-                .map((pid) => projectStats[pid])
-                .filter(Boolean);
-              return (
-                <div key={d.id || i} className="goal-deliv">
-                  {i > 0 && <div className="goal-divider" />}
-                  <div className="goal-deliv-row">
-                    <span className="goal-deliv-num">{i + 1}.</span>
-                    <span className="goal-deliv-text">{d.text || <span className="goal-muted">—</span>}</span>
-                  </div>
-                  {linkedProjects.length > 0 && (
-                    <div className="goal-deliv-pills">
-                      {linkedProjects.map((proj) => (
-                        <button
-                          key={proj.id}
-                          type="button"
-                          className="goal-deliv-pill"
-                          title={`${proj.name} (${proj.workspaceName}) — ${proj.pct}% complete · ${proj.taskCount} task${proj.taskCount === 1 ? '' : 's'} · click for WBS`}
-                          onClick={() => onOpenWbs?.(proj.id)}
-                        >
-                          <div className="goal-deliv-pill-fill" style={{ width: `${proj.pct}%`, background: proj.color }} />
-                          <span className="goal-deliv-pill-label">{proj.name}</span>
-                          <span className="goal-deliv-pill-pct">{proj.pct}%</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Target date + status, aligned to each deliverable */}
-          <div className="goal-panel goal-col">
-            {deliverables.length === 0 ? <span className="goal-muted">—</span> : deliverables.map((d, i) => (
-              <div key={d.id || i} className="goal-target">
-                {i > 0 && <div className="goal-divider" />}
-                <div className="goal-target-text">
-                  {d.targetDate || d.status ? (
-                    <>
-                      {d.targetDate && <><strong>Target:</strong> {d.targetDate}<br /></>}
-                      {d.status && <><strong>Status:</strong> {d.status}</>}
-                    </>
-                  ) : <span className="goal-muted">—</span>}
-                </div>
-              </div>
-            ))}
+    <div className={`gl-card tone-${g.tone}`}>
+      {/* The head: a conic ring carrying the goal's own completion, its name,
+          its owner and the date it is due by. The ring is a gradient rather
+          than an SVG because it is one value — an arc library for a single
+          number is a dependency you maintain for ever. */}
+      <div className="gl-head">
+        <span
+          className="gl-ring"
+          style={{ '--gl-deg': `${(g.pct ?? 0) * 3.6}deg` }}
+          role="img"
+          aria-label={g.pct == null ? 'Nothing measured yet' : `${g.pct}% complete`}
+        >
+          <span className="gl-ring-in">{g.pct == null ? '—' : `${g.pct}%`}</span>
+        </span>
+        <div className="gl-id">
+          <button type="button" className="gl-name" onClick={onEdit} title="Edit this goal">
+            {goal.title || 'Untitled goal'}
+          </button>
+          {/* The title has always been the edit control, which nobody could be
+              expected to guess. The button says so. */}
+          <button type="button" className="gl-edit" onClick={onEdit} aria-label={`Edit ${goal.title || 'this goal'}`}>
+            ✎ Edit
+          </button>
+          <div className="gl-who">
+            {owner
+              ? <Avatar id={goal.userId} name={owner.displayName || owner.email} photo={owner.photoURL} size={24} />
+              : <Avatar id={goal.userId || goal.id} name={goal.code || 'Goal'} size={24} />}
+            <span className="gl-due">{g.due || 'no date'}</span>
           </div>
         </div>
       </div>
+
+      {/* Target is what the goal is AIMING at — the KPI somebody wrote down.
+          Now is what is true today. The mockup prints a measured value there;
+          this app has no "current reading" field, so Now is the count of
+          deliverables actually finished, which is a real number rather than a
+          plausible one. */}
+      <div className="gl-band">
+        <div className="gl-band-cell">
+          <div className="gl-lbl">Target</div>
+          <div className="gl-target">{goal.kpi || '—'}</div>
+        </div>
+        <div className="gl-band-cell gl-band-now">
+          <div className="gl-lbl">Now</div>
+          <div className="gl-now">{g.total ? `${g.done}/${g.total}` : '—'}</div>
+        </div>
+      </div>
+
+      <div className="gl-lbl gl-krs-lbl">Key results</div>
+      {g.deliverables.length === 0 ? (
+        <p className="gl-empty">Nothing listed yet — open the goal to add a deliverable.</p>
+      ) : (
+        <div className="gl-krs">
+          {g.deliverables.map((d, i) => (
+            <div key={d.id || i}>
+              <div className="gl-kr-top">
+                <span className="gl-kr-name" title={d.text || 'Untitled'}>{d.text || 'Untitled'}</span>
+                <span className={`gl-kr-pct tone-ink-${d.tone}`}>
+                  {d.pct == null ? '—' : `${d.pct}%`}
+                </span>
+              </div>
+              {/* No bar where there is no number. A 0%-wide track reads as
+                  "started, got nowhere" for something nobody has wired up. */}
+              <div className="gl-kr-track">
+                {d.pct != null && (
+                  <span className={`gl-kr-bar tone-fill-${d.tone}`} style={{ width: `${d.pct}%` }} />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {g.unmeasured > 0 && (
+        <p className="gl-unmeasured">
+          {g.unmeasured} of {g.total} not linked to a project, so {g.unmeasured === 1 ? 'it is' : 'they are'} not
+          in the ring.
+        </p>
+      )}
+
+      {/* The project chips under the card were hidden on request. The link
+          between a goal and its projects is not lost — it is still what the
+          ring is computed from, it is still edited in the goal editor, and
+          the unmeasured line above still says when some of it is unlinked. */}
     </div>
   );
 }
-
-// ─── Editor modal ───────────────────────────────────────────────────────────
 
 function GoalEditor({ goal, projectsByWorkspace = [], projectStats = {}, titleSeed, onClose }) {
   const modal = useModalDialog({ onClose });

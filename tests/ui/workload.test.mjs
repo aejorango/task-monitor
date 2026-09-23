@@ -1,4 +1,14 @@
-// T-0079 / NEW-005 — Board → Workload, rendered.
+// T-0079 / NEW-005 / T-0150 — Board → Workload.
+//
+// T-0150 rebuilt this page to `Board Explorer.dc.html`: it is now ONE panel —
+// a person per row, a bar segmented by project, a cap notch and the hours.
+// The people × six-weeks drag-to-rebalance grid that used to sit under it was
+// removed on request.
+//
+// These guards are mostly about that removal, because "the grid is gone" and
+// "the grid's arithmetic quietly broke" look identical from the outside, and
+// because deleting a capability without re-homing it is the one thing the
+// porting playbook forbids.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,159 +20,142 @@ setupDom();
 
 const { default: WorkloadView } = await import('../../src/components/WorkloadView.jsx');
 const { ToastProvider } = await import('../../src/components/Toast.jsx');
-const { cellId, parseCellId, describeMove } = await import('../../src/services/workload.js');
+const { cellId, parseCellId, describeMove, taskHours, DEFAULT_CAPACITY_HOURS } =
+  await import('../../src/services/workload.js');
 
 const h = React.createElement;
 const root = path.resolve(import.meta.dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
 const view = read('src', 'components', 'WorkloadView.jsx');
+const css = read('src', 'App.css');
 
 let quiet;
 before(() => { quiet = muteConsoleError(); });
 after(() => { quiet?.restore(); teardownDom(); });
 
-const render = (props = {}) => mount(
-  h(ToastProvider, null, h(WorkloadView, props)),
-);
+const render = (props = {}) => mount(h(ToastProvider, null, h(WorkloadView, props)));
 
-// ─── the page ───────────────────────────────────────────────────────────────
+// ─── the panel, to the mockup ───────────────────────────────────────────────
 
-test('the page renders with its heading and says what to do with it', async () => {
-  const ui = await render();
-  const shown = text(ui.container);
-  assert.match(shown, /Workload/);
-  assert.match(shown, /Drag a task to another week to move its deadline/);
-  assert.match(shown, /to another person to hand it over/);
+test('the panel is the mockup’s, to the pixel', () => {
+  assert.match(css, /\.wl-card \{[\s\S]*?padding: 18px 20px/);
+  assert.match(css, /\.wl-card \{[\s\S]*?border-radius: 16px/);
+  assert.match(css, /\.wl-rows \{[\s\S]*?gap: 15px/);
+  assert.match(css, /\.wl-name \{ width: 104px/,       'the mockup’s own 104px');
+  assert.match(css, /\.wl-person \{[\s\S]*?font-size: 12\.5px; font-weight: 700/);
+  assert.match(css, /\.wl-count \{[\s\S]*?font-size: 10\.5px/);
+  assert.match(css, /\.wl-track \{[\s\S]*?height: 16px; border-radius: 6px/);
+  assert.match(css, /\.wl-notch \{[\s\S]*?width: 2px/);
+  assert.match(css, /\.wl-hours \{[\s\S]*?font-size: 11\.5px; font-weight: 800/);
+  assert.match(css, /\.wl-leg-dot \{ width: 9px; height: 9px; border-radius: 3px/);
+});
+
+test('a bar is segmented by project and measured against a real cap', () => {
+  assert.match(view, /className="wl-seg"/);
+  assert.match(view, /width: `\$\{\(sg\.h \/ load\.widest\) \* 100\}%`/);
+  assert.match(view, /capPct: \(DEFAULT_CAPACITY_HOURS \/ widest\) \* 100/);
+  assert.match(view, /Math\.max\(DEFAULT_CAPACITY_HOURS \* 1\.25/,
+    'the notch must stay inside the track, and an over-cap bar needs somewhere to go');
+});
+
+test('the legend names every project on screen, and the cap line', () => {
+  assert.match(view, /className="wl-leg-dot"/);
+  assert.match(view, /className="wl-leg-line"/);
+  assert.match(view, /\{DEFAULT_CAPACITY_HOURS\}h cap/);
+});
+
+// ─── honesty ────────────────────────────────────────────────────────────────
+
+test('the page never lets an assumed hour pass as a measured one', () => {
+  // A full bar the reader believes is measured, when half of it was a 4h
+  // fallback, is the oldest trap on this page.
+  assert.match(view, /if \(t\.estimateHours == null\) guessed \+= 1/);
+  assert.match(view, /\{p\.guessed\} assumed<\/span>/,     'each row says how many');
+  assert.match(view, /className="wl-assumed"/,
+    'and it sits OUTSIDE the 104px name column, which truncates');
+  assert.match(view, /HOURS_PER_TASK/);
+  assert.match(view, /a full bar built out of assumptions is worse than no bar/);
+});
+
+test('the bar counts open work whether or not it has a date', () => {
+  // With the weeks grid gone there is no date window, so an undated task is
+  // no longer invisible here — which is why the "no due date" rail could go.
+  assert.match(view, /const open = visible\.filter\(\(t\) => t\.status !== 'done'\)/);
+  assert.doesNotMatch(view, /plan\?\.endDate/, 'no date filter belongs in this sum');
+});
+
+test('a person with nothing open is left out, not drawn as an empty row', () => {
+  assert.match(view, /\.filter\(\(p\) => p\.open > 0\)/);
+});
+
+// ─── what a row does ────────────────────────────────────────────────────────
+
+test('a row filters the whole Board hub to that person', () => {
+  // The mockup's row is not a control. Making it one re-homes the grid's
+  // "look at just this person" without adding anything the mockup lacks:
+  // ?who= is the route the Board toolbar's roster already sets.
+  assert.match(view, /navigate\?\.\(\{ who: isOn \? null : p\.uid \}\)/);
+  assert.match(view, /aria-pressed=\{isOn\}/);
+  assert.match(view, /Show everybody/, 'and a way back out when it is applied');
+});
+
+test('an empty workspace says what would make the panel appear', async () => {
+  const ui = await render({ projectFilter: 'all' });
+  assert.match(text(ui.container), /Nobody is carrying open work|Loading the plan/);
   ui.unmount();
 });
 
-test('the colour key is spelled out, not left to be guessed from a shade', async () => {
-  const ui = await render();
-  const shown = text(ui.container);
-  for (const label of ['Nothing planned', 'Room to spare', 'A full week', 'More than a full week']) {
-    assert.match(shown, new RegExp(label));
-  }
-  ui.unmount();
+// ─── the grid is gone, and both halves of it are re-homed ───────────────────
+
+test('the weeks grid and its drag-and-drop are gone', () => {
+  assert.doesNotMatch(view, /workload-grid|workload-cell|workload-scroll/);
+  assert.doesNotMatch(view, /DndContext|useDraggable|useDroppable|DragOverlay/);
+  // The header comment NAMES them on purpose, so match a real import or
+  // call rather than the word.
+  assert.doesNotMatch(view, /^import[\s\S]*?\b(buildWorkload|planningWeeks|moveTaskPlan)\b/m);
+  assert.doesNotMatch(view, /\b(buildWorkload|planningWeeks|moveTaskPlan)\(/);
+  assert.doesNotMatch(view, /No due date yet/, 'the unplannable rail went with it');
+  const offenders = fs.readdirSync(path.join(root, 'src', 'components'))
+    .filter((f) => f.endsWith('.jsx'))
+    .filter((f) => /className="workload-/.test(read('src', 'components', f)));
+  assert.deepEqual(offenders, [], 'nothing renders the grid any more');
 });
 
-test('an empty workspace says what would make the grid appear', async () => {
-  const ui = await render();
-  assert.match(text(ui.container), /Nobody to plan for yet/);
-  assert.match(text(ui.container), /give tasks a due date so they show up here/);
-  ui.unmount();
+test('…and its stylesheet went with it', () => {
+  assert.doesNotMatch(css, /^\.workload-grid/m);
+  assert.doesNotMatch(css, /^\.workload-cell/m);
+  assert.doesNotMatch(css, /^\.workload-chip/m);
 });
 
-test('the week navigation is there, including a way back to now', async () => {
-  const ui = await render();
-  const labels = [...ui.container.querySelectorAll('button')].map((b) => b.textContent.trim());
-  assert.ok(labels.includes('← Earlier'));
-  assert.ok(labels.includes('This week'));
-  assert.ok(labels.includes('Later →'));
-  ui.unmount();
+test('moving WHEN and moving WHO both still have a home', () => {
+  // This is the guard that matters. The grid did two things; if neither of
+  // these renders, a capability was deleted rather than re-homed.
+  assert.match(read('src', 'components', 'CalendarView.jsx'), /moveTaskToDay/,
+    'move WHEN — drag between days on the Calendar');
+  assert.match(read('src', 'components', 'MyWeekView.jsx'), /useMyWeek/,
+    'move WHEN — My Week');
+  // T-0152 deleted the Table and the bulk bar with it, so reassigning is the
+  // task editor alone now. That IS a narrowing — it is recorded in CLAUDE.md
+  // rather than left to be discovered by someone looking for it.
+  assert.match(read('src', 'components', 'TaskEditor.jsx'), /assignedTo/,
+    'move WHO — the task editor');
 });
 
-// ─── the grid ───────────────────────────────────────────────────────────────
-
-test('the grid is a real table, so a screen reader can read across it', () => {
-  assert.match(view, /<table className="workload-grid">/);
-  assert.match(view, /<th scope="col"/);
-  assert.match(view, /<th scope="row" className="workload-person">/);
-});
-
-test('every cell says what it holds, in a sentence, on hover and for a reader', () => {
-  assert.match(view, /const description = describeCell\(row, week, cell\)/);
-  assert.match(view, /title=\{description\}/);
-  assert.match(view, /aria-label=\{description\}/);
-});
-
-test('the week columns honour the week-start preference', () => {
-  assert.match(view, /const weekStart = settings\?\.weekStart \?\? 1;/);
-  assert.match(view, /planningWeeks\(\{ from, count: WEEKS_AHEAD, weekStart \}\)/);
-});
-
-test('the grid is built by the pure module, not in the component', () => {
-  assert.match(view, /buildWorkload\(visible, \{ weeks, members, memberProfiles \}\)/);
-  assert.doesNotMatch(view, /plan\?\.endDate >=/, 'bucketing belongs in services/workload.js');
-});
-
-// ─── dragging ───────────────────────────────────────────────────────────────
-
-test('a cell id carries both halves of where it is, and reads back', () => {
-  const id = cellId('u-ace', '2026-09-14');
-  assert.deepEqual(parseCellId(id), { userId: 'u-ace', weekKey: '2026-09-14' });
+test('the pure module keeps its arithmetic and its tests', () => {
+  // buildWorkload and friends are unrendered but not deleted: the grid is one
+  // component away from coming back, and moveTaskToDay from the same module
+  // is still live behind the Calendar.
+  assert.deepEqual(parseCellId(cellId('u-ace', '2026-09-14')), { userId: 'u-ace', weekKey: '2026-09-14' });
   assert.equal(parseCellId('something-else'), null);
-  assert.equal(parseCellId(undefined), null);
-});
-
-test('a drop works out its target from the cell it landed on', () => {
-  assert.match(view, /const where = parseCellId\(over\?\.id\)/);
-  assert.match(view, /toUserId: where\.userId/);
-  assert.match(view, /toWeek: weeks\.find\(\(w\) => w\.key === where\.weekKey\) \|\| null/);
-});
-
-test('a drop outside a cell, or on a task that is gone, writes nothing', () => {
-  assert.match(view, /if \(!where\) return;/);
-  assert.match(view, /if \(!task\) return;/);
-});
-
-test('the write goes through applyTaskMove, so the new owner is told', () => {
-  assert.match(view, /await applyTaskMove\(task, patch, \{/);
-  assert.match(view, /byUserId: userId/);
-  assert.match(view, /byName: memberLabel\(userId, memberProfiles\)/);
-});
-
-test('a drop where it already was is not a write', () => {
-  assert.match(view, /if \(!patch\) return;\s+\/\/ dropped where it already was/);
-});
-
-test('a failed move says so in plain words rather than silently doing nothing', () => {
-  assert.match(view, /friendlyError\(err, 'Could not move that task\.'\)/);
-});
-
-test('a successful move says what it did', () => {
   assert.equal(
     describeMove({ 'plan.endDate': '2026-09-25', assignedTo: ['u-mia'] },
       { 'u-mia': { displayName: 'Mia Santos' } }),
     'Moved: due 2026-09-25, assigned to Mia Santos.',
   );
-  assert.equal(describeMove({ assignedTo: [] }), 'Moved: unassigned.');
-  assert.match(view, /toast\.success\(describeMove\(patch, memberProfiles\)\)/);
-});
-
-test('the chip is both the drag handle and the way into the task', () => {
-  assert.match(view, /useDraggable\(\{ id: task\.id \}\)/);
-  assert.match(view, /drag to move it, click to open it/);
-  // A click at the end of a drag must not also open the task.
-  assert.match(view, /const dragged = useRef\(false\);/);
-  assert.match(view, /if \(isDragging\) dragged\.current = true;/);
-  assert.match(view, /if \(dragged\.current\) \{ dragged\.current = false; return; \}/);
-});
-
-test('dragging a chip does not select the words it is dragging', () => {
-  const css = read('src', 'App.css');
-  const chip = css.slice(css.indexOf('.workload-chip {'), css.indexOf('.workload-chip.is-dragging'));
-  assert.match(chip, /user-select: none/);
-  assert.match(chip, /touch-action: none/, 'a touch drag must not scroll the page instead');
-});
-
-test('a drag in progress is shown, so the cursor is not carrying nothing', () => {
-  assert.match(view, /<DragOverlay>/);
-  assert.match(view, /dragging \? <span className="workload-chip is-dragging">/);
-});
-
-test('the cell being dropped on is marked with its own class, not the overload one', () => {
-  assert.match(view, /isOver \? 'is-drop-target' : ''/);
-  const css = read('src', 'App.css');
-  assert.match(css, /\.workload-cell\.is-drop-target \{ outline: 2px dashed/);
-  assert.match(css, /\.workload-cell\.is-over \{/, 'the over-capacity colour is separate');
-});
-
-// ─── the tasks that cannot be planned ───────────────────────────────────────
-
-test('tasks with no due date are offered, with what to do about them', () => {
-  assert.match(view, /No due date yet \(\{unscheduled\.length\}\)/);
-  assert.match(view, /cannot be planned until somebody says when they are due/);
-  assert.match(view, /onClick=\{\(\) => setEditing\(task\)\}/);
+  assert.equal(typeof taskHours, 'function');
+  assert.equal(typeof DEFAULT_CAPACITY_HOURS, 'number');
+  assert.match(view, /nothing renders them any more/,
+    'the file must say so, or the next reader deletes a tested module by accident');
 });
 
 // ─── wiring ─────────────────────────────────────────────────────────────────
@@ -170,27 +163,16 @@ test('tasks with no due date are offered, with what to do about them', () => {
 test('the page is routed, named and code-split like every other view', async () => {
   const app = read('src', 'App.jsx');
   assert.match(app, /const WorkloadView\s+= lazy\(\(\) => import\('\.\/components\/WorkloadView'\)\)/);
-  assert.match(app, /route\.view === 'workload'\s+&& <WorkloadView projectFilter=\{route\.projectFilter\} \/>/);
+  assert.match(app, /route\.view === 'workload'\s+&& <WorkloadView projectFilter=\{route\.projectFilter\} navigate=\{navigate\} route=\{route\} \/>/);
 
-  // The error boundary's name for the page used to be a hand-kept map in
-  // App.jsx, which had already drifted; it is derived from the registry now
-  // (T-0131), so what matters is that the registry names it.
   const { RENDERABLE_VIEWS } = await import('../../src/services/views.js');
   assert.equal(RENDERABLE_VIEWS.find((v) => v.id === 'workload')?.label, 'Workload');
   assert.match(app, /RENDERABLE_VIEWS\.map\(\(v\) => \[v\.id, v\.label\]\)/,
     'a second list of page names is how a crash gets reported on the wrong page');
 });
 
-test('it lives under Board in the sidebar, which is where the audit put it', async () => {
-  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
-  const shell = read('src', 'components', 'AppShell.jsx');
+test('it lives under Board, which is where the audit put it', async () => {
+  const { VIEW_REGISTRY, hubForView } = await import('../../src/services/views.js');
   assert.ok(VIEW_REGISTRY.find((v) => v.id === 'workload' && v.label === 'Workload'));
-  assert.match(shell, /childIds: \['board', 'calendar', 'gantt', 'wbs', 'workload'\]/);
-});
-
-test('the grid scrolls inside itself on a narrow screen', () => {
-  const css = read('src', 'App.css');
-  assert.match(view, /<div className="workload-scroll">/);
-  assert.match(css, /\.workload-scroll \{ overflow-x: auto; \}/);
-  assert.match(css, /@media \(max-width: 720px\) \{\s*\n\s*\.workload-grid/);
+  assert.equal(hubForView('workload')?.id, 'board');
 });

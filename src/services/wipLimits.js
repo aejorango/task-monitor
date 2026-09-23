@@ -11,7 +11,7 @@
 // always happens; the board says what just went over.
 
 /** Where the limits live on a project: `{ todo: 5, doing: 3, done: null }`. */
-export const WIP_STATUSES = ['todo', 'doing', 'done'];
+export const WIP_STATUSES = ['todo', 'doing', 'review', 'done'];
 
 /** Past this many days in a column, a card is old enough to point at. */
 export const DEFAULT_AGEING_DAYS = 5;

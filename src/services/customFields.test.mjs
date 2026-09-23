@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  allFields, columnIdFor, customFieldColumns, fieldIdOf, fieldsOf, formatValue,
+  allFields, fieldsOf, formatValue,
   hasValue, sortValue, taskChips,
 } from './customFields.js';
 
@@ -119,26 +119,3 @@ test('a task with no values, or no project, shows no chips', () => {
 
 // ─── columns ────────────────────────────────────────────────────────────────
 
-test('a column id round-trips to the field it came from', () => {
-  assert.equal(columnIdFor('f1'), 'custom:f1');
-  assert.equal(fieldIdOf('custom:f1'), 'f1');
-  assert.equal(fieldIdOf('status'), null, 'a built-in column is not a custom one');
-  assert.equal(fieldIdOf(undefined), null);
-});
-
-test('each field becomes a column that can render and sort itself', () => {
-  const cols = customFieldColumns([project]);
-  assert.deepEqual(cols.map((c) => c.id), ['custom:f1', 'custom:f2', 'custom:f3']);
-  assert.equal(cols[0].text(task), 'Acme');
-  assert.equal(cols[1].value(task), 250000);
-  assert.equal(cols[1].align, 'right', 'numbers read right-aligned');
-});
-
-test('a task with nothing in that field shows a dash, not a blank cell', () => {
-  assert.equal(customFieldColumns([project])[0].text({}), '—');
-});
-
-test('no projects means no extra columns, rather than a crash', () => {
-  assert.deepEqual(customFieldColumns(), []);
-  assert.deepEqual(customFieldColumns([]), []);
-});

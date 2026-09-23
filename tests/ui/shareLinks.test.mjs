@@ -108,7 +108,7 @@ test('no bar can run off the end of its track', () => {
 });
 
 test('the board form groups by status, in the order work moves', () => {
-  assert.match(snapshot, /const STATUS_ORDER = \['todo', 'doing', 'done'\]/);
+  assert.match(snapshot, /const STATUS_ORDER = \['todo', 'doing', 'review', 'done'\]/);
   assert.match(snapshot, /share\.kind === 'board' \? \(/);
 });
 

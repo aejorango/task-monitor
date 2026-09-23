@@ -14,6 +14,7 @@ import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function relTime(ts) {
@@ -79,7 +80,15 @@ function Avatar({ photoURL, name, size = 38, color }) {
   );
 }
 
-function ConvAvatar({ conv, meUid, size = 40 }) {
+/** A stable colour per person, matching the avatars elsewhere in the app. */
+function senderColor(personId) {
+  const palette = ['#0051BA', '#e2892e', '#7B2D8F', '#1DA449', '#1D7CC7', '#c0392b'];
+  let h = 0;
+  for (const ch of String(personId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return palette[h % palette.length];
+}
+
+function ConvAvatar({ conv, meUid, size = 44 }) {
   if (conv.type === 'group') {
     return (
       <div className="chat-avatar group" style={{ width: size, height: size }}>
@@ -116,16 +125,21 @@ export default function MessagesView() {
     if (me?.uid) markConversationRead(id, me.uid);
   };
 
+  // The count the subtitle shows. `isUnread` is the same predicate the list
+  // rows use, so the header and the dots beside the rows can never disagree.
+  const unreadCount = conversations.filter((c) => isUnread(c, me?.uid)).length;
+
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Messages</h1>
-          <p className="page-subtitle">
-            Chat with people in {activeWs?.name ? <strong>{activeWs.name}</strong> : 'this workspace'} — direct or group.
-          </p>
-        </div>
-      </div>
+      <PageSubtitle>
+        {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
+        {unreadCount > 0 && <> · <strong>{unreadCount} unread</strong></>}
+      </PageSubtitle>
+      <PageActions>
+        <button className="cmd cmd-primary" onClick={() => setNewChatOpen(true)}>
+          <span className="cmd-icon">+</span>New chat
+        </button>
+      </PageActions>
 
       <div className={`chat ${selected ? 'has-active' : ''}`}>
         {/* Conversation list */}
@@ -323,7 +337,14 @@ function ChatThread({ conversation, me, activeWs, onBack }) {
             <Fragment key={m.id}>
               {showDay && <div className="chat-day-sep"><span>{day}</span></div>}
               <div className={`chat-msg ${mine ? 'mine' : 'theirs'}`}>
-                {showName && <div className="chat-msg-sender">{m.senderName}</div>}
+                {/* In a group, who said it is carried by colour as well as by
+                    the name — the same colour as their avatar, so the eye can
+                    follow one person down a thread without reading. */}
+                {showName && (
+                  <div className="chat-msg-sender" style={{ color: senderColor(m.senderId) }}>
+                    {m.senderName}
+                  </div>
+                )}
                 <div className="chat-bubble" title={clockTime(m.createdAt)}>
                   {m.text}
                 </div>

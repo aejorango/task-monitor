@@ -213,15 +213,15 @@ test('the view mounts without a workspace and says it is loading', async () => {
 
 /* ── T-0132: it is actually in the sidebar ─────────────────────────────── */
 
-test('My Week gets its own sidebar entry, not swallowed into a group', async () => {
-  const shell = read('src', 'components', 'AppShell.jsx');
-  // The sidebar builds itself from the registry: a view in no NAV_GROUP becomes
-  // a top-level item. What would break this is somebody adding 'my-week' to a
-  // group's childIds, which would bury a page whose whole point is being there.
-  assert.doesNotMatch(shell, /childIds: \[[^\]]*'my-week'/,
-    'My Week is a destination, not a sub-item of Board or Reports');
-  assert.match(shell, /const group = childToGroup\.get\(v\.id\);\s*\n\s*if \(!group\) \{ items\.push\(v\); return; \}/,
-    'that is what makes an ungrouped registry entry appear at all');
+test('My Week is one click from the first page you land on', async () => {
+  const { hubForView, HUBS } = await import('../../src/services/views.js');
+  // Since T-0143 every page belongs to a hub, so "not swallowed into a group"
+  // is no longer the question — the question is WHICH hub. My Week belongs with
+  // the Dashboard, so it is a tab away from where the app opens, not buried
+  // under Board or Reports where nobody looking for their own week would go.
+  assert.equal(hubForView('my-week')?.id, 'dashboard');
+  const tabs = HUBS.find((h) => h.id === 'dashboard').tabs.map((t) => t.view);
+  assert.ok(tabs.indexOf('my-week') <= 1, 'it should sit right beside Overview');
 });
 
 test('it sits next to Dashboard, which is where you look first thing', async () => {

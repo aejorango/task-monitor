@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   canAdministerProject, canEditProject, friendlyError,
   isWorkspaceAdmin, projectRole, workspaceRole,
+  deniedDespiteRole, isPermissionDenied,
 } from './access.js';
 
 const WS = { id: 'ws', acl: { owner: 'owner', adm: 'admin', ed: 'editor', vw: 'viewer' } };
@@ -63,4 +64,47 @@ test('friendlyError never leaks an SDK dump', () => {
   assert.match(msg, /do not have permission/);
   assert.equal(friendlyError(null), 'Something went wrong. Please try again.');
   assert.equal(friendlyError({}, 'Could not save.'), 'Could not save.');
+});
+
+// ─── T-0159 / BUG-034: "ask an admin" is wrong advice for an admin ─────────
+
+test('a denial the UI did not expect does not tell the admin to ask an admin', () => {
+  const err = { code: 'permission-denied' };
+  const { message, operatorHint } = deniedDespiteRole(err, { believedAllowed: true });
+  assert.ok(!/ask a project or workspace admin/i.test(message),
+    'the page already established that they ARE the admin');
+  assert.match(message, /reload/i, 'and it has to say what to actually do');
+  assert.ok(operatorHint, 'the operator gets the real cause');
+  assert.match(operatorHint, /deploy:rules/);
+});
+
+test('a denial the UI DID expect keeps the normal sentence', () => {
+  const err = { code: 'permission-denied' };
+  const { message, operatorHint } = deniedDespiteRole(err, { believedAllowed: false });
+  assert.equal(message, friendlyError(err), 'a viewer really should ask an admin');
+  assert.equal(operatorHint, null);
+});
+
+test('a non-permission error is untouched whatever the role', () => {
+  const err = { code: 'unavailable' };
+  for (const believedAllowed of [true, false]) {
+    const { message, operatorHint } = deniedDespiteRole(err, { believedAllowed });
+    assert.equal(message, friendlyError(err));
+    assert.equal(operatorHint, null);
+  }
+});
+
+test('the operator hint never reaches the screen', () => {
+  const { message } = deniedDespiteRole({ code: 'permission-denied' }, { believedAllowed: true });
+  for (const leak of ['firestore.rules', 'npm run', 'acl[uid]', 'console']) {
+    assert.ok(!message.includes(leak), `"${leak}" is operator copy, not user copy`);
+  }
+});
+
+test('permission-denied is recognised however Firestore spelled it', () => {
+  assert.equal(isPermissionDenied({ code: 'permission-denied' }), true);
+  assert.equal(isPermissionDenied(new Error('7 PERMISSION_DENIED: Missing or insufficient permissions.')), true);
+  assert.equal(isPermissionDenied('Missing permissions'), false);
+  assert.equal(isPermissionDenied({ code: 'not-found' }), false);
+  assert.equal(isPermissionDenied(null), false);
 });

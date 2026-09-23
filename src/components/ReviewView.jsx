@@ -10,12 +10,18 @@ import {
 } from '../services/anthropic';
 import Markdown from './Markdown';
 import ExportButton from './ExportButton';
+import { PageActions, PageSubtitle } from './PageHeader';
+import { Tile } from './DashboardView';
 import {
   bullets, heading, keyValues, paragraph, sheetFromRows, table,
 } from '../services/exporters';
 import { useAiStatus } from '../hooks/useAiStatus';
+import { formatVariance, totalVariance } from '../services/effort';
+import { rateProjects, RAG_MEANING } from '../services/portfolio';
 import { useIsOperator } from '../hooks/useUserProfile';
 import { describeAiFailure } from '../services/errorMessages';
+
+const RAG_LABEL = { RED: 'Red', AMBER: 'Amber', GREEN: 'Green', IDLE: 'Idle' };
 
 const RANGES = [
   { id: '7',  label: 'This week (7d)',  days: 7 },
@@ -31,6 +37,16 @@ function daysAgo(n) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/** "Jul 14 – Jul 20" — month-first, matching fmtDay everywhere else. */
+function fmtRange(fromIso, toIso) {
+  const show = (iso) => {
+    const [y, m, d] = String(iso).split('-').map(Number);
+    if (!y || !m || !d) return iso;
+    return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  };
+  return `${show(fromIso)} – ${show(toIso)}`;
 }
 
 export default function ReviewView() {
@@ -99,6 +115,96 @@ export default function ReviewView() {
     return Object.entries(map).map(([date, hours]) => ({ date, hours }));
   }, [periodActivities, range.days]);
   const maxDayHours = Math.max(1, ...hoursByDay.map((d) => d.hours));
+
+  // ───── Hours by day, stacked by project ────────────────────────────────
+  // The legend is capped and everything past it folds into "Other": eight
+  // colours in a stack is a chart nobody can read back to a project.
+  const stack = useMemo(() => {
+    const totalsBy = new Map();
+    periodActivities.forEach((a) => {
+      const key = a.projectId || '__other__';
+      totalsBy.set(key, (totalsBy.get(key) || 0) + (a.hoursSpent || 0));
+    });
+    const ranked = [...totalsBy.entries()].sort((a, b) => b[1] - a[1]);
+    const top = ranked.slice(0, 5).map(([key]) => key);
+    const keyOf = (a) => {
+      const k = a.projectId || '__other__';
+      return top.includes(k) ? k : '__rest__';
+    };
+    const nameOf = (key) => (key === '__rest__' ? 'Other' : projectById[key]?.name || 'No project');
+    const colorOf = (key) => (key === '__rest__' ? 'var(--c-text-muted)' : projectById[key]?.color || '#a1a1aa');
+
+    const legendKeys = [...top, ...(ranked.length > 5 ? ['__rest__'] : [])];
+    const byDay = new Map();
+    for (let i = range.days - 1; i >= 0; i--) byDay.set(daysAgo(i), new Map());
+    periodActivities.forEach((a) => {
+      const day = byDay.get(a.date);
+      if (!day) return;
+      const k = keyOf(a);
+      day.set(k, (day.get(k) || 0) + (a.hoursSpent || 0));
+    });
+
+    const days = [...byDay.entries()].map(([date, parts]) => {
+      const list = legendKeys
+        .map((key) => ({ key, name: nameOf(key), color: colorOf(key), hours: parts.get(key) || 0 }))
+        .filter((pt) => pt.hours > 0);
+      return {
+        date,
+        label: new Date(`${date}T00:00:00`).toLocaleDateString('en',
+          range.days > 31 ? { month: 'short' } : { day: 'numeric' }),
+        parts: list,
+        total: list.reduce((n, pt) => n + pt.hours, 0),
+      };
+    });
+    return {
+      days,
+      max: Math.max(0, ...days.map((d) => d.total)),
+      legend: legendKeys.map((key) => ({ key, name: nameOf(key), color: colorOf(key) })),
+    };
+  }, [periodActivities, projectById, range.days]);
+
+  // ───── Status mix ──────────────────────────────────────────────────────
+  // Every task in scope, not only the ones touched in the period: "what state
+  // is the work in" is a question about the work, not about the last 7 days.
+  const mix = useMemo(() => {
+    const live = tasks.filter((t) => !t.deleted && !t.archived);
+    const late = live.filter((t) => t.status !== 'done' && t.plan?.endDate && t.plan.endDate < today).length;
+    const rows = [
+      { id: 'done',  label: 'Done',        color: 'var(--c-done)',   count: live.filter((t) => t.status === 'done').length },
+      { id: 'doing', label: 'In progress', color: 'var(--c-doing)',  count: live.filter((t) => t.status === 'doing').length },
+      { id: 'late',  label: 'Overdue',     color: 'var(--c-danger)', count: late },
+      { id: 'todo',  label: 'Not started', color: 'var(--c-todo)',
+        count: live.filter((t) => t.status === 'todo' && !(t.plan?.endDate && t.plan.endDate < today)).length },
+    ];
+    return { rows, total: rows.reduce((n, r) => n + r.count, 0) };
+  }, [tasks, today]);
+
+  // ───── By project — planned against logged ─────────────────────────────
+  // Planned is the sum of the ESTIMATES somebody actually wrote down, via
+  // services/effort.js. A project nobody estimated shows a dash, not a zero:
+  // "0h planned against 40h logged" is a 4000% overrun that never happened.
+  const rated = useMemo(() => rateProjects(projects, tasks, today), [projects, tasks, today]);
+  const byProject = useMemo(() => rated.map((h) => {
+    const own = tasks.filter((t) => t.projectId === h.project.id && !t.deleted);
+    const v = totalVariance(own);
+    return {
+      id: h.project.id,
+      name: h.project.name,
+      color: h.project.color,
+      planned: v.state === 'none' ? '—' : `${v.estimate.toFixed(1)}h`,
+      logged: `${v.logged.toFixed(1)}h`,
+      varText: formatVariance(v),
+      varTone: v.state === 'over' ? 'red' : v.state === 'under' ? 'green' : v.state === 'on' ? 'navy' : 'none',
+      pct: h.pct,
+      rag: h.rag,
+      ragLabel: RAG_LABEL[h.rag],
+    };
+  }), [rated, tasks]);
+
+  const totals = useMemo(
+    () => totalVariance(tasks.filter((t) => !t.deleted && t.projectId)),
+    [tasks],
+  );
 
   // Bottleneck remarks in the period
   const bottlenecks = periodActivities
@@ -169,85 +275,167 @@ export default function ReviewView() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Review</h1>
-          <p className="page-subtitle">Summary of your work in the selected period.</p>
-        </div>
-        <div className="page-actions">
-          <ExportButton
-            build={buildReport}
-            baseName={`review-${range.id}`}
-            kind="document"
-            title="Save this review as a Word, PDF, Markdown or web-page file"
-          />
-          {RANGES.map((r) => (
-            <button
-              key={r.id}
-              className={`chip ${rangeId === r.id ? 'active' : ''}`}
-              onClick={() => setRangeId(r.id)}
-            >{r.label}</button>
-          ))}
-        </div>
+      <PageSubtitle>{range.label} · {fmtRange(sinceStr, today)}</PageSubtitle>
+      <PageActions>
+        <ExportButton
+          build={buildReport}
+          baseName={`review-${range.id}`}
+          kind="document"
+          className="cmd"
+          title="Save this review as a Word, PDF, Markdown or web-page file"
+        />
+      </PageActions>
+
+      {/* The period is a band of its own, as the Report Explorer has it. It was
+          four chips crowded in beside Export, where the thing that decides what
+          every number below means looked like one more command. */}
+      <div className="period-bar">
+        {RANGES.map((r) => (
+          <button
+            key={r.id}
+            className={`pill${rangeId === r.id ? ' active' : ''}`}
+            aria-pressed={rangeId === r.id}
+            onClick={() => setRangeId(r.id)}
+          >{r.label}</button>
+        ))}
+        <span className="period-note">{fmtRange(sinceStr, today)} · {range.days} days</span>
       </div>
 
-      <div className="kpi-grid">
-        <KpiCard label="Hours logged" value={totalHours.toFixed(1)} suffix="h" />
-        <KpiCard label="Tasks completed" value={tasksCompleted.length} />
-        <KpiCard label="Tasks created" value={tasksAdded.length} />
-        <KpiCard label="Overdue" value={overdueTasks.length} accent={overdueTasks.length > 0 ? 'danger' : 'muted'} />
-        <KpiCard label="Activities logged" value={periodActivities.length} />
-        <KpiCard label="Completed entries" value={completedActivities} accent="success" />
-        <KpiCard label="Blocked entries" value={blockedActivities} accent={blockedActivities > 0 ? 'warn' : 'muted'} />
+      <div className="tiles">
+        <Tile tone="navy"  label="Hours logged"     value={`${totalHours.toFixed(1)}h`}
+              sub={`${periodActivities.length} ${periodActivities.length === 1 ? 'entry' : 'entries'} logged`} />
+        <Tile tone="green" label="Tasks completed"  value={tasksCompleted.length}
+              sub={`${completedActivities} entries marked complete`} />
+        <Tile tone="teal"  label="Tasks created"    value={tasksAdded.length}
+              sub="new in this period" />
+        <Tile tone="red"   label="Overdue"          value={overdueTasks.length}
+              sub={overdueTasks.length ? 'past their plan date' : 'nothing is late'} />
+        <Tile tone="amber" label="Blocked entries"  value={blockedActivities}
+              sub={blockedActivities ? 'entries logged as blocked' : 'nothing logged as blocked'} />
       </div>
 
-      <section className="review-section">
-        <h2 className="review-h2">Hours by project</h2>
-        {hoursByProject.length === 0 ? (
-          <p className="muted small">No activities in this period.</p>
-        ) : (
-          <div className="bar-list">
-            {hoursByProject.map((p) => (
-              <div key={p.name} className="bar-row">
-                <div className="bar-row-label">
-                  <span className="proj-dot" style={{ background: p.color }} />
-                  <span>{p.name}</span>
-                </div>
-                <div className="bar-row-track">
-                  <div
-                    className="bar-row-fill"
-                    style={{ width: `${(p.hours / maxHours) * 100}%`, background: p.color }}
-                  />
-                </div>
-                <div className="bar-row-value">{p.hours.toFixed(1)}h</div>
+      {/* ══ Hours by day, stacked by project · Status mix ═════════════════
+          One chart where there were two lists. "Hours by project" and "Daily
+          hours" each answered half of the same question — how the period's
+          hours were spent — and neither could answer it on its own: the first
+          had no dates, the second had no projects. */}
+      <div className="rep-split">
+        <section className="dcard">
+          <div className="dcard-head">
+            <h2 className="dcard-title">Hours by day</h2>
+            <span className="rep-total">{totalHours.toFixed(1)}h logged</span>
+          </div>
+          {stack.days.length === 0 || stack.max === 0 ? (
+            <p className="db-empty">No hours logged in this period.</p>
+          ) : (
+            <>
+              <div className="stack" style={{ '--stack-max': stack.max }}>
+                {stack.days.map((d) => (
+                  <div key={d.date} className="stack-col" title={`${d.label}: ${d.total.toFixed(1)}h`}>
+                    <div className="stack-bar">
+                      {d.parts.map((part) => (
+                        <span
+                          key={part.key}
+                          className="stack-seg"
+                          style={{ height: `${(part.hours / stack.max) * 100}%`, background: part.color }}
+                          title={`${part.name}: ${part.hours.toFixed(1)}h`}
+                        />
+                      ))}
+                    </div>
+                    <div className="stack-label">{d.label}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+              <div className="stack-legend">
+                {stack.legend.map((l) => (
+                  <span key={l.key} className="stack-legend-item">
+                    <span className="stack-swatch" style={{ background: l.color }} />
+                    {l.name}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="dcard">
+          <h2 className="dcard-title">Status mix</h2>
+          {mix.total === 0 ? (
+            <p className="db-empty">No tasks yet.</p>
+          ) : (
+            <>
+              <div className="mix-bar">
+                {mix.rows.filter((m) => m.count > 0).map((m) => (
+                  <span
+                    key={m.id}
+                    className="mix-seg"
+                    style={{ width: `${(m.count / mix.total) * 100}%`, background: m.color }}
+                    title={`${m.label}: ${m.count}`}
+                  />
+                ))}
+              </div>
+              <div className="mix-list">
+                {mix.rows.map((m) => (
+                  <div key={m.id} className="mix-row">
+                    <span className="mix-dot" style={{ background: m.color }} />
+                    <span className="mix-label">{m.label}</span>
+                    <span className="mix-count">{m.count}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      {/* ══ By project — planned against logged ═══════════════════════════ */}
+      <section className="rtable">
+        <div className="rtable-head">
+          <h2 className="rtable-title">By project</h2>
+          <span className="rtable-note">planned vs. logged</span>
+        </div>
+        <div className="rtable-cols">
+          <span>Project</span><span>Planned</span><span>Logged</span>
+          <span>Var.</span><span>Completion</span><span>Health</span>
+        </div>
+        {byProject.length === 0 ? (
+          <p className="db-empty" style={{ padding: '24px 18px' }}>Nothing to compare yet.</p>
+        ) : byProject.map((r, i) => (
+          <div key={r.id} className={`rtable-row${i % 2 ? ' alt' : ''}`}>
+            <span className="rtable-rail" style={{ background: r.color }} aria-hidden="true" />
+            <span className="rtable-name">
+              <span className="mix-dot" style={{ background: r.color }} />
+              <span className="rtable-name-text">{r.name}</span>
+            </span>
+            <span className="rtable-num">{r.planned}</span>
+            <span className="rtable-num strong">{r.logged}</span>
+            <span className="rtable-cell">
+              <span className={`vchip vchip-${r.varTone}`}>{r.varText}</span>
+            </span>
+            <span className="rtable-cell rtable-prog">
+              <span className="rtable-track">
+                <span className="rtable-fill" style={{ width: `${r.pct}%`, background: r.color }} />
+              </span>
+              <span className="rtable-pct">{r.pct}%</span>
+            </span>
+            <span className="rtable-cell">
+              <span className={`ragchip ragchip-${r.rag.toLowerCase()}`} title={RAG_MEANING[r.rag]}>{r.ragLabel}</span>
+            </span>
+          </div>
+        ))}
+        {byProject.length > 0 && (
+          <div className="rtable-totals">
+            <span className="rtable-totals-label">Totals</span>
+            <span><strong>{totals.estimate.toFixed(1)}h</strong> planned</span>
+            <span><strong>{totals.logged.toFixed(1)}h</strong> logged</span>
+            <span className={`tone-ink-${totals.state === 'over' ? 'red' : totals.state === 'under' ? 'green' : 'navy'}`}>
+              <strong>{formatVariance(totals)}</strong>
+              {totals.unestimated > 0 && (
+                <span className="rtable-caveat"> · {totals.unestimated} not estimated</span>
+              )}
+            </span>
           </div>
         )}
-      </section>
-
-      <section className="review-section">
-        <h2 className="review-h2">Daily hours</h2>
-        <div className="day-strip">
-          {hoursByDay.map(({ date, hours }) => {
-            const dayName = new Date(`${date}T00:00:00`).toLocaleDateString('en', { weekday: 'short' });
-            const dayNum  = new Date(`${date}T00:00:00`).getDate();
-            const isToday = date === today;
-            return (
-              <div key={date} className={`day-cell ${isToday ? 'today' : ''}`}>
-                <div className="day-bar-wrap" title={`${date}: ${hours.toFixed(1)}h`}>
-                  <div
-                    className="day-bar-fill"
-                    style={{ height: `${(hours / maxDayHours) * 100}%` }}
-                  />
-                </div>
-                <div className="day-label">{dayName}</div>
-                <div className="day-num">{dayNum}</div>
-                <div className="day-hours">{hours > 0 ? hours.toFixed(1) : '·'}</div>
-              </div>
-            );
-          })}
-        </div>
       </section>
 
       <div className="review-2col">
@@ -324,15 +512,6 @@ export default function ReviewView() {
         projects={projects}
       />
     </>
-  );
-}
-
-function KpiCard({ label, value, suffix, accent }) {
-  return (
-    <div className={`kpi-card kpi-${accent || 'default'}`}>
-      <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}{suffix && <span className="kpi-suffix">{suffix}</span>}</div>
-    </div>
   );
 }
 

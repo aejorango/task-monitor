@@ -12,7 +12,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CHILD_OF, rollup } from '../../src/services/taskTree.js';
-import { groupTasks, normalizeTableConfig } from '../../src/services/tableViews.js';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
@@ -108,32 +107,8 @@ const tasks = [
   { id: 'x', title: 'Unrelated', status: 'todo', links: [], subtasks: [], plan: {}, actual: {} },
 ];
 
-test('ungrouped, a child sits under its parent', () => {
-  const groups = groupTasks(tasks, normalizeTableConfig({ groupBy: 'none', sortBy: 'title' }, ctx), ctx);
-  const rows = groups[0].tasks;
-  const ids = rows.map((t) => t.id);
-  assert.equal(ids.indexOf('c'), ids.indexOf('p') + 1, 'a promoted task belongs next to its parent');
-  assert.equal(rows.find((t) => t.id === 'c')._depth, 1);
-  assert.equal(rows.find((t) => t.id === 'p')._depth, undefined, 'a root is not indented');
-  assert.equal(rows.length, 3, 'and nothing is lost');
-});
-
 // With a grouping applied, something else is already deciding the order, and an
 // indent would claim a relationship the row order does not have.
-test('grouped, the indent is not applied', () => {
-  const groups = groupTasks(tasks, normalizeTableConfig({ groupBy: 'status' }, ctx), ctx);
-  const all = groups.flatMap((g) => g.tasks);
-  assert.equal(all.length, 3);
-  assert.ok(all.every((t) => t._depth === undefined));
-});
-
-test('the row renders the indent it was given', () => {
-  const view = read('src', 'components', 'TasksTableView.jsx');
-  assert.match(view, /\$\{task\._depth \? ` is-child d\$\{Math\.min\(task\._depth, 4\)\}` : ''\}/);
-  const css = read('src', 'App.css');
-  assert.match(css, /\.tt-table \.tt-row\.is-child\.d1 > td:nth-child\(2\) \{ padding-left: 26px; \}/);
-  assert.match(css, /content: '↳'/, 'an indent with no marker reads as a rendering glitch');
-});
 
 /* ── the rollup feeds the things that already read progress ────────────── */
 

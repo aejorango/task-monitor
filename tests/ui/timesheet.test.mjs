@@ -69,12 +69,11 @@ test('the timesheet can be exported', async () => {
   ui.unmount();
 });
 
-test('it is in the sidebar under Reports, on its own route', async () => {
-  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
-  const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
+test('it is in the Reports hub, on its own route', async () => {
+  const { VIEW_REGISTRY, hubForView } = await import('../../src/services/views.js');
   const app = fs.readFileSync(path.join(root, 'src', 'App.jsx'), 'utf8');
   assert.ok(VIEW_REGISTRY.find((v) => v.id === 'timesheet' && v.label === 'Timesheet'));
-  assert.match(shell, /'work-performed', 'timesheet'/);
+  assert.equal(hubForView('timesheet')?.id, 'reports');
   assert.match(app, /route\.view === 'timesheet'/);
 });
 

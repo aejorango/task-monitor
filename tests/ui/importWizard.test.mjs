@@ -133,7 +133,7 @@ test('a failed row is reported by line and reason, not swallowed', () => {
 });
 
 test('both table pages offer it', () => {
-  for (const [file, kind] of [['TableView.jsx', 'activities'], ['TasksTableView.jsx', 'tasks']]) {
+  for (const [file, kind] of [['TableView.jsx', 'activities']]) {
     const src = fs.readFileSync(path.join(root, 'src', 'components', file), 'utf8');
     assert.match(src, /<ImportWizard/, file);
     assert.match(src, new RegExp(`initialKind="${kind}"`), file);
@@ -149,7 +149,9 @@ test('both table pages offer it', () => {
 
 test('the Activity Log has exactly one import control', () => {
   const src = fs.readFileSync(path.join(root, 'src', 'components', 'TableView.jsx'), 'utf8');
-  const header = src.slice(src.indexOf('<div className="page-actions">'), src.indexOf('</div>', src.indexOf('<div className="page-actions">')));
+  // The commands moved onto the page chrome in T-0143; <PageActions> is where
+  // they live now. Same question: how many doors say "Import"?
+  const header = src.slice(src.indexOf('<PageActions>'), src.indexOf('</PageActions>'));
   const importButtons = [...header.matchAll(/>\s*([^<>{}]*[Ii]mport[^<>{}]*?)\s*</g)]
     .map((m) => m[1].trim())
     .filter(Boolean);

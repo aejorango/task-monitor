@@ -235,13 +235,3 @@ test('a direction word in a button’s name matches the arrow it draws', () => {
     'a screen-reader user and a sighted user must be told the same thing');
 });
 
-test('the column picker moves columns along the table, and says so', () => {
-  const src = read('TasksTableView.jsx');
-  assert.match(src, /aria-label=\{`Move \$\{col\.label\} left`\}\s*\n\s*title=\{`Move \$\{col\.label\} left`\}/,
-    'the title must agree with the name');
-  assert.match(src, /onClick=\{\(\) => moveColumn\(col\.id, -1\)\}\s*\n\s*>←<\/button>/,
-    'left is ←, not ↑');
-  assert.match(src, /onClick=\{\(\) => moveColumn\(col\.id, 1\)\}\s*\n\s*>→<\/button>/);
-  assert.doesNotMatch(src, />↑<\/button>/);
-  assert.doesNotMatch(src, />↓<\/button>/);
-});

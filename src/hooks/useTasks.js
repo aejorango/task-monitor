@@ -15,8 +15,6 @@ import {
   subscribeToTasksAcrossWorkspaces,
   subscribeToMyTasksAcrossWorkspaces,
   subscribeToSharedProjects,
-  subscribeToTasksByProjects,
-  subscribeToActivitiesByProjects,
   subscribeToTemplates,
   subscribeToGoals,
   subscribeToMinutes,
@@ -30,6 +28,7 @@ import {
 } from './useWorkspace';
 import { mergeProjectLists } from '../services/projects';
 import { createSharedSubscription } from '../services/sharedSubscription';
+import { isResolvingWorkspace } from '../services/activeWorkspace';
 
 // ─── Shared listeners ───────────────────────────────────────────────────────
 // One Firestore query per (collection, workspace), however many components ask.
@@ -107,7 +106,10 @@ export function useProjects() {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setWorkspaceProjects([]);
-      setLoading(workspaceId ? true : false);
+      // Signed in with no workspace resolved YET is a loading state, not a
+      // result: the query has not been asked, so its answer cannot be "none".
+      // This rendered an empty Activity log instead of a spinner.
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -151,15 +153,13 @@ export function useTasks() {
   const { userId, ready } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [workspaceTasks, setWorkspaceTasks] = useState([]);
-  const [sharedTasks, setSharedTasks] = useState([]);
-  const [sharedProjects, setSharedProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Active workspace's tasks.
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setWorkspaceTasks([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -169,44 +169,28 @@ export function useTasks() {
     });
   }, [userId, ready, workspaceId]);
 
-  // Shared projects this user is in — drives the shared-tasks query below.
-  useEffect(() => {
-    if (!ready || !userId) return;
-    const unsub = subscribeToSharedProjects(userId, setSharedProjects);
-    return () => unsub();
-  }, [userId, ready]);
+  // NOTE (BUG-033): there used to be a second listener here —
+  // `subscribeTo{Tasks,Activities}ByProjects(sharedProjectIds)` — and it was
+  // both REDUNDANT and DENIED in production.
+  //
+  //   · Redundant, because `sharedProjectIds` was already filtered to the
+  //     ACTIVE workspace, and the workspace-wide listener above asks
+  //     `where('workspaceId','==',id)` — so it returns every one of those rows
+  //     already. `tests/rules/consoleErrors.rules.test.mjs` proves it.
+  //   · Denied, because `where('projectId','in',[…])` states nothing the read
+  //     rule can use: the rule's satisfiable branch for a teammate's document
+  //     is `isProjectMember`, an exists()+get() PER DOCUMENT, and rules are not
+  //     filters — one document the rule cannot clear refuses the whole query.
+  //     The console filled with `permission-denied` on every load.
+  //
+  // A project shared from a workspace you do not belong to was never reachable
+  // either way: it cannot become your active workspace, so the memo dropped it
+  // before the query ran. Nothing was lost by removing this.
 
-  // Tasks under projects in the ACTIVE workspace that the user reaches via
-  // per-project membership (rather than workspace membership). Scoped to the
-  // active workspace so tasks from OTHER workspaces' shared projects never
-  // bleed into the current workspace's task list. We key the effect by a stable
-  // join of the project ids so we don't tear down + re-create subscriptions on
-  // unrelated re-renders.
-  const sharedProjectIds = useMemo(
-    () => sharedProjects.filter((p) => p.workspaceId === workspaceId).map((p) => p.id),
-    [sharedProjects, workspaceId],
-  );
-  const sharedProjectIdsKey = sharedProjectIds.join(',');
-  useEffect(() => {
-    if (!ready || !userId || sharedProjectIds.length === 0) return;
-    const unsub = subscribeToTasksByProjects(sharedProjectIds, setSharedTasks);
-    return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, ready, sharedProjectIdsKey]);
-
-  // Merge by id; workspace-scoped wins on collision. Gating on
-  // (ready && userId) makes the stale `sharedTasks` from a previous session
-  // invisible after sign-out, avoiding a synchronous setState reset above.
   const tasks = useMemo(() => {
     if (!ready || !userId) return [];
-    const map = new Map();
-    workspaceTasks.forEach((t) => map.set(t.id, t));
-    // Only count shared tasks if we still have shared projects to back them.
-    if (sharedProjectIds.length > 0) {
-      sharedTasks.forEach((t) => { if (!map.has(t.id)) map.set(t.id, t); });
-    }
-    return [...map.values()];
-  }, [workspaceTasks, sharedTasks, sharedProjectIds, ready, userId]);
+    return workspaceTasks;
+  }, [workspaceTasks, ready, userId]);
 
   const byStatus = (status) => tasks.filter((t) => t.status === status);
 
@@ -261,15 +245,13 @@ export function useAllActivities() {
   const { userId, ready } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const [workspaceActivities, setWorkspaceActivities] = useState([]);
-  const [sharedActivities, setSharedActivities] = useState([]);
-  const [sharedProjects, setSharedProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Activities in the active workspace.
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setWorkspaceActivities([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -279,27 +261,23 @@ export function useAllActivities() {
     });
   }, [userId, ready, workspaceId]);
 
-  // Shared projects — drives the shared-activities query.
-  useEffect(() => {
-    if (!ready || !userId) return;
-    const unsub = subscribeToSharedProjects(userId, setSharedProjects);
-    return () => unsub();
-  }, [userId, ready]);
-
-  // Scope to the ACTIVE workspace so activities from other workspaces' shared
-  // projects never bleed into the current workspace's Work Performed / Table /
-  // activity-log views (same fix as useTasks/useProjects).
-  const sharedProjectIds = useMemo(
-    () => sharedProjects.filter((p) => p.workspaceId === workspaceId).map((p) => p.id),
-    [sharedProjects, workspaceId],
-  );
-  const sharedProjectIdsKey = sharedProjectIds.join(',');
-  useEffect(() => {
-    if (!ready || !userId || sharedProjectIds.length === 0) return;
-    const unsub = subscribeToActivitiesByProjects(sharedProjectIds, setSharedActivities);
-    return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, ready, sharedProjectIdsKey]);
+  // NOTE (BUG-033): there used to be a second listener here —
+  // `subscribeTo{Tasks,Activities}ByProjects(sharedProjectIds)` — and it was
+  // both REDUNDANT and DENIED in production.
+  //
+  //   · Redundant, because `sharedProjectIds` was already filtered to the
+  //     ACTIVE workspace, and the workspace-wide listener above asks
+  //     `where('workspaceId','==',id)` — so it returns every one of those rows
+  //     already. `tests/rules/consoleErrors.rules.test.mjs` proves it.
+  //   · Denied, because `where('projectId','in',[…])` states nothing the read
+  //     rule can use: the rule's satisfiable branch for a teammate's document
+  //     is `isProjectMember`, an exists()+get() PER DOCUMENT, and rules are not
+  //     filters — one document the rule cannot clear refuses the whole query.
+  //     The console filled with `permission-denied` on every load.
+  //
+  // A project shared from a workspace you do not belong to was never reachable
+  // either way: it cannot become your active workspace, so the memo dropped it
+  // before the query ran. Nothing was lost by removing this.
 
   // ── Older history, fetched on demand ────────────────────────────────────
   // The live listener holds one page (the newest ACTIVITY_PAGE_SIZE entries).
@@ -326,11 +304,8 @@ export function useAllActivities() {
     const map = new Map();
     workspaceActivities.forEach((a) => map.set(a.id, a));
     olderActivities.forEach((a) => { if (!map.has(a.id)) map.set(a.id, a); });
-    if (sharedProjectIds.length > 0) {
-      sharedActivities.forEach((a) => { if (!map.has(a.id)) map.set(a.id, a); });
-    }
     return [...map.values()].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  }, [workspaceActivities, olderActivities, sharedActivities, sharedProjectIds, ready, userId]);
+  }, [workspaceActivities, olderActivities, ready, userId]);
 
   // True only once a full page came back — a half-empty page IS the end.
   const mayHaveMore = hasMore && workspaceActivities.length >= ACTIVITY_PAGE_SIZE;
@@ -366,7 +341,7 @@ export function useWebhooks() {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setHooks([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -391,7 +366,7 @@ export function useSavedViews() {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setViews([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -438,7 +413,7 @@ export function useTemplates() {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setTemplates([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -463,7 +438,7 @@ export function useGoals() {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setGoals([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -488,7 +463,7 @@ export function useMinutes() {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setMinutes([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);
@@ -592,7 +567,7 @@ export function useRecentActivities(days = 7) {
   useEffect(() => {
     if (!ready || !userId || !workspaceId) {
       setActivities([]);
-      setLoading(workspaceId ? true : false);
+      setLoading(!ready || isResolvingWorkspace({ ready, userId, workspaceId }));
       return;
     }
     setLoading(true);

@@ -5,17 +5,17 @@ import {
   DndContext, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, DragOverlay,
 } from '@dnd-kit/core';
-import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
+import { useTasks, useProjects, useAuth, useAllActivities } from '../hooks/useTasks';
 import { tagFilterState } from '../services/tagFilter';
-import TagFilterBar from './TagFilterBar';
 import { useSettings } from '../hooks/useSettings';
-import { updateTask } from '../services/firebase';
+import { updateTask, todayLocal } from '../services/firebase';
+import { scopeTasks, scopeOf, blockedTaskIds } from '../services/boardScope';
 import { moveTaskToDay } from '../services/workload';
 import TaskEditor from './TaskEditor';
-import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 // The date arithmetic a drop needs now lives in services/workload.js, so all
 // this file still needs is a formatter for the grid it draws.
@@ -23,9 +23,10 @@ function iso(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function CalendarView({ projectFilter, initialTagFilter }) {
+export default function CalendarView({ projectFilter, initialTagFilter, route = {} }) {
   const toast = useToast();
   const { tasks, loading } = useTasks();
+  const { activities: allActivities } = useAllActivities();
   const { projects, byId: projectById } = useProjects();
   const { settings } = useSettings();
   const weekStart = settings.weekStart ?? 1;
@@ -33,11 +34,10 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date(); d.setDate(1); return d;
   });
-  const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null);
   const { userId } = useAuth();
   const [activeDrag, setActiveDrag] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'todo' | 'doing' | 'done'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' or one of TASK_STATUSES
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   // A saved view stores the tag it was filtered by; the router hands it over
   // here. The audit believed this page already honoured it — it did not
@@ -47,11 +47,15 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  const blockedIds = useMemo(() => blockedTaskIds(allActivities), [allActivities]);
   const inProject = useMemo(
-    () => tasks
-      .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
-      .filter((t) => statusFilter === 'all' || t.status === statusFilter),
-    [tasks, projectFilter, statusFilter],
+    () => scopeTasks(
+      tasks
+        .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
+        .filter((t) => statusFilter === 'all' || t.status === statusFilter),
+      { scope: scopeOf(route), who: route.who, q: route.q, userId, blockedIds, today: todayLocal() },
+    ),
+    [tasks, projectFilter, statusFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId, blockedIds],
   );
   const tagState = useMemo(() => tagFilterState(inProject, tagFilter), [inProject, tagFilter]);
   const filtered = tagState.filtered;
@@ -126,31 +130,48 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Calendar</h1>
-          <p className="page-subtitle">Tasks placed on their <strong>plan end date</strong>. Click to edit; drag to reschedule.</p>
-        </div>
-        <div className="page-actions">
-          <div className="cal-nav">
-            <button className="cal-nav-btn" onClick={prev} aria-label="Previous month">‹</button>
-            <button className="cal-nav-today" onClick={goToday}>Today</button>
-            <button className="cal-nav-btn" onClick={next} aria-label="Next month">›</button>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setQuickAddOpen(true)}>
+      {/* The tag chip strip is gone from every page (T-0148). The filter is
+          NOT — a saved view still applies it, so the page says so here and
+          offers a way out. Dropping the strip and the filter both would make
+          one saved view mean two different things (BUG-018). */}
+      <PageSubtitle>
+        {tagState?.active && (
+          <>
+            Filtered to <strong>#{tagState.active}</strong> ·{' '}
+            <button className="table-link" onClick={() => setTagFilter(null)}
+              style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+            >show all</button> ·{' '}
+          </>
+        )}
+        Tasks on their <strong>plan end date</strong> · drag one to reschedule it
+      </PageSubtitle>
+      <PageActions>
+        <button className="cmd cmd-primary" onClick={() => setQuickAddOpen(true)}>
+          <span className="cmd-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            New task
-          </button>
-        </div>
-      </div>
+          </span>
+          New task
+        </button>
+      </PageActions>
 
-      <div className="cal-toolbar">
-        <h2 className="cal-month-label">{monthName} <span className="accent">{monthYear}</span></h2>
-        <div className="cal-filter-group">
+
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <div className="bcard calendar">
+        {/* The Board Explorer keeps the month, the arrows and Today inside the
+            card, with what the grid is plotting spelled out on the right —
+            "by due date", because a month grid that does not say which date it
+            used is a month grid you have to guess at. */}
+        <div className="cal-toolbar">
+          <h2 className="cal-month-label">{monthName} <span className="accent">{monthYear}</span></h2>
+          <button className="cal-nav-btn" onClick={prev} aria-label="Previous month">‹</button>
+          <button className="cal-nav-btn" onClick={next} aria-label="Next month">›</button>
+          <button className="cal-nav-today" onClick={goToday}>Today</button>
+          <div className="cal-filter-group">
           {[
             { id: 'all',   label: 'All' },
             { id: 'todo',  label: 'To do' },
             { id: 'doing', label: 'Ongoing' },
+            { id: 'review', label: 'In review' },
             { id: 'done',  label: 'Done' },
           ].map((s) => (
             <button
@@ -159,13 +180,9 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
               onClick={() => setStatusFilter(s.id)}
             >{s.label}</button>
           ))}
+          </div>
+          <span className="cal-basis">by due date</span>
         </div>
-      </div>
-
-      <TagFilterBar state={tagState} onChange={setTagFilter} />
-
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="calendar">
           <div className="cal-header">
             {orderedDayInfo.map((d) => (
               <div key={d.label} className={`cal-day-label ${d.isWeekend ? 'weekend' : ''}`}>{d.label}</div>
@@ -189,7 +206,7 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
                   dayNum={d.getDate()}
                   dayTasks={dayTasks}
                   projectById={projectById}
-                  onTaskClick={setViewing}
+                  onTaskClick={setEditing}
                 />
               );
             })}
@@ -209,20 +226,15 @@ export default function CalendarView({ projectFilter, initialTagFilter }) {
         </DragOverlay>
       </DndContext>
 
-      {viewing && !editing && (
-        <TaskActivitiesModal
-          task={viewing}
-          userId={userId}
-          onClose={() => setViewing(null)}
-          onEditTask={(t) => setEditing(t)}
-        />
-      )}
-
+      {/* Clicking a task opens the EDITOR, not the read-only activity list.
+          One click, one destination — the activity log is that editor's
+          Activity tab now, so the list is not lost, it just stopped being
+          a second modal in front of the thing you actually wanted. */}
       {editing && (
         <TaskEditor
           task={editing}
           projects={projects}
-          onClose={() => { setEditing(null); setViewing(null); }}
+          onClose={() => setEditing(null)}
         />
       )}
 
@@ -279,7 +291,7 @@ function DraggableCalTask({ task, project, onClick }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className={`cal-task ${task.status === 'done' ? 'done' : ''}`}
+      className={`cal-task cal-task-${task.status || 'todo'} ${task.status === 'done' ? 'done' : ''}`}
       style={{
         '--task-color': project?.color || 'var(--c-text-3)',
         opacity: isDragging ? 0.3 : 1,

@@ -81,6 +81,14 @@ const PATHS = {
     </>
   ),
   gantt: <path d="M4 5h9M4 12h14M4 19h6" />,
+  // Stacked sheets — "everything, all of it". The segmented switch's All.
+  layers: (
+    <>
+      <path d="M12 3 3 7.5 12 12l9-4.5L12 3Z" />
+      <path d="m3 12.5 9 4.5 9-4.5" />
+      <path d="m3 17 9 4.5 9-4.5" />
+    </>
+  ),
   wbs: (
     <>
       <rect x="9" y="2" width="6" height="5" rx="1" />

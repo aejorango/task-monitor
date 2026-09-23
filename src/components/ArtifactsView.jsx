@@ -2,6 +2,7 @@
 // across activity log entries, one row per attachment.
 
 import { useState, useMemo } from 'react';
+import { PageActions, PageSubtitle } from './PageHeader';
 import { useAllActivities, useProjects, useTasks } from '../hooks/useTasks';
 import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import AddToNotebookButton from './AddToNotebookButton';
@@ -69,12 +70,7 @@ export default function ArtifactsView({ projectFilter }) {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Artifacts</h1>
-          <p className="page-subtitle">All documents attached or linked from activity log entries, across your tasks and projects.</p>
-        </div>
-      </div>
+      <PageSubtitle>Everything attached or linked from an activity entry</PageSubtitle>
 
       {rows.length === 0 ? (
         <div className="empty-state">

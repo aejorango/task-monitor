@@ -73,14 +73,14 @@ const renderRow = (task = ranged()) => mount(h(ToastProvider, null, h(GanttRow, 
   task,
   onSavePlan: (id, patch) => { writes.push([id, patch]); },
   project: { id: 'p1', name: 'Bridged', color: '#4f46e5' },
-  phaseName: 'Discovery',
   range: RANGE,
-  zoomConf: { id: 'day', dayWidth: DAY_WIDTH },
-  totalWidth: 31 * DAY_WIDTH, phaseWidth: 120, taskWidth: 200, rowWidth: 1400,
+  // The chart is fluid now: the row is handed the measured day width rather
+  // than a zoom preset. The drag arithmetic is the same either way.
+  dayWidth: DAY_WIDTH,
   today: TODAY,
 })));
 
-const barOf = (ui) => ui.container.querySelector('.gantt-bar.plan');
+const barOf = (ui) => ui.container.querySelector('.gc-bar');
 const fire = async (el, type, clientX) => {
   await act(async () => {
     el.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX }));
@@ -200,9 +200,9 @@ test('unmounting mid-drag takes the listeners with it', async () => {
 
 test('the effect is keyed on the mode, which does not change during a gesture', () => {
   assert.match(source, /const dragMode = drag\?\.mode \|\| null;/);
-  assert.match(source, /\}, \[dragMode, zoomConf\.dayWidth, rangeMin, onSavePlan\]\);/,
+  assert.match(source, /\}, \[dragMode, dayWidth, rangeMin, onSavePlan\]\);/,
     'depending on `drag` is what re-installed the listeners on every move');
-  assert.doesNotMatch(source, /\}, \[drag, zoomConf\.dayWidth/);
+  assert.doesNotMatch(source, /\}, \[drag, dayWidth/);
 });
 
 test('the handlers read live geometry from a ref, not from a closure', () => {

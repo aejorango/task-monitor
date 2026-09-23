@@ -17,12 +17,11 @@ import { GanttRow } from '../src/components/GanttView.jsx';
 import { ToastProvider } from '../src/components/Toast.jsx';
 import '../src/App.css';
 
-const ZOOMS = {
-  day:   { id: 'day',   dayWidth: 36 },
-  week:  { id: 'week',  dayWidth: 16 },
-  month: { id: 'month', dayWidth: 6 },
-};
-const zoomConf = ZOOMS[new URLSearchParams(location.search).get('zoom')] || ZOOMS.day;
+// The chart is fluid in the app — its day width is measured off the card.
+// Here it is a knob, so a narrow window (the case a one-day milestone has to
+// survive) can be reproduced on purpose.
+const WIDTHS = { day: 36, week: 16, month: 6 };
+const dayWidth = WIDTHS[new URLSearchParams(location.search).get('zoom')] || WIDTHS.day;
 
 const RANGE = { min: new Date(2026, 8, 21), max: new Date(2026, 9, 21) };
 const TODAY = new Date(2026, 8, 21);
@@ -55,30 +54,27 @@ export function Harness() {
     } : t)));
   };
 
-  const totalWidth = DAYS * zoomConf.dayWidth;
+  const trackWidth = DAYS * dayWidth;
 
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ marginTop: 0 }}>Gantt rows · BUG-014</h2>
       <p className="muted">
-        Zoom: <strong>{zoomConf.id}</strong> ({zoomConf.dayWidth}px a day) — try{' '}
+        <strong>{dayWidth}px a day</strong> — try{' '}
         <a href="?zoom=day">day</a> · <a href="?zoom=week">week</a> · <a href="?zoom=month">month</a>.
         Drag the first row’s <strong>left edge</strong> to give it a start date it never had.
       </p>
 
-      <div className="gantt-scroll" style={{ overflowX: 'auto', border: '1px solid var(--c-border)', borderRadius: 8 }}>
-        {tasks.map((t) => (
+      <div className="bcard" style={{ width: 220 + trackWidth }}>
+        {tasks.map((t, i) => (
           <GanttRow
             key={t.id}
             task={t}
             project={PROJECT}
-            phaseName={t.phaseName}
             range={RANGE}
-            zoomConf={zoomConf}
-            totalWidth={totalWidth}
-            phaseWidth={110}
-            taskWidth={240}
-            rowWidth={110 + 240 + totalWidth}
+            dayWidth={dayWidth}
+            alt={i % 2 === 1}
+            todayPct={0}
             today={TODAY}
             onSavePlan={save}
           />

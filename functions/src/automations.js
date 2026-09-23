@@ -20,7 +20,7 @@ export const TRIGGERS = [
 export const CONDITION_FIELDS = [
   { value: 'project',  label: 'Project',       type: 'project' },
   { value: 'priority', label: 'Priority',      type: 'choice', options: ['low', 'medium', 'high'] },
-  { value: 'status',   label: 'Status',        type: 'choice', options: ['todo', 'doing', 'done'] },
+  { value: 'status',   label: 'Status',        type: 'choice', options: ['todo', 'doing', 'review', 'done'] },
   { value: 'tag',      label: 'Tag',           type: 'text' },
   { value: 'assignee', label: 'Assigned to',   type: 'member' },
   { value: 'title',    label: 'Task name',     type: 'text' },

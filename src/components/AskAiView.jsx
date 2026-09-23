@@ -21,6 +21,7 @@ import {
   narrate, isAiAvailable, answerToText,
   looksLikeAction, parseAction, applyAction,
 } from '../services/askAi';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 const SCOPE_DEFAULT_INTENT = {
   Workspaces: { key: 'workspaces' },
@@ -243,25 +244,19 @@ export default function AskAiView() {
 
   return (
     <div className="askai">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">
-            Ask AI <span className="askai-beta">BETA</span>
-          </h1>
-          <p className="page-subtitle">
-            {hasThread
-              ? `${turns.length} ${turns.length === 1 ? 'question' : 'questions'} in this thread · scope: ${scope.toLowerCase()}`
-              : 'Ask in plain language about your workspaces, projects and tasks.'}
-          </p>
-        </div>
-        {hasThread && (
-          <div className="page-actions">
-            <button className="btn btn-sm" onClick={() => { setTurns([]); setDraft(''); seqRef.current = 0; }}>
-              ⟲ New thread
-            </button>
-          </div>
-        )}
-      </div>
+      <PageSubtitle>
+        <span className="askai-beta">BETA</span>
+        {hasThread
+          ? `${turns.length} ${turns.length === 1 ? 'question' : 'questions'} in this thread · scope: ${scope.toLowerCase()}`
+          : 'Ask in plain language about your workspaces, projects and tasks.'}
+      </PageSubtitle>
+      {hasThread && (
+        <PageActions>
+          <button className="cmd" onClick={() => { setTurns([]); setDraft(''); seqRef.current = 0; }}>
+            ⟲ New thread
+          </button>
+        </PageActions>
+      )}
 
       {/* ── Empty state: hero prompt + suggestions ─────────── */}
       {!hasThread && (

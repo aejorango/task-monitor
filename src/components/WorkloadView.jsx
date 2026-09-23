@@ -1,267 +1,206 @@
-// src/components/WorkloadView.jsx — Board → Workload.
+// src/components/WorkloadView.jsx — Board → Workload, rebuilt to
+// `Board Explorer.dc.html` (T-0150).
 //
-// People down the side, the next six weeks across the top, every cell showing
-// what that person is carrying that week and how full it makes them. Drag a
-// task to another week to move its deadline, or to another person to hand it
-// over — which is the whole point: see the pile-up and fix it before the
-// deadline slips.
+// The mockup's Workload is ONE panel: a person per row, a bar segmented by
+// project, a notch where the weekly cap falls, and the hours at the end.
+// That is the whole page now.
 //
-// The arithmetic and the meaning of a drop are in the pure services/workload.js.
+// What was here before was a people × six-weeks grid with drag-to-rebalance
+// underneath this panel — drag a task to another week to move its deadline,
+// or onto another person to hand it over. It was removed on request, with
+// both halves of what it did still reachable:
+//
+//   · move WHEN         → Calendar (drag between days) and My Week
+//   · move WHO          → the Table's bulk bar, or the task editor
+//
+// `services/workload.js` still exports the grid's arithmetic
+// (`buildWorkload`, `planningWeeks`, `moveTaskPlan`, `describeCell`…) and its
+// tests still run, but nothing renders them any more. They were left in place
+// rather than deleted because the grid is one component away from coming
+// back; `moveTaskToDay` from the same module IS still live, behind the
+// Calendar and My Week.
+//
+// The arithmetic and the meaning of a load level stay in the pure module.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor,
-  useDraggable, useDroppable, useSensor, useSensors,
-} from '@dnd-kit/core';
+import { useMemo } from 'react';
 import { useProjects, useTasks, useAuth } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
-import { useSettings } from '../hooks/useSettings';
-import { applyTaskMove } from '../services/firebase';
-import { friendlyError } from '../services/access';
 import { memberLabel } from '../services/invites';
-import { shiftWeek } from '../services/timesheet';
 import { todayLocal } from '../services/recurrence';
-import {
-  LOAD_LABEL, WEEKS_AHEAD,
-  buildWorkload, cellId, describeCell, describeMove, moveTaskPlan, parseCellId, planningWeeks,
-} from '../services/workload';
-import { useToast } from './Toast';
-import TaskEditor from './TaskEditor';
+import { DEFAULT_CAPACITY_HOURS, HOURS_PER_TASK, taskHours } from '../services/workload';
+import { scopeTasks, scopeOf } from '../services/boardScope';
+import { PageActions, PageSubtitle } from './PageHeader';
+import Avatar from './Avatar';
 
-export default function WorkloadView({ projectFilter = 'all' }) {
+export default function WorkloadView({ projectFilter = 'all', route = {}, navigate }) {
   const { tasks, loading } = useTasks();
   const { byId: projectById } = useProjects();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
-  const { settings } = useSettings();
-  const toast = useToast();
 
   const workspace = workspaces.find((w) => w.id === workspaceId);
   const members = useMemo(() => workspace?.members || [], [workspace]);
   const memberProfiles = useMemo(() => workspace?.memberProfiles || {}, [workspace]);
 
-  const [from, setFrom] = useState(todayLocal());
-  const [dragging, setDragging] = useState(null);
-  const [editing, setEditing] = useState(null);
-
-  const weekStart = settings?.weekStart ?? 1;
-  const weeks = useMemo(
-    () => planningWeeks({ from, count: WEEKS_AHEAD, weekStart }),
-    [from, weekStart],
-  );
-
   const visible = useMemo(
-    () => (projectFilter === 'all' ? tasks : tasks.filter((t) => t.projectId === projectFilter)),
-    [tasks, projectFilter],
+    () => scopeTasks(
+      projectFilter === 'all' ? tasks : tasks.filter((t) => t.projectId === projectFilter),
+      { scope: scopeOf(route), who: route.who, q: route.q, userId, today: todayLocal() },
+    ),
+    [tasks, projectFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId],
   );
 
-  const { rows, unscheduled, byWeekTotals } = useMemo(
-    () => buildWorkload(visible, { weeks, members, memberProfiles }),
-    [visible, weeks, members, memberProfiles],
-  );
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor),
-  );
-
-  const move = async (task, target) => {
-    const patch = moveTaskPlan(task, target);
-    if (!patch) return;   // dropped where it already was
-    try {
-      await applyTaskMove(task, patch, {
-        byUserId: userId,
-        byName: memberLabel(userId, memberProfiles),
+  // One bar per person, segmented by project, against a real cap.
+  //
+  // The hours are ESTIMATES of open work — every open task, dated or not,
+  // because a task nobody has scheduled is still on somebody's plate. Where a
+  // task has no estimate the module's fallback is used and the row says how
+  // many were counted that way: a full bar the reader believes is measured,
+  // when half of it was assumed, is this page's oldest trap.
+  const load = useMemo(() => {
+    const open = visible.filter((t) => t.status !== 'done');
+    const people = members.map((uid) => {
+      const own = open.filter((t) => (t.assignedTo || []).includes(uid));
+      const byProject = {};
+      let guessed = 0;
+      own.forEach((t) => {
+        if (t.estimateHours == null) guessed += 1;
+        const key = t.projectId || 'none';
+        byProject[key] = (byProject[key] || 0) + taskHours(t);
       });
-      toast.success(describeMove(patch, memberProfiles));
-    } catch (err) {
-      console.error(err);
-      toast.error(friendlyError(err, 'Could not move that task.'));
-    }
-  };
-
-  const onDragEnd = async ({ active, over }) => {
-    setDragging(null);
-    const where = parseCellId(over?.id);
-    if (!where) return;
-    const task = visible.find((t) => t.id === active.id);
-    if (!task) return;
-    await move(task, {
-      toUserId: where.userId,
-      toWeek: weeks.find((w) => w.key === where.weekKey) || null,
-    });
-  };
+      const hours = Object.values(byProject).reduce((n, h) => n + h, 0);
+      return {
+        uid,
+        name: memberLabel(uid, memberProfiles, { selfUid: userId }),
+        open: own.length,
+        done: visible.filter((t) => t.status === 'done' && (t.assignedTo || []).includes(uid)).length,
+        hours,
+        guessed,
+        segs: Object.entries(byProject)
+          .map(([pid, h]) => ({ pid, h, color: projectById[pid]?.color || 'var(--c-text-muted)' }))
+          .sort((a, b) => b.h - a.h),
+      };
+    }).filter((p) => p.open > 0);
+    // The track runs to the widest bar or to the cap plus a quarter, whichever
+    // is larger, so the cap notch always sits inside the track and an
+    // over-capacity bar still has somewhere to overflow into.
+    const widest = Math.max(DEFAULT_CAPACITY_HOURS * 1.25, ...people.map((p) => p.hours));
+    return {
+      people: people.sort((a, b) => b.hours - a.hours),
+      widest,
+      capPct: (DEFAULT_CAPACITY_HOURS / widest) * 100,
+    };
+  }, [visible, members, memberProfiles, projectById, userId]);
 
   if (loading) return <p className="muted">Loading the plan…</p>;
 
+  const projectIds = [...new Set(load.people.flatMap((p) => p.segs.map((sg) => sg.pid)))].slice(0, 6);
+  const totalOpen = load.people.reduce((n, p) => n + p.open, 0);
+  const over = load.people.filter((p) => p.hours > DEFAULT_CAPACITY_HOURS).length;
+
   return (
-    <div className="workload-view">
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Workload</h1>
-          <p className="muted small" style={{ margin: 0 }}>
-            What everybody is carrying, week by week. Drag a task to another week to
-            move its deadline, or to another person to hand it over.
+    <>
+      <PageSubtitle>
+        {load.people.length} {load.people.length === 1 ? 'person' : 'people'} ·{' '}
+        {totalOpen} open item{totalOpen === 1 ? '' : 's'}
+        {over > 0 && <> · <strong>{over}</strong> over the {DEFAULT_CAPACITY_HOURS}h cap</>}
+      </PageSubtitle>
+      <PageActions>
+        {/* The mockup draws no controls here. Clearing the member filter is
+            the one thing this page needs a way out of, and only when it is
+            actually applied. */}
+        {route.who && (
+          <button className="cmd" onClick={() => navigate?.({ who: null })}>
+            Show everybody
+          </button>
+        )}
+      </PageActions>
+
+      {load.people.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">▤</div>
+          <p>Nobody is carrying open work in this view.</p>
+          <p className="small">
+            Assign a task to someone — the bar here is built from what they have open,
+            whether or not it has a date.
           </p>
         </div>
-        <div className="workload-nav">
-          <button className="btn btn-sm" onClick={() => setFrom(shiftWeek(from, -1, weekStart))}>
-            ← Earlier
-          </button>
-          <button className="btn btn-sm" onClick={() => setFrom(todayLocal())}>This week</button>
-          <button className="btn btn-sm" onClick={() => setFrom(shiftWeek(from, 1, weekStart))}>
-            Later →
-          </button>
-        </div>
-      </div>
-
-      <p className="muted small workload-key">
-        {['free', 'ok', 'full', 'over'].map((level) => (
-          <span key={level} className="workload-key-item">
-            <span className={`workload-swatch is-${level}`} aria-hidden="true" />
-            {LOAD_LABEL[level]}
-          </span>
-        ))}
-      </p>
-
-      {rows.length === 0 ? (
-        <p className="muted">
-          Nobody to plan for yet. Invite people to this workspace in Settings → Workspaces,
-          and give tasks a due date so they show up here.
-        </p>
       ) : (
-        <DndContext
-          sensors={sensors}
-          onDragStart={({ active }) => setDragging(visible.find((t) => t.id === active.id) || null)}
-          onDragCancel={() => setDragging(null)}
-          onDragEnd={onDragEnd}
-        >
-          <div className="workload-scroll">
-            <table className="workload-grid">
-              <thead>
-                <tr>
-                  <th scope="col" className="workload-person-head">Person</th>
-                  {weeks.map((w) => (
-                    <th scope="col" key={w.key}>
-                      <span className="workload-week">{w.label}</span>
-                      <span className="muted small workload-week-total">
-                        {byWeekTotals[w.key] ? `${byWeekTotals[w.key]}h planned` : 'nothing planned'}
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.userId}>
-                    <th scope="row" className="workload-person">
-                      <span>{row.name}</span>
-                      <span className="muted small">{row.total ? `${row.total}h in view` : 'nothing in view'}</span>
-                    </th>
-                    {weeks.map((week) => (
-                      <WorkloadCell
-                        key={week.key}
-                        row={row}
-                        week={week}
-                        cell={row.cells[week.key]}
-                        projectById={projectById}
-                        onOpen={setEditing}
-                      />
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <section className="wl-card">
+          <div className="wl-head">
+            <span className="wl-title">Workload</span>
+            <span className="wl-cap">cap {DEFAULT_CAPACITY_HOURS}h</span>
           </div>
 
-          <DragOverlay>
-            {dragging ? <span className="workload-chip is-dragging">{dragging.title}</span> : null}
-          </DragOverlay>
-        </DndContext>
-      )}
-
-      {unscheduled.length > 0 && (
-        <section className="workload-unscheduled">
-          <h2 className="review-h2">No due date yet ({unscheduled.length})</h2>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            These cannot be planned until somebody says when they are due. Open one to set a date.
-          </p>
-          <ul className="workload-unscheduled-list">
-            {unscheduled.map((task) => (
-              <li key={task.id}>
-                <button type="button" className="workload-chip" onClick={() => setEditing(task)}>
-                  {task.title}
+          <div className="wl-rows">
+            {load.people.map((p) => {
+              const tone = p.hours > DEFAULT_CAPACITY_HOURS ? 'red'
+                : p.hours >= DEFAULT_CAPACITY_HOURS * 0.8 ? 'amber' : 'green';
+              const isOn = route.who === p.uid;
+              return (
+                <button
+                  type="button"
+                  key={p.uid}
+                  className={`wl-row${isOn ? ' is-on' : ''}`}
+                  aria-pressed={isOn}
+                  title={`${p.name} — ${Math.round(p.hours)}h across ${p.segs.length} project${p.segs.length === 1 ? '' : 's'}. Show only their work.`}
+                  onClick={() => navigate?.({ who: isOn ? null : p.uid })}
+                >
+                  <Avatar id={p.uid} name={p.name} photo={memberProfiles[p.uid]?.photoURL} size={30} />
+                  <span className="wl-name">
+                    <span className="wl-person">{p.name}</span>
+                    <span className="wl-count">{p.open} open · {p.done} done</span>
+                  </span>
+                  <span className="wl-track">
+                    {p.segs.map((sg) => (
+                      <span
+                        key={sg.pid}
+                        className="wl-seg"
+                        style={{ width: `${(sg.h / load.widest) * 100}%`, background: sg.color }}
+                        title={`${projectById[sg.pid]?.name || 'No project'}: ${Math.round(sg.h)}h`}
+                      />
+                    ))}
+                    <span className="wl-notch" style={{ left: `${load.capPct}%` }} aria-hidden="true" />
+                  </span>
+                  {/* The mockup's 104px name column truncates, and "N
+                      assumed" is the one thing on this row that must never be
+                      the bit that gets cut — it is what stops a measured-
+                      looking bar from being believed. So it sits outside that
+                      column, as its own chip. */}
+                  <span className="wl-assumed-slot">
+                    {p.guessed > 0 && (
+                      <span
+                        className="wl-assumed"
+                        title={`${p.guessed} of these ${p.open} have no estimate and were counted at ${HOURS_PER_TASK}h each`}
+                      >{p.guessed} assumed</span>
+                    )}
+                  </span>
+                  <span className={`wl-hours tone-ink-${tone}`}>{Math.round(p.hours)}h</span>
                 </button>
-              </li>
+              );
+            })}
+          </div>
+
+          <div className="wl-legend">
+            {projectIds.map((pid) => (
+              <span key={pid} className="wl-leg">
+                <span className="wl-leg-dot" style={{ background: projectById[pid]?.color || 'var(--c-text-muted)' }} />
+                {projectById[pid]?.name || 'No project'}
+              </span>
             ))}
-          </ul>
+            <span className="wl-leg"><span className="wl-leg-line" />{DEFAULT_CAPACITY_HOURS}h cap</span>
+          </div>
+
+          {/* Not in the mockup, and not optional: the bars are part guesswork
+              and the reader has to be told which part. */}
+          <p className="wl-note">
+            Open work only, in estimated hours. A task with no estimate is
+            counted at {HOURS_PER_TASK}h — each row says how many of those there
+            were, because a full bar built out of assumptions is worse than no bar.
+          </p>
         </section>
       )}
-
-      {editing && <TaskEditor task={editing} onClose={() => setEditing(null)} />}
-    </div>
+    </>
   );
 }
-
-function WorkloadCell({ row, week, cell, projectById, onOpen }) {
-  const id = cellId(row.userId, week.key);
-  const { setNodeRef, isOver } = useDroppable({ id });
-  const description = describeCell(row, week, cell);
-
-  return (
-    <td
-      ref={setNodeRef}
-      className={`workload-cell is-${cell.level} ${isOver ? 'is-drop-target' : ''}`}
-      title={description}
-      aria-label={description}
-    >
-      {cell.tasks.length === 0 ? (
-        <span className="workload-empty" aria-hidden="true">—</span>
-      ) : (
-        <>
-          <span className="workload-hours">{cell.hours}h</span>
-          <ul className="workload-cell-list">
-            {cell.tasks.map((task) => (
-              <li key={task.id}>
-                <WorkloadChip task={task} projectById={projectById} onOpen={onOpen} />
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </td>
-  );
-}
-
-function WorkloadChip({ task, projectById, onOpen }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
-  const project = projectById[task.projectId];
-
-  // The whole chip is the drag handle AND the way into the task — it is too
-  // small to hold both a handle and a button. A click that never moved opens
-  // the task; a click that arrives at the end of a drag does not.
-  const dragged = useRef(false);
-  useEffect(() => { if (isDragging) dragged.current = true; }, [isDragging]);
-
-  const open = () => {
-    if (dragged.current) { dragged.current = false; return; }
-    onOpen(task);
-  };
-
-  return (
-    <button
-      type="button"
-      ref={setNodeRef}
-      className={`workload-chip ${isDragging ? 'is-dragging' : ''}`}
-      style={project?.color ? { borderLeftColor: project.color } : undefined}
-      onClick={open}
-      title={`${task.title} — drag to move it, click to open it`}
-      {...listeners}
-      {...attributes}
-    >
-      {task.title}
-    </button>
-  );
-}
-

@@ -111,15 +111,19 @@ test('the README lists the new suites and the harness', () => {
   assert.match(readme, /`src\/services\/workload\.test\.mjs`/);
   assert.match(readme, /`tests\/ui\/workload\.test\.mjs`/);
   assert.match(readme, /`tests\/ui\/workloadApi\.test\.mjs`/);
-  assert.match(readme, /`\/dev\/workload\.html`/);
 });
 
-test('CLAUDE.md records the module and the two traps it cost to find', () => {
+// T-0150 replaced the weeks grid with the mockup's single panel, and T-0152
+// took the Table with its bulk bar. What CLAUDE.md must still carry is where
+// the grid's two capabilities went, and that the pure module survived it.
+test('CLAUDE.md records what the weeks grid became, and what it cost', () => {
   const claude = read('CLAUDE.md');
-  assert.match(claude, /workload\.js\s+← the people × weeks grid, and what a drop means/);
   assert.match(claude, /WorkloadView\.jsx\s+← Board → Workload/);
-  assert.match(claude, /Reusing `is-over` for two things/);
-  assert.match(claude, /Giving a workload chip an inner button/);
+  assert.match(claude, /workload\.js\s+← load per person/);
+  assert.match(claude, /kept but unrendered/, 'the unrendered arithmetic must be flagged, not silently dead');
+  assert.match(claude, /Workload \(the weeks grid\)/, 'the removal has a row of its own');
+  assert.match(claude, /Reassigning many tasks at once is no longer possible/,
+    'the capability the deletion cost has to be stated, not discovered');
 });
 
 test('the changelog records both halves', () => {

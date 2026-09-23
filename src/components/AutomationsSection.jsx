@@ -20,7 +20,7 @@ import {
   ACTIONS, CONDITION_FIELDS, OPERATORS, TRIGGERS, describeRule, validateRule,
 } from '../../functions/src/automations.js';
 import { memberLabel } from '../services/invites';
-import { friendlyError } from '../services/access';
+import { friendlyError, deniedDespiteRole } from '../services/access';
 import { useModalDialog } from '../hooks/useModalDialog';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
@@ -110,6 +110,17 @@ export default function AutomationsSection({ userId, isAdmin = false }) {
     || id
   ), [projects, members, memberProfiles, webhooks]);
 
+  // Every write on this page is admin-only, and the button that starts it is
+  // only rendered for an admin — so a refusal here means the page and the
+  // server disagree, and "ask an admin" would send the admin looking for
+  // themselves. `deniedDespiteRole` says the true thing; the operator hint
+  // goes to the console, where only somebody who can act on it will look.
+  const denied = (err, fallback) => {
+    const { message, operatorHint } = deniedDespiteRole(err, { believedAllowed: isAdmin });
+    if (operatorHint) console.error('[automations]', operatorHint);
+    return message === friendlyError(err) ? friendlyError(err, fallback) : message;
+  };
+
   const save = async (rule) => {
     const problem = validateRule(rule);
     if (problem) { toast.error(problem); return; }
@@ -125,7 +136,7 @@ export default function AutomationsSection({ userId, isAdmin = false }) {
       toast.success(rule.id ? 'Rule saved.' : 'Rule created. It runs from now on.');
     } catch (err) {
       console.error(err);
-      toast.error(friendlyError(err, 'Could not save that rule.'));
+      toast.error(denied(err, 'Could not save that rule.'));
     } finally { setBusy(false); }
   };
 
@@ -141,13 +152,13 @@ export default function AutomationsSection({ userId, isAdmin = false }) {
       toast.success('Rule deleted.');
     } catch (err) {
       console.error(err);
-      toast.error(friendlyError(err, 'Could not delete that rule.'));
+      toast.error(denied(err, 'Could not delete that rule.'));
     }
   };
 
   const toggle = async (rule) => {
     try { await updateAutomation(rule.id, { enabled: !rule.enabled }); }
-    catch (err) { console.error(err); toast.error(friendlyError(err, 'Could not change that rule.')); }
+    catch (err) { console.error(err); toast.error(denied(err, 'Could not change that rule.')); }
   };
 
   return (

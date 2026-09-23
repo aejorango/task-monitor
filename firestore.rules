@@ -126,6 +126,22 @@ service cloud.firestore {
     // itself is the proof — no UID ever has to change hands. The claim may add
     // exactly the claimer, at exactly the role offered, and must clear the
     // invitation as it goes.
+    // The person an invitation NAMES may read the workspace that is offering
+    // it. They are by definition not in `members` yet — that is what claiming
+    // is for — so without this branch the query somebody must run to find
+    // their own invitation is denied, and invite-by-email can never complete.
+    // `pendingInviteEmails` is the flat array that exists precisely so a rule
+    // can check it (see CLAUDE.md); the read rule simply never did.
+    //
+    // It grants read on THAT workspace only, and only while the invitation is
+    // outstanding: claiming consumes the email, so the branch closes behind
+    // them and `members` takes over.
+    function isInvitedToWorkspace() {
+      return isApproved()
+          && request.auth.token.email != null
+          && request.auth.token.email.lower() in resource.data.get('pendingInviteEmails', []);
+    }
+
     function isClaimingWorkspaceInvite() {
       let email = request.auth.token.email.lower();
       return isApproved()
@@ -150,8 +166,10 @@ service cloud.firestore {
     }
 
     match /workspaces/{workspaceId} {
-      // Anyone in the members array can read the workspace.
-      allow read:   if isApproved() && request.auth.uid in resource.data.members;
+      // Anyone in the members array can read the workspace — and so can the
+      // person it is currently inviting, or they could never find it.
+      allow read:   if (isApproved() && request.auth.uid in resource.data.members)
+                    || isInvitedToWorkspace();
       // Any approved user can create their own workspace.
       allow create: if isApproved()
                     && request.resource.data.createdByUserId == request.auth.uid

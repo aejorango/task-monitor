@@ -38,7 +38,7 @@ import {
 
 // The board's own column names, so the editor and the board cannot disagree
 // about what "In Progress" is called.
-const WIP_LABEL = { todo: 'To Do', doing: 'In Progress', done: 'Done' };
+const WIP_LABEL = { todo: 'To Do', doing: 'In Progress', review: 'In Review', done: 'Done' };
 import NotebookPicker from './NotebookPicker';
 import TemplateGallery from './TemplateGallery';
 import ShareLinksPanel from './ShareLinksPanel';
@@ -51,8 +51,55 @@ import { useQuickCreate, newSeed, useSeededField } from '../hooks/useQuickCreate
 import { GROUP_ICONS, iconFor, normalizeIcon, suggestIcon } from '../services/icons';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
+import Icon from './Icon';
+import { PageActions, PageSubtitle } from './PageHeader';
+import { Tile } from './DashboardView';
+import { rateProjects, RAG_MEANING } from '../services/portfolio';
+import { addDaysISO } from '../services/dueAlerts';
+import { activateProps } from '../hooks/useActivate';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
+
+/**
+ * The health bands the table groups by, worst first. The words are the
+ * mockup's — "At risk", "Needs attention", "On track" — and each is tied to
+ * one RAG letter from services/portfolio.js, so the heading somebody reads and
+ * the badge on the row beneath it can never mean different things.
+ */
+const HEALTH_BANDS = [
+  { key: 'red',   rag: 'RED',   label: 'At risk',         tone: 'red' },
+  { key: 'amber', rag: 'AMBER', label: 'Needs attention', tone: 'amber' },
+  { key: 'green', rag: 'GREEN', label: 'On track',        tone: 'green' },
+  { key: 'idle',  rag: 'IDLE',  label: 'Nothing scheduled', tone: 'navy' },
+];
+const RAG_LABEL = { RED: 'Red', AMBER: 'Amber', GREEN: 'Green', IDLE: 'Idle' };
+
+function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+
+/** "Jun 15" — month-first, matching fmtDay and the board's due chips. */
+function shortDate(iso) {
+  const [y, m, d] = String(iso || '').split('-').map(Number);
+  if (!y || !m || !d) return '—';
+  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
+/** A stable colour per person, so the same face is the same colour everywhere. */
+function avatarColorFor(uid) {
+  const palette = ['#0051BA', '#e2892e', '#7B2D8F', '#1DA449', '#1D7CC7', '#c0392b'];
+  let h = 0;
+  for (const ch of String(uid)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return palette[h % palette.length];
+}
+
+function nameFor(profile, uid) {
+  return profile?.displayName || profile?.email || `Member ${String(uid).slice(0, 4)}`;
+}
+
+function initialsFor(profile, uid) {
+  const parts = String(nameFor(profile, uid)).trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return String(parts[0] || '?').slice(0, 2).toUpperCase();
+}
 
 export default function ProjectsView() {
   const { userId } = useAuth();
@@ -114,8 +161,11 @@ export default function ProjectsView() {
       grouped['Uncategorized'] = [];
     }
 
-    // Now add projects to their segments
-    projects.forEach((p) => {
+    // Now add projects to their segments. Archived ones are deliberately left
+    // out: they used to sit in the grid behind a small badge, which made a
+    // finished project look like a live one at a glance. They get their own
+    // section at the foot of the page instead (T-0143, Projects Explorer).
+    projects.filter((p) => !p.archived).forEach((p) => {
       const seg = p.segment || 'Uncategorized';
       if (!grouped[seg]) grouped[seg] = [];
       grouped[seg].push(p);
@@ -132,27 +182,114 @@ export default function ProjectsView() {
     return sorted;
   }, [projects, workspace?.segments]);
 
+  const archivedProjects = useMemo(
+    () => projects.filter((p) => p.archived && !p.deleted)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+    [projects],
+  );
+
+  // ───── The portfolio table ─────────────────────────────────────────────
+  // Segment by default (T-0153): health is a derived judgement that changes
+  // week to week, while a segment is what somebody decided this project IS.
+  // Opening on the stable grouping means the page looks the same tomorrow.
+  const [groupMode, setGroupMode] = useState('segment');  // 'segment' | 'health'
+  const [closedGroups, setClosedGroups] = useState({});
+
+  const memberProfiles = workspace?.memberProfiles || {};
+
+  const portfolioRows = useMemo(() => {
+    const rated = rateProjects(projects, tasks, todayLocal());
+    return rated.map((h) => {
+      const own = tasks.filter((t) => t.projectId === h.project.id && !t.deleted);
+      // Who is on it: everybody assigned to one of its tasks, most-assigned
+      // first, so the avatars are the people you would actually ask about it.
+      const load = new Map();
+      own.forEach((t) => (t.assignedTo || []).forEach((uid) => load.set(uid, (load.get(uid) || 0) + 1)));
+      const people = [...load.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([uid]) => ({ uid, name: nameFor(memberProfiles[uid], uid), initials: initialsFor(memberProfiles[uid], uid) }));
+      const hours = activities
+        .filter((a) => a.projectId === h.project.id)
+        .reduce((n, a) => n + (a.hoursSpent || 0), 0);
+      return {
+        ...h,
+        meta: `${plural(own.length, 'item', 'items')}${h.project.segment ? ` · ${h.project.segment}` : ''}`,
+        ragLabel: RAG_LABEL[h.rag],
+        team: people.slice(0, 3),
+        moreTeam: Math.max(0, people.length - 3),
+        timeline: h.start && h.end ? `${shortDate(h.start)} – ${shortDate(h.end)}` : 'no dates',
+        hours: hours > 0 ? `${Math.round(hours)}h` : '—',
+      };
+    });
+  }, [projects, tasks, activities, memberProfiles]);
+
+  const portfolioGroups = useMemo(() => {
+    if (groupMode === 'segment') {
+      const by = new Map();
+      portfolioRows.forEach((r) => {
+        const key = r.project.segment || 'Uncategorized';
+        if (!by.has(key)) by.set(key, []);
+        by.get(key).push(r);
+      });
+      return [...by.entries()]
+        .sort((a, b) => (a[0] === 'Uncategorized' ? 1 : b[0] === 'Uncategorized' ? -1 : a[0].localeCompare(b[0])))
+        .map(([key, rows]) => ({ key, label: key, tone: 'navy', rows }));
+    }
+    // Worst band first. A band with nothing in it is left out rather than
+    // drawn empty — "At risk (0)" is a heading that makes you look twice.
+    return HEALTH_BANDS
+      .map((b) => ({ ...b, rows: portfolioRows.filter((r) => r.rag === b.rag) }))
+      .filter((b) => b.rows.length > 0);
+  }, [portfolioRows, groupMode]);
+
+  // The four tiles above the grid, on exactly the rating services/portfolio.js
+  // gives the Dashboard and the Portfolio page — one definition of amber for
+  // the whole app, so three screens cannot disagree about the same project.
+  const health = useMemo(() => {
+    const rated = rateProjects(projects, tasks, todayLocal());
+    const archived = projects.filter((p) => p.archived && !p.deleted).length;
+    const soon = addDaysISO(todayLocal(), 14);
+    return {
+      active: rated.length,
+      archived,
+      red:   rated.filter((r) => r.rag === 'RED').length,
+      green: rated.filter((r) => r.rag === 'GREEN').length,
+      dueSoon: rated.filter((r) => r.end && r.end >= todayLocal() && r.end <= soon).length,
+      // An unrated project counts as 0%, not as "excluded" — a portfolio
+      // average that quietly skips the empty projects flatters itself.
+      avgPct: rated.length ? Math.round(rated.reduce((n, r) => n + r.pct, 0) / rated.length) : 0,
+      worst: rated.find((r) => r.rag === 'RED') || null,
+      subtitle: `${rated.length} active${archived ? ` · ${archived} archived` : ''}`,
+    };
+  }, [projects, tasks]);
+
   if (loading) return <p className="muted">Loading projects…</p>;
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Projects</h1>
-          <p className="page-subtitle">Manage projects organized by department or segment.</p>
+      {/* Title, count line and commands live on the page chrome now — the
+          same three bands every page wears (T-0143). */}
+      <PageSubtitle>{health.subtitle}</PageSubtitle>
+      <PageActions>
+        <button className="cmd" onClick={() => setManagingSegments(true)}>⚙ Segments</button>
+        <button className="cmd" onClick={() => setGalleryOpen(true)}>◈ From a template</button>
+        <button className="cmd cmd-primary" onClick={() => setEditing('new')} data-tutorial="new-project-btn">
+          <span className="cmd-icon"><Icon name="plus" size={14} /></span>New project
+        </button>
+      </PageActions>
+
+      {projects.length > 0 && (
+        <div className="tiles">
+          <Tile tone="navy"  label="Active"    value={health.active}
+                sub={health.green ? `${health.green} on track` : 'none rated green yet'} />
+          <Tile tone="red"   label="At risk"   value={health.red}
+                sub={health.worst ? health.worst.project.name : 'nothing in the red'} />
+          <Tile tone="amber" label="Due ≤ 14d" value={health.dueSoon}
+                sub={health.dueSoon ? 'ending inside a fortnight' : 'nothing lands this fortnight'} />
+          <Tile tone="green" label="Delivered" value={`${health.avgPct}%`} bar={health.avgPct}
+                sub="average completion" />
         </div>
-        <div className="page-actions">
-          <button className="btn btn-secondary" onClick={() => setManagingSegments(true)}>
-            ⚙ Segments
-          </button>
-          <button className="btn btn-secondary" onClick={() => setGalleryOpen(true)}>
-            ◈ From a template
-          </button>
-          <button className="btn btn-primary" onClick={() => setEditing('new')} data-tutorial="new-project-btn">
-            + New project
-          </button>
-        </div>
-      </div>
+      )}
 
       {projects.length === 0 ? (
         <div className="empty-state">
@@ -172,77 +309,138 @@ export default function ProjectsView() {
           </div>
         </div>
       ) : (
-        <div className="segments-container">
-          {Object.entries(segments).map(([segmentName, segmentProjects]) => (
-            <div key={segmentName} className="segment-group">
-              <h2 className="segment-title">{segmentName}</h2>
-              <div className="projects-row">
-                {segmentProjects.map((p) => {
-                  const s = stats(p.id);
-                  return (
-                    <div key={p.id} className="project-card" style={{ '--project-color': p.color }} onClick={() => setEditing(p)}>
-                      <div className="project-card-head">
-                        <span className="proj-icon" style={{ color: p.color }} aria-hidden="true">
-                          {iconFor(p) === '◆' && !p.icon ? suggestIcon(p.id) : iconFor(p)}
-                        </span>
-                        <h3 className="project-name">{p.name}</h3>
-                        {p._shared && (
-                          <span
-                            className="badge badge-soft-info"
-                            title="This project lives in a different workspace and was shared with you."
-                            style={{ marginLeft: 'auto' }}
-                          >Shared</span>
-                        )}
-                      </div>
-                      <div className="project-progress" title={`${s.done} of ${s.total} tasks done`}>
-                        <div className="project-progress-track">
-                          <div
-                            className="project-progress-fill"
-                            style={{ width: `${s.total > 0 ? Math.round((s.done / s.total) * 100) : 0}%` }}
-                          />
-                        </div>
-                        <span className="project-progress-label">
-                          {s.total > 0 ? Math.round((s.done / s.total) * 100) : 0}%
-                        </span>
-                      </div>
-                      <ProjectAssigneeStrip project={p} />
-                      <div className="project-phases">
-                        {p.phases?.length > 0 ? p.phases.map((ph) => (
-                          <span key={ph.id} className="phase-tag">{ph.name}</span>
-                        )) : <span className="muted small">No phases</span>}
-                      </div>
-                      <div className="project-stats">
-                        <span>{s.total} task{s.total === 1 ? '' : 's'}</span>
-                        <span>·</span>
-                        <span>{s.done} done</span>
-                        <span>·</span>
-                        <span>{s.activities} activit{s.activities === 1 ? 'y' : 'ies'}</span>
-                        {p.archived && (<><span>·</span><span className="badge badge-soft-muted">Archived</span></>)}
-                      </div>
-                      <div className="project-card-actions" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          title="View Work Breakdown Structure"
-                          onClick={() => setWbsFor(p)}
-                        >🗂 WBS</button>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          title="View this project's activity log"
-                          onClick={() => setActivityLogFor(p)}
-                        >☰ Log</button>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          title="Generate tasks with AI"
-                          onClick={() => setAiFor(p)}
-                        >✨ AI</button>
-                      </div>
-                    </div>
-                  );
-                })}
+        /* The portfolio table, from the Projects Explorer. It replaced a grid
+           of cards that could show a name, a bar and three buttons: the table
+           shows health, who is on it, the span it has to run in, and how far
+           through that span today is — the four things somebody opening this
+           page came to compare, side by side, which cards cannot do. */
+        <div className="ptable">
+          <div className="ptable-bar">
+            <button className="pill pill-accent" onClick={() => setEditing('new')}>+ New project</button>
+            <button
+              className="pill"
+              onClick={() => setGroupMode((m) => (m === 'health' ? 'segment' : 'health'))}
+              title="Switch between grouping by health and by segment"
+            >◫ Group: {groupMode === 'health' ? 'Health' : 'Segment'}</button>
+            <button className="pill" onClick={() => setManagingSegments(true)}>⚙ Segments</button>
+            <span className="ptable-count">{plural(portfolioRows.length, 'project', 'projects')} shown</span>
+          </div>
+
+          <div className="ptable-cols">
+            <span>Project</span><span>Health</span><span>Team</span>
+            <span>Timeline</span><span>Progress</span><span>Hours</span>
+          </div>
+
+          {portfolioGroups.map((g) => (
+            <div key={g.key}>
+              <div
+                className="ptable-group"
+                {...activateProps(() => setClosedGroups((c) => ({ ...c, [g.key]: !c[g.key] })))}
+                aria-expanded={!closedGroups[g.key]}
+              >
+                <span className={`ptable-chev${closedGroups[g.key] ? '' : ' open'}`} aria-hidden="true">▸</span>
+                <span className={`ptable-group-name tone-ink-${g.tone}`}>{g.label}</span>
+                <span className="ptable-group-count">{g.rows.length}</span>
               </div>
+              {!closedGroups[g.key] && g.rows.map((r, i) => (
+                <div
+                  key={r.project.id}
+                  className={`ptable-row${i % 2 ? ' alt' : ''}`}
+                  {...activateProps(() => setEditing(r.project))}
+                >
+                  <span className="ptable-rail" style={{ background: r.project.color }} aria-hidden="true" />
+                  <span className="ptable-name-cell">
+                    <span className="ptable-icon" style={{ background: r.project.color }} aria-hidden="true">
+                      {iconFor(r.project) === '◆' && !r.project.icon ? suggestIcon(r.project.id) : iconFor(r.project)}
+                    </span>
+                    <span className="ptable-name-text">
+                      <span className="ptable-name">{r.project.name}</span>
+                      <span className="ptable-meta">{r.meta}</span>
+                    </span>
+                  </span>
+                  <span className="ptable-cell">
+                    <span className={`ragchip ragchip-${r.rag.toLowerCase()}`} title={RAG_MEANING[r.rag]}>{r.ragLabel}</span>
+                  </span>
+                  <span className="ptable-cell ptable-team">
+                    {r.team.length === 0
+                      ? <span className="ptable-none">—</span>
+                      : r.team.map((m, k) => (
+                          <span
+                            key={m.uid}
+                            className="ptable-av"
+                            style={{ background: avatarColorFor(m.uid), marginLeft: k ? -6 : 0 }}
+                            title={m.name}
+                          >{m.initials}</span>
+                        ))}
+                    {r.moreTeam > 0 && <span className="ptable-more">+{r.moreTeam}</span>}
+                  </span>
+                  <span className="ptable-timeline">{r.timeline}</span>
+                  <span className="ptable-cell ptable-prog">
+                    <span className="ptable-track">
+                      <span className="ptable-fill" style={{ width: `${r.pct}%`, background: r.project.color }} />
+                      {/* Where today falls in the project's own span. The gap
+                          between this notch and the end of the bar IS the
+                          health rating, drawn — see services/portfolio.js. */}
+                      {r.elapsed != null && (
+                        <span className="ptable-notch" style={{ left: `${r.elapsed}%` }} title={`${r.elapsed}% of the schedule gone`} />
+                      )}
+                    </span>
+                    <span className="ptable-pct">{r.pct}%</span>
+                  </span>
+                  <span className="ptable-hours">{r.hours}</span>
+                </div>
+              ))}
             </div>
           ))}
+
+          <div className="ptable-key">
+            <span className="ptable-key-item"><span className="ptable-key-notch" />today in the project's span</span>
+            <span className="ptable-key-item"><span className="ragchip ragchip-red">Red</span>needs attention now</span>
+            <span className="ptable-key-item"><span className="ragchip ragchip-amber">Amber</span>watch it</span>
+            <span className="ptable-key-item"><span className="ragchip ragchip-green">Green</span>on track</span>
+          </div>
         </div>
+      )}
+
+      {/* Archived — finished work, still readable, out of the way. Open it and
+          the cards behave exactly as the live ones do, because an archived
+          project is not a deleted one: that is what Trash is for. */}
+      {archivedProjects.length > 0 && (
+        <details className="archive-fold">
+          <summary className="archive-fold-head">
+            <span className="archive-fold-title">Archived</span>
+            <span className="archive-fold-count">{archivedProjects.length}</span>
+            <span className="muted small">out of the main grid, still open to read</span>
+          </summary>
+          <div className="projects-row">
+            {archivedProjects.map((p) => {
+              const s2 = stats(p.id);
+              return (
+                <div
+                  key={p.id}
+                  className="project-card is-archived"
+                  style={{ '--project-color': p.color }}
+                  onClick={() => setEditing(p)}
+                >
+                  <div className="project-card-head">
+                    <span className="proj-icon" style={{ color: p.color }} aria-hidden="true">
+                      {iconFor(p) === '◆' && !p.icon ? suggestIcon(p.id) : iconFor(p)}
+                    </span>
+                    <h3 className="project-name">{p.name}</h3>
+                    <span className="badge badge-soft-muted" style={{ marginLeft: 'auto' }}>Archived</span>
+                  </div>
+                  <div className="project-stats">
+                    <span>{s2.total} task{s2.total === 1 ? '' : 's'}</span>
+                    <span>·</span>
+                    <span>{s2.done} done</span>
+                    <span>·</span>
+                    <span>{s2.activities} activit{s2.activities === 1 ? 'y' : 'ies'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </details>
       )}
 
       <section className="review-section" style={{ marginTop: 24 }}>
@@ -1292,7 +1490,12 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
               <div className="pe-hero-id">
                 <div className="pe-mode">{isNew ? 'New project' : 'Edit project'}</div>
                 <div className="pe-name-row">
-                  <span className="pe-name-dot" style={{ background: color, boxShadow: `0 0 0 3px ${color}40` }} />
+                  {/* The mockup leads with a 44px tile in the project's own
+                      colour, not a dot: it is what makes one project
+                      recognisable in a stack of modals. */}
+                  <span className="pe-icon" style={{ background: color }} aria-hidden="true">
+                    {(name.trim() || 'P').charAt(0).toUpperCase()}
+                  </span>
                   <input
                     className="pe-name-input"
                     value={name}
@@ -1340,6 +1543,43 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
             </div>
 
             {/* Structure — workspace → project → editable phases */}
+            {/* ── Pace ──
+                The mockup's own panel, and the one thing the editor could not
+                say before: how far the work has got AGAINST how much of the
+                schedule has gone. Two numbers the page already had, put on one
+                track so the gap between them is the thing you see. Drawn only
+                when there are dates to measure — a notch with no schedule
+                behind it is decoration. */}
+            {!isNew && health.schedulePct !== null && (
+              <section className="pe-card pe-pace">
+                <div className="pe-pace-head">
+                  <span className="pe-sect-plain">Pace</span>
+                  <span className={`pe-gap tone-ink-${
+                    health.gap === null ? 'navy' : health.gap >= 20 ? 'red' : health.gap >= 8 ? 'amber' : 'green'
+                  }`}>
+                    {health.gap === null ? 'no planned dates'
+                      : health.gap > 0 ? `${health.gap} pts behind schedule`
+                      : `${Math.abs(health.gap)} pts ahead`}
+                  </span>
+                </div>
+                <div className="pe-pace-track">
+                  <span
+                    className="pe-pace-bar"
+                    style={{ width: `${health.completePct}%`, background: color }}
+                  />
+                  <span
+                    className="pe-pace-notch"
+                    style={{ left: `${Math.min(100, health.schedulePct)}%` }}
+                    title={`${health.schedulePct}% of the planned schedule has passed`}
+                  />
+                </div>
+                <div className="pe-pace-legend">
+                  <span>{health.completePct}% complete</span>
+                  <span><span className="pe-pace-key" />{health.schedulePct}% of schedule</span>
+                </div>
+              </section>
+            )}
+
             <section className="pe-card">
               <h4 className="pe-sect"><span className="pe-sect-mark">⌗</span>Structure — phases and their tasks</h4>
 

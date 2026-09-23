@@ -66,8 +66,8 @@ import {
 import { catchUpPlan } from './recurrenceSchedule';
 // What a status implies about progress and the actual dates — one rule, so a
 // task imported as Done cannot land in To Do (BUG-015).
-import { clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
-import { chunkWrites } from './bulkTasks';
+import { TASK_STATUSES, clampProgress, normalizeTaskStatus, statusStamps } from './taskStatus';
+import { chunkWrites } from './writeBatches';
 import { normalizeEstimate } from './effort';
 import { normalizeLimits } from './wipLimits';
 import { duplicateProjectPlan, duplicateTaskPayload } from './duplicate';
@@ -772,9 +772,13 @@ export async function updateMyMemberProfileInWorkspace(workspaceId, profile) {
 // permission-denied case (other errors are still surfaced).
 function listenerError(label, reset) {
   return (err) => {
-    if (err?.code !== 'permission-denied') {
-      console.warn(`[subscribe:${label}]`, err?.code || err);
-    }
+    // `permission-denied` used to be swallowed entirely. It is the code a
+    // listener gets when a token refresh loses a race with a rules evaluation
+    // — and the handler below answers it with an empty list, so the page goes
+    // blank with nothing in the console to say why. That is how the Activity
+    // log and Work performed pages came to "always disappear" with no trace.
+    // Log every code; a silent reset is an unexplained one.
+    console.warn(`[subscribe:${label}]`, err?.code || err);
     try { reset(); } catch { /* ignored */ }
   };
 }
@@ -1026,6 +1030,23 @@ export function migrateLegacyCategories() {
 // of workspace — i.e. projects that were SHARED with them. Recipient could be
 // in a totally different workspace; this is how that shared project shows up
 // in their app at all. Caller dedupes against their workspace-scoped list.
+/**
+ * REMOVED (BUG-033): `subscribeToTasksByProjects` / `subscribeToActivitiesByProjects`.
+ *
+ * Both asked `where('projectId', 'in', [...])` and nothing else. That states
+ * nothing the read rule can use — the satisfiable branch for a teammate's
+ * document is `isProjectMember`, an exists()+get() PER DOCUMENT — and RULES
+ * ARE NOT FILTERS, so a single document the rule cannot clear refuses the
+ * whole query. Production answered both with `permission-denied` on every
+ * load. They were also redundant: every caller had already filtered the
+ * project ids to the ACTIVE workspace, which the workspace-wide listeners
+ * cover in full, and they were unbounded — no orderBy, no limit — against this
+ * project's own "bound every query at the server" rule.
+ *
+ * If per-project reading is ever needed again it must carry the workspace:
+ * `where('workspaceId','==',id)` is the clause the rule can actually check.
+ */
+
 export function subscribeToSharedProjects(userId, callback) {
   if (!userId) { callback([]); return () => {}; }
   const q = query(projectsRef, where('members', 'array-contains', userId));
@@ -1037,58 +1058,7 @@ export function subscribeToSharedProjects(userId, callback) {
   }, listenerError('sharedProjects', () => callback([])));
 }
 
-// Subscribe to all non-deleted tasks across the given projectIds, in chunks of
-// 30 (Firestore `in`-query limit). Used so a user who's a project member of a
-// SHARED project can see its tasks even when the project lives in a workspace
-// they're not part of.
-export function subscribeToTasksByProjects(projectIds, callback) {
-  if (!projectIds || projectIds.length === 0) { callback([]); return () => {}; }
-  const chunks = [];
-  for (let i = 0; i < projectIds.length; i += 30) chunks.push(projectIds.slice(i, i + 30));
 
-  const byChunk = {};
-  const seenInitial = new Set();
-  const fire = () => {
-    if (seenInitial.size < chunks.length) return;
-    callback(Object.values(byChunk).flat());
-  };
-  const unsubs = chunks.map((chunk, idx) => {
-    const q = query(tasksRef, where('projectId', 'in', chunk));
-    return onSnapshot(q, (snap) => {
-      byChunk[idx] = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((t) => !t.deleted && !t.archived);
-      seenInitial.add(idx);
-      fire();
-    }, listenerError('tasksByProjects', () => { byChunk[idx] = []; seenInitial.add(idx); fire(); }));
-  });
-  return () => unsubs.forEach((u) => u && u());
-}
-
-// Same shape, for activities under shared projects.
-export function subscribeToActivitiesByProjects(projectIds, callback) {
-  if (!projectIds || projectIds.length === 0) { callback([]); return () => {}; }
-  const chunks = [];
-  for (let i = 0; i < projectIds.length; i += 30) chunks.push(projectIds.slice(i, i + 30));
-
-  const byChunk = {};
-  const seenInitial = new Set();
-  const fire = () => {
-    if (seenInitial.size < chunks.length) return;
-    callback(Object.values(byChunk).flat());
-  };
-  const unsubs = chunks.map((chunk, idx) => {
-    const q = query(activitiesRef, where('projectId', 'in', chunk));
-    return onSnapshot(q, (snap) => {
-      byChunk[idx] = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((a) => !a.deleted);
-      seenInitial.add(idx);
-      fire();
-    }, listenerError('activitiesByProjects', () => { byChunk[idx] = []; seenInitial.add(idx); fire(); }));
-  });
-  return () => unsubs.forEach((u) => u && u());
-}
 
 // ─── TASKS ──────────────────────────────────────────────────────────────────
 
@@ -1297,9 +1267,11 @@ export async function materialiseRecurrences(tasks = [], { userId, today } = {})
 
 // Cycle-only API — kept for back-compat with TaskList's Move button.
 export async function moveTaskStatus(task) {
-  const next =
-    task.status === 'todo'  ? 'doing' :
-    task.status === 'doing' ? 'done'  : 'todo';
+  // Round the columns in order and wrap. Derived from TASK_STATUSES, so the
+  // cycle gained In Review for free when the status did.
+  const order = TASK_STATUSES;
+  const at = order.indexOf(task.status);
+  const next = order[(at < 0 ? 0 : at + 1) % order.length];
   return setTaskStatus(task, next);
 }
 
@@ -1309,50 +1281,6 @@ export async function archiveTask(taskId) {
 
 export async function softDeleteTask(taskId) {
   return await updateTask(taskId, { deleted: true });
-}
-
-/**
- * Apply one patch per task, in as few commits as Firestore allows (T-0127).
- *
- * The caller hands over a plan from `services/bulkTasks.js` — `[{ id, patch }]`
- * — and this only commits it. Deciding WHAT to write stays in that pure module
- * so it can be checked without touching data; deciding HOW to write it is here,
- * because only this file knows about `db`.
- *
- * Commits run in series, not in parallel: `Promise.all` over batches would put
- * hundreds of writes in flight at once and, on a failure, leave no way to say
- * how far it got. On an error the writes already committed stay committed, and
- * the error carries `committed` so the caller can say "4 of 10" honestly rather
- * than claiming nothing happened.
- *
- * Per-project ACLs are NOT re-checked here: `firestore.rules` is the enforcement
- * point, and a batch that touches a task the caller may not write is rejected
- * whole. That is the behaviour we want — a partial bulk edit driven by a
- * client-side guess about permissions would be worse.
- */
-export async function bulkUpdateTasks(writes = [], { newBatch = null, stamp = null } = {}) {
-  // `newBatch` / `stamp` exist so the batching, the serial commits and the
-  // partial-failure count can be exercised without a Firestore behind them.
-  // Nothing in the app passes them.
-  const makeBatch = newBatch || (() => writeBatch(db));
-  const touched = stamp || serverTimestamp;
-
-  const chunks = chunkWrites(writes);
-  let committed = 0;
-  for (const chunk of chunks) {
-    const batch = makeBatch();
-    for (const { id, patch } of chunk) {
-      batch.update(doc(db, 'tasks', id), { ...patch, updatedAt: touched() });
-    }
-    try {
-      await batch.commit();
-    } catch (err) {
-      err.committed = committed;
-      throw err;
-    }
-    committed += chunk.length;
-  }
-  return { committed, batches: chunks.length };
 }
 
 // ─── TRASH ──────────────────────────────────────────────────────────────────
@@ -2436,10 +2364,11 @@ export async function addSavedView(userId, view) {
     statusFilter:  view.statusFilter || null,
     sortBy:        view.sortBy || null,
     sortDir:       view.sortDir || 'desc',
-    // v12: a saved view remembers the TABLE it was, not just the filters —
-    // which columns, in what order, grouped by what. See services/tableViews.js.
-    columns:       Array.isArray(view.columns) ? view.columns : null,
-    groupBy:       view.groupBy || null,
+    // v12 stored `columns` and `groupBy` here too — which table the view was,
+    // not just its filters. The task table was deleted in T-0152, so nothing
+    // reads them and nothing writes them any more. Existing documents keep
+    // the fields; they are inert, and rewriting somebody's saved views to
+    // strip a field is not worth a migration.
     deleted:       false,
     createdAt:     serverTimestamp(),
     updatedAt:     serverTimestamp(),
@@ -2461,14 +2390,22 @@ export async function softDeleteSavedView(viewId) {
 // saved views within the current workspace.
 export function subscribeToSavedViews(workspaceId, userId, callback) {
   if (!workspaceId || !userId) { callback([]); return () => {}; }
-  // Single where (workspaceId) + client-side userId/deleted filter avoids the
-  // composite (workspaceId, userId, deleted) index. Saved views per workspace
-  // are tiny — typically < 20.
-  const q = query(savedViewsRef, where('workspaceId', '==', workspaceId));
+  // Filter on USERID, not workspaceId. The rule is `allow read: if
+  // isOwner(resource)` — so a query for the whole workspace's views asks for
+  // documents a teammate owns, and RULES ARE NOT FILTERS: Firestore refuses
+  // the entire query rather than trimming it, and the saved-views menu was
+  // simply empty with `permission-denied` in the console (BUG-033).
+  //
+  // The old comment said the workspace query avoided a composite index. It
+  // did — by asking a question that can never be answered. `userId` alone is a
+  // single-field filter, which Firestore indexes automatically, so this needs
+  // no composite index either; the workspace and `deleted` are filtered in the
+  // callback, which is safe on a per-user list that is typically under twenty.
+  const q = query(savedViewsRef, where('userId', '==', userId));
   return onSnapshot(q, (snap) => {
     const data = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((v) => v.userId === userId && !v.deleted)
+      .filter((v) => v.workspaceId === workspaceId && !v.deleted)
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);
   }, listenerError('savedViews', () => callback([])));

@@ -23,7 +23,6 @@ import PendingApprovalView from './components/PendingApprovalView';
 import './App.css';
 
 const TableView         = lazy(() => import('./components/TableView'));
-const TasksTableView    = lazy(() => import('./components/TasksTableView'));
 const TrashView         = lazy(() => import('./components/TrashView'));
 const TimesheetView     = lazy(() => import('./components/TimesheetView'));
 const WorkloadView      = lazy(() => import('./components/WorkloadView'));
@@ -34,16 +33,23 @@ const CalendarView      = lazy(() => import('./components/CalendarView'));
 const DashboardView     = lazy(() => import('./components/DashboardView'));
 const ReviewView        = lazy(() => import('./components/ReviewView'));
 const ArtifactsView     = lazy(() => import('./components/ArtifactsView'));
-const AnalyticsView     = lazy(() => import('./components/AnalyticsView'));
 const InviteClaimView   = lazy(() => import('./components/InviteClaimView'));
 const ProjectsView      = lazy(() => import('./components/ProjectsView'));
+const TimelineView      = lazy(() => import('./components/TimelineView'));
 const SettingsView      = lazy(() => import('./components/SettingsView'));
 const WorkPerformedView = lazy(() => import('./components/WorkPerformedView'));
 const HowToUseView      = lazy(() => import('./components/HowToUseView'));
+const TutorialView      = lazy(() => import('./components/TutorialView'));
 const WBSView           = lazy(() => import('./components/WBSView'));
 const GoalsView         = lazy(() => import('./components/GoalsView'));
 const MessagesView      = lazy(() => import('./components/MessagesView'));
 const MinutesView       = lazy(() => import('./components/MinutesView'));
+const MonitoringView    = lazy(() => import('./components/MonitoringView'));
+const AutomationsView   = lazy(() => import('./components/AutomationsView'));
+const InboxView         = lazy(() => import('./components/InboxView'));
+const PeopleView        = lazy(() => import('./components/PeopleView'));
+const VarianceView      = lazy(() => import('./components/VarianceView'));
+const LibraryView       = lazy(() => import('./components/LibraryView'));
 const AskAiView         = lazy(() => import('./components/AskAiView'));
 
 // What each route is called in the sidebar — the error card says "We could not
@@ -209,28 +215,48 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'invite'    && <InviteClaimView inviteId={route.projectFilter} navigate={navigate} />}
         {route.view === 'ask-ai'    && <AskAiView />}
         {route.view === 'dashboard' && <DashboardView projectFilter={route.projectFilter} navigate={navigate} />}
-        {route.view === 'board'     && <Board    projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} initialStatusFilter={route.statusFilter} onlyMine={route.onlyMine} />}
+        {route.view === 'board'     && <Board    projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} initialStatusFilter={route.statusFilter} route={route} />}
         {route.view === 'table'       && <TableView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
-        {route.view === 'tasks-table' && <TasksTableView projectFilter={route.projectFilter} savedViewId={route.savedViewId} />}
-        {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
-        {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} />}
-        {route.view === 'workload'  && <WorkloadView projectFilter={route.projectFilter} />}
+        {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} route={route} />}
+        {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} route={route} />}
+        {route.view === 'workload'  && <WorkloadView projectFilter={route.projectFilter} navigate={navigate} route={route} />}
         {/* No projectFilter: My Week spans every workspace on purpose, so a
             one-project filter would be the opposite of what it is for. */}
         {route.view === 'my-week'   && <MyWeekView />}
+        {/* No projectFilter: the point is every project at once (T-0142). */}
         {route.view === 'goals'     && <GoalsView />}
         {route.view === 'messages'  && <MessagesView />}
+        {route.view === 'inbox'     && <InboxView navigate={navigate} />}
         {route.view === 'minutes'   && <MinutesView projectFilter={route.projectFilter} />}
-        {route.view === 'calendar'  && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} />}
+        {route.view === 'calendar'  && <CalendarView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} route={route} />}
         {route.view === 'review'         && <ReviewView />}
         {route.view === 'artifacts'      && <ArtifactsView projectFilter={route.projectFilter} />}
-        {route.view === 'analytics'      && <AnalyticsView projectFilter={route.projectFilter} />}
+        {/* Analytics IS Monitoring (T-0157). Its own charts were deleted on
+            request and Monitoring moved here; `resolveView` forwards the old
+            #/monitoring hash, so there is one page at one address. */}
+        {route.view === 'analytics'      && <MonitoringView projectFilter={route.projectFilter} />}
         {route.view === 'projects'       && <ProjectsView />}
-        {route.view === 'settings'       && <SettingsView />}
+        {route.view === 'timeline'       && <TimelineView projectFilter={route.projectFilter} navigate={navigate} route={route} />}
+        {/* Settings is six routes over one component. The tab strip replaced
+            its "On this page" rail, and `section` is which band of it to
+            draw — see SETTINGS_SECTIONS in SettingsView.jsx. */}
+        {route.view === 'settings'        && <SettingsView section="preferences" />}
+        {route.view === 'notifications'   && <SettingsView section="notifications" />}
+        {route.view === 'workspaces'      && <SettingsView section="workspaces" />}
+        {route.view === 'user-management' && <SettingsView section="users" />}
+        {route.view === 'ai-data'         && <SettingsView section="ai-data" />}
+        {/* Tutorial moved out of Settings into the Dashboard hub in T-0158,
+            where the mockup draws it, and became its own component — it is a
+            two-column page now, not a band of the Settings stack. */}
+        {route.view === 'tutorial'        && <TutorialView navigate={navigate} />}
+        {route.view === 'automations'    && <AutomationsView navigate={navigate} />}
+        {route.view === 'people'         && <PeopleView />}
+        {route.view === 'variance'       && <VarianceView projectFilter={route.projectFilter} />}
+        {route.view === 'library'        && <LibraryView navigate={navigate} />}
         {route.view === 'work-performed' && <WorkPerformedView projectFilter={route.projectFilter} />}
         {route.view === 'timesheet'      && <TimesheetView projectFilter={route.projectFilter} />}
         {route.view === 'trash'          && <TrashView />}
-        {route.view === 'how-to-use'     && <HowToUseView />}
+        {route.view === 'how-to-use'     && <HowToUseView navigate={navigate} />}
         {/* A hash that names no page. Without this the content area is simply
             blank, which reads as a crash rather than as a bad link. */}
         {!isKnownView(route.view) && <NotFoundView view={route.view} navigate={navigate} />}

@@ -102,9 +102,25 @@ test('"Mark all as read" is offered only when there is something to clear', () =
   assert.match(panel, /\{unread > 0 && \(\s*\n\s*<button[^>]*onClick=\{onMarkAllRead\}/);
 });
 
-test('the bell is in the topbar, next to the other one', () => {
+// The bell came off the top bar with everything else on it. What must NOT
+// happen is the notices going with it: `mentions.js` would still be writing
+// them and nobody could read one, which is the "action with nowhere to land"
+// this codebase keeps tripping over. They are a page in the Messages hub now.
+test('the notices still have a page to land on', async () => {
+  const { hubForView, VIEW_REGISTRY } = await import('../../src/services/views.js');
+  assert.ok(VIEW_REGISTRY.some((v) => v.id === 'inbox'), 'inbox is a real page');
+  assert.equal(hubForView('inbox')?.id, 'messages');
+
+  const view = read('src', 'components', 'InboxView.jsx');
+  assert.match(view, /useInbox\(\)/, 'the same one listener, not a second');
+  assert.match(view, /<InboxPanel/, 'the same list the bell used');
+  assert.match(view, /goToTask\(task, navigate\)/, 'a notice still opens its task');
+
+  const app = read('src', 'App.jsx');
+  assert.match(app, /route\.view === 'inbox'/);
+
   const shell = read('src', 'components', 'AppShell.jsx');
-  assert.match(shell, /<InboxBell navigate=\{navigate\} \/>/);
+  assert.ok(!shell.includes('<InboxBell'), 'the topbar was cleared on purpose');
 });
 
 test('times read as a person would say them', () => {

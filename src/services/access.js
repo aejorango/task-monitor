@@ -58,6 +58,48 @@ const FRIENDLY_BY_CODE = {
 };
 
 /**
+ * "You do not have permission" is the wrong thing to say to an admin.
+ *
+ * The page and the server test the SAME fact — is `acl[uid]` owner or admin —
+ * so a control the page offered should never be refused. When it is, the two
+ * have come apart, and by far the commonest reason is that `firestore.rules`
+ * in the repo is ahead of what is deployed: the file is not the state, and
+ * this project has had the pair drift completely before (BUG-033, where none
+ * of the twelve indexes in `firestore.indexes.json` had ever been deployed).
+ *
+ * Telling somebody who IS the admin to "ask an admin" sends them looking for a
+ * person who does not exist. This says the true thing instead, and hands the
+ * operator — and only the operator — the one command that fixes it.
+ *
+ * @param {unknown} err              the caught value
+ * @param {boolean} believedAllowed  did the UI think this person could do it?
+ * @returns {{ message: string, operatorHint: string|null }}
+ */
+export function deniedDespiteRole(err, { believedAllowed = false } = {}) {
+  const denied = isPermissionDenied(err);
+  if (!denied || !believedAllowed) {
+    return { message: friendlyError(err), operatorHint: null };
+  }
+  return {
+    message:
+      'The server refused that, even though this page shows you as an admin. '
+      + 'Your access has probably not finished syncing — reload the page, and if '
+      + 'it happens again tell whoever looks after this workspace.',
+    operatorHint: 'Rules/UI disagree on acl[uid]. The deployed firestore.rules '
+      + 'are most likely behind the repo — run `npm run deploy:rules` and re-check.',
+  };
+}
+
+/** Is this a Firestore permission-denied, however it was spelled? */
+export function isPermissionDenied(err) {
+  if (!err) return false;
+  const code = typeof err === 'object' ? err.code : null;
+  if (code === 'permission-denied') return true;
+  const raw = typeof err === 'string' ? err : (err.message || '');
+  return raw.toLowerCase().replace(/_/g, '-').includes('permission-denied');
+}
+
+/**
  * Turn any thrown value into one sentence a non-technical person can act on.
  * @param {unknown} err       the caught value
  * @param {string}  fallback  what to say when we cannot recognise it

@@ -21,8 +21,12 @@ export function approvalCopy(profile) {
     return {
       state: 'rejected',
       title: 'Access declined',
+      // "the people below" used to point at a list of superadmin addresses on
+      // the card. That list was removed, so the sentence had to stop pointing
+      // at it — a reference to something that is no longer on screen reads as a
+      // rendering bug.
       message: 'An administrator declined this request. If you think that is a '
-             + 'mistake, ask one of the people below to look again.',
+             + 'mistake, ask an administrator to look again.',
       // No point telling someone to keep the tab open: nothing will change on
       // its own from here.
       waitNote: null,

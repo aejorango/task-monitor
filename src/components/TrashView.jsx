@@ -12,6 +12,7 @@ import {
 import { friendlyError } from '../services/access';
 import { iconFor } from '../services/icons';
 import Icon from './Icon';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 const KINDS = [
   { kind: 'task',    collection: 'tasks',    label: 'Tasks',    icon: 'board' },
@@ -81,20 +82,12 @@ export default function TrashView() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Trash</h1>
-          <p className="page-subtitle">
-            Deleted items are kept here. Nothing is lost until you say so —
-            restore anything, or remove it for good.
-          </p>
-        </div>
-        {note && (
-          <div className="page-actions">
-            <span className={`small ${note.ok ? 'ok-text' : 'link-danger'}`} role="status">{note.text}</span>
-          </div>
-        )}
-      </div>
+      <PageSubtitle>Nothing is lost until you say so — restore anything, or remove it for good</PageSubtitle>
+      {note && (
+        <PageActions>
+          <span className={`small ${note.ok ? 'ok-text' : 'link-danger'}`} role="status">{note.text}</span>
+        </PageActions>
+      )}
 
       {total === 0 ? (
         <div className="empty-state">

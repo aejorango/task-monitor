@@ -9,7 +9,7 @@ import { allFields, formatValue } from './customFields';
 import { heading, paragraph, sheetFromRows, table } from './exporters';
 import { estimateOf, formatVariance, variance } from './effort';
 
-const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
+const STATUS_LABEL = { todo: 'To do', doing: 'In progress', review: 'In review', done: 'Done' };
 const PRIORITY_LABEL = { low: 'Low', medium: 'Medium', high: 'High' };
 
 /** Columns, in the order a person reads them. */

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CHILD_OF, MAX_DEPTH, asTree, canParent, childrenOf, descendantsOf,
+  CHILD_OF, MAX_DEPTH, canParent, childrenOf, descendantsOf,
   explainRollup, parentIdOf, rollup,
 } from './taskTree.js';
 
@@ -186,32 +186,4 @@ test('an ordinary parenting is allowed', () => {
 
 test('nothing to link is refused in plain language', () => {
   assert.match(canParent(null, task('b'), []).reason, /Nothing to link/);
-});
-
-/* ── the table’s indent ────────────────────────────────────────────────── */
-
-test('a tree indents children under their parents', () => {
-  const rows = asTree([task('a'), childOf('b', 'a'), childOf('c', 'b'), task('d')]);
-  assert.deepEqual(rows.map((r) => [r.task.id, r.depth]),
-    [['a', 0], ['b', 1], ['c', 2], ['d', 0]]);
-});
-
-// A filtered view should hide nothing it was asked to show.
-test('a child whose parent is filtered out is shown at the top, not dropped', () => {
-  const rows = asTree([childOf('b', 'a')]);
-  assert.deepEqual(rows.map((r) => [r.task.id, r.depth]), [['b', 0]]);
-});
-
-test('every task appears exactly once, cycles included', () => {
-  const a = childOf('a', 'b');
-  const b = childOf('b', 'a');
-  const rows = asTree([a, b, task('c')]);
-  assert.equal(rows.length, 3);
-  assert.equal(new Set(rows.map((r) => r.task.id)).size, 3,
-    'a row shown twice is worse than one shown at the wrong indent');
-});
-
-test('an empty list is an empty tree', () => {
-  assert.deepEqual(asTree([]), []);
-  assert.deepEqual(asTree(), []);
 });

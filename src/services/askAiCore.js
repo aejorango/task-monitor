@@ -894,7 +894,7 @@ function taskAnswer(d, taskId) {
   };
 }
 
-const STATUS_LABEL = { todo: 'To do', doing: 'Doing', done: 'Done' };
+const STATUS_LABEL = { todo: 'To do', doing: 'Doing', review: 'In review', done: 'Done' };
 
 function taskRow(t) {
   return {

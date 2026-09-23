@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { createSharedSubscription } from '../services/sharedSubscription';
+import { nextActiveWorkspaceId } from '../services/activeWorkspace';
 import {
   onAuthChange,
   subscribeToWorkspaces,
@@ -131,14 +132,12 @@ export function useWorkspaces() {
       setWorkspaces(data);
       setLoading(false);
 
-      // Resolve initial active workspace:
-      // 1. If current _activeWorkspaceId still valid → keep it
-      // 2. Otherwise pick the first workspace
-      const stillValid = data.some((w) => w.id === _activeWorkspaceId);
-      if (!stillValid) {
-        const next = data[0]?.id || null;
-        setActiveWorkspaceId(next);
-      }
+      // Resolve the active workspace. The rule is `nextActiveWorkspaceId` and
+      // nowhere else: an EMPTY snapshot must not clear it, because an empty
+      // snapshot is also what `listenerError` hands back for any failure —
+      // and clearing took the Activity log and Work performed pages down with
+      // it, silently, all the way into localStorage. See the module header.
+      setActiveWorkspaceId(nextActiveWorkspaceId(data, _activeWorkspaceId));
     });
   }, [authReady, userId]);
 

@@ -1,9 +1,43 @@
-// src/components/HowToUseView.jsx — guided walkthrough of the mental model:
-// what Workspaces, Projects, Phases, Tasks, Subtasks, Activities mean, when
-// to use each, plus concrete real-world scenarios with the right call.
+// src/components/HowToUseView.jsx — Dashboard → How to use (T-0156).
+//
+// The Dashboard Explorer's "How to use" tab, ported panel for panel: a navy
+// one-line hero, the data model drawn as NESTING, the loop as four numbered
+// chips, and the status language beside the shortcuts. Every metric in it is
+// the mockup's own, copied from the style objects in its `<script
+// type="text/x-dc">` block rather than measured off a screenshot;
+// `tests/ui/howToUse.test.mjs` fails the build if one drifts.
+//
+// Two rules the port is built on, both from PORTING-A-MOCKUP.md:
+//
+//   · NEVER INVENT. The mockup's Shortcuts panel lists six keys — N for a new
+//     item, L to log, "G then B" to go to the board. This app has none of
+//     them. Printing a shortcut that does nothing is worse than printing no
+//     panel: somebody presses it, nothing happens, and they stop trusting the
+//     page. `SHORTCUTS` below is the app's REAL key handling, each row
+//     carrying the file it is implemented in. Same rule for the data model —
+//     it draws the reader's OWN most recent entry, and says so; only when
+//     there is nothing to draw does it fall back to a labelled example.
+//
+//   · THE APP WINS ON COVERAGE. The mockup draws four panels. This page also
+//     carries the decision guide, the scenarios, the concepts, the
+//     anti-patterns and the glossary — which the mockup has no room for and
+//     which are the reason anybody opens it twice. They were re-homed into
+//     the mockup's own card idiom below the four panels, not deleted.
+//
+// The status vocabulary is `STATUS_TEXT` + `displayStatus` from
+// services/boardScope.js — the same function the Kanban card, the WBS and the
+// Dashboard ask. A guide that named the statuses itself would be a fifth
+// surface free to drift from the four that matter.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import NavIcon from './Icon';
+import Avatar from './Avatar';
+import { PageSubtitle } from './PageHeader';
+import { startTutorial } from '../services/tutorials';
+import { fmtDay } from './ActivityTimeline';
+import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
+import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { STATUS_TEXT } from '../services/boardScope';
 
 // ─── Icon set ────────────────────────────────────────────────
 // Inline stroke SVGs (Lucide-style) so the guide matches the app's
@@ -146,252 +180,496 @@ function Icon({ name, size = 18, className }) {
   );
 }
 
-// 6-color rotation reused for view/concept icon chips — mirrors the imported
+// 6-color rotation reused for the page and concept icon chips — the imported
 // mockup's palette, built entirely from existing theme tokens so dark mode
 // stays automatic.
 const CHIP_PALETTE = ['htu-pal-0', 'htu-pal-1', 'htu-pal-2', 'htu-pal-3', 'htu-pal-4', 'htu-pal-5'];
 
-const SECTIONS = [
-  { id: 'overview',    label: 'Overview' },
-  { id: 'views',       label: 'The Views (what each page does)' },
-  { id: 'hierarchy',   label: 'The Hierarchy' },
-  { id: 'concepts',    label: 'Concepts (when to use what)' },
-  { id: 'decision',    label: 'Decision Guide' },
-  { id: 'scenarios',   label: 'Real-World Scenarios' },
-  { id: 'workflows',   label: 'Workflows' },
-  { id: 'principles',  label: 'Principles & Best Practices' },
-  { id: 'antipatterns',label: 'Anti-Patterns to Avoid' },
-  { id: 'glossary',    label: 'Glossary' },
+
+// ─── The loop ────────────────────────────────────────────────
+// The mockup's four numbered chips. `where` is a REAL destination, and the
+// chip navigates there — the mockup prints the path as decoration, but a path
+// printed next to a thing you can click is a thing that should click.
+
+const FLOWS = [
+  { n: '1', title: 'Log',     where: 'Dashboard → Log time', view: 'dashboard' },
+  { n: '2', title: 'Track',   where: 'Board → Kanban',       view: 'board' },
+  { n: '3', title: 'Measure', where: 'Reports → Analytics',    view: 'analytics' },
+  { n: '4', title: 'Report',  where: 'Reports → Summary',    view: 'review' },
 ];
 
-export default function HowToUseView() {
-  const [activeId, setActiveId] = useState('overview');
+// ─── Status language ─────────────────────────────────────────
+// Four of these five ARE the board's columns, and their names come from
+// `STATUS_TEXT` so this page cannot drift from the card, the WBS and the
+// Dashboard. The fifth is not a column at all: "Stuck" is what
+// `displayStatus` PRINTS over whatever column a task is sitting in, which is
+// exactly the kind of thing a guide has to say out loud.
 
-  const scrollTo = (id) => {
-    setActiveId(id);
-    const el = document.getElementById(`htu-${id}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const STATUS_GUIDE = [
+  { key: 'todo',   label: STATUS_TEXT.todo,   when: 'Nobody has started it yet.' },
+  { key: 'doing',  label: STATUS_TEXT.doing,  when: 'Someone has picked it up and it is moving.' },
+  { key: 'review', label: STATUS_TEXT.review, when: 'Done by its owner, waiting on a second pair of eyes.' },
+  { key: 'stuck',  label: 'Stuck',            when: 'A bottleneck somebody logged, or open and past its plan date.' },
+  { key: 'done',   label: STATUS_TEXT.done,   when: 'Shipped. The hours stay in the report.' },
+];
+
+// ─── Shortcuts ───────────────────────────────────────────────
+// THE APP'S OWN KEYS, not the mockup's. The Explorer lists N, L, "G then B",
+// "G then R" and "?"; none of them exist here, and a shortcut card that lies
+// is the fastest way to lose a reader. Each row names the file that handles
+// the key, so the next person to change one knows this panel has to move too.
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+
+const SHORTCUTS = [
+  { k: IS_MAC ? '⌘K' : 'Ctrl K', a: 'Command palette' },   // AppShell.jsx
+  { k: 'Esc',  a: 'Close it again' },                       // AppShell / useModalDialog
+  { k: '↑ ↓',  a: 'Move through results' },                 // AppShell.jsx
+  { k: '↵',    a: 'Open the highlighted one' },             // AppShell.jsx
+  { k: 'D',    a: 'Due alert: done' },                // DueTaskAlertModal.jsx
+  { k: 'S',    a: 'Due alert: skip' },           // DueTaskAlertModal.jsx
+];
+
+/**
+ * The entry the Data-model panel draws.
+ *
+ * It is the reader's OWN most recent activity, with the task it belongs to
+ * and that task's project — because "workspace › project › item › activity"
+ * is a claim about their data, and the fastest way to believe a claim is to
+ * see your own row in it. `real` is false only when there is nothing yet to
+ * draw, and the panel says so in its head rather than passing a fabrication
+ * off as a reading.
+ */
+function modelExample({ tasks, activities, projects, workspace, memberProfiles }) {
+  const liveTasks = tasks.filter((t) => !t.deleted && !t.archived);
+  const wsName = workspace?.name || 'Your workspace';
+  const ownerOf = (t) =>
+    t?.requestedBy?.trim()
+    || memberProfiles[t?.userId]?.displayName
+    || memberProfiles[t?.userId]?.email
+    || null;
+
+  const byNewest = [...activities]
+    .filter((a) => !a.deleted && a.taskId)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+  for (const a of byNewest) {
+    const task = liveTasks.find((t) => t.id === a.taskId);
+    if (!task) continue;
+    const project = projects.find((p) => p.id === task.projectId) || null;
+    return {
+      real: true,
+      note: 'your most recent entry',
+      workspace: wsName,
+      project: project?.name || 'No project',
+      phases: project?.phases?.length ?? null,
+      task: task.title,
+      done: task.status === 'done',
+      owner: ownerOf(task),
+      ownerId: task.assignedTo?.[0] || task.userId,
+      hours: Number(a.hoursSpent) || 0,
+      comment: a.comment || 'no note',
+      date: a.date || null,
+    };
+  }
+
+  // Nothing logged yet. Draw the shape with a task if there is one, and say
+  // plainly that the activity row is what one WOULD look like.
+  const task = liveTasks[0] || null;
+  const project = task ? projects.find((p) => p.id === task.projectId) || null : projects[0] || null;
+  return {
+    real: false,
+    note: task ? 'nothing logged yet — the activity row is an example' : 'an example — you have not created anything yet',
+    workspace: wsName,
+    project: project?.name || 'SBLAF onboarding',
+    phases: project?.phases?.length ?? null,
+    task: task?.title || 'Rotate partner API keys',
+    done: task ? task.status === 'done' : false,
+    owner: task ? ownerOf(task) : null,
+    ownerId: task?.assignedTo?.[0] || task?.userId || 'example',
+    hours: 2,
+    comment: 'rotated sandbox keys',
+    date: null,
   };
+}
+
+export default function HowToUseView({ navigate }) {
+  const { tasks } = useTasks();
+  const { projects } = useProjects();
+  const { activities } = useAllActivities();
+  const { workspaces } = useWorkspaces();
+  const activeWs = useActiveWorkspaceId();
+  const workspace = workspaces.find((w) => w.id === activeWs) || null;
+
+  // `workspace?.memberProfiles || {}` OUTSIDE the memo would be a fresh object
+  // on every render while no workspace is loaded, which makes the memo run on
+  // every render — the same trap `useModalDialog` was bitten by twice.
+  const model = useMemo(
+    () => modelExample({
+      tasks, activities, projects, workspace,
+      memberProfiles: workspace?.memberProfiles || {},
+    }),
+    [tasks, activities, projects, workspace],
+  );
+
+  const go = (view) => { if (navigate) navigate({ view }); };
 
   return (
     <>
-      <div className="htu-hero">
-        <span className="htu-hero-eyebrow">The Playbook</span>
-        <h1 className="htu-hero-title">How to Use Task Monitor</h1>
-        <p className="htu-hero-subtitle">
-          The mental model — when something is a Workspace vs. Project vs. Task vs. Subtask vs. Activity,
-          with real examples and decision rules. Read it once; refer back when in doubt.
-        </p>
-      </div>
+      <PageSubtitle>The mental model in four panels, then the long answers underneath.</PageSubtitle>
 
-      <div className="htu-layout">
-        <aside className="htu-toc">
-          <div className="htu-toc-label">On this page</div>
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              className={`htu-toc-link ${activeId === s.id ? 'active' : ''}`}
-              onClick={() => scrollTo(s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </aside>
-
-        <div className="htu-content">
-          <Overview />
-          <Views />
-          <Hierarchy />
-          <Concepts />
-          <Decision />
-          <Scenarios />
-          <Workflows />
-          <Principles />
-          <AntiPatterns />
-          <Glossary />
+      <div className="htu-stack">
+        {/* ── one-line hero ─────────────────────────────────── */}
+        <div className="htu-hero">
+          <span className="htu-hero-glow" aria-hidden="true" />
+          <div className="htu-hero-text">
+            <div className="htu-hero-eyebrow">How to use</div>
+            <div className="htu-hero-line">Log the work. Everything else is computed.</div>
+          </div>
+          <button
+            type="button"
+            className="htu-hero-cta"
+            onClick={() => startTutorial()}
+          >
+            Take the tutorial →
+          </button>
         </div>
+
+        {/* ── data model, as nesting ────────────────────────── */}
+        <div className="bx-panel htu-card">
+          <div className="htu-lbl">
+            Data model
+            <span className="htu-lbl-note">{model.note}</span>
+          </div>
+          <div className="htu-nest-ws">
+            <div className="htu-nest-head">
+              <span className="htu-nest-badge ws">Workspace</span>
+              <span className="htu-nest-name ws">{model.workspace}</span>
+            </div>
+
+            <div className="htu-nest-proj">
+              <div className="htu-nest-head">
+                <span className="htu-nest-badge proj">Project</span>
+                <span className="htu-nest-name proj">{model.project}</span>
+                {model.phases !== null && (
+                  <span className="htu-nest-phases">
+                    {model.phases} {model.phases === 1 ? 'phase' : 'phases'}
+                  </span>
+                )}
+              </div>
+
+              <div className="htu-nest-item">
+                <div className="htu-nest-irow">
+                  <span className={`htu-nest-tick${model.done ? '' : ' off'}`} aria-hidden="true">
+                    {model.done ? '✓' : ''}
+                  </span>
+                  <span className="htu-nest-badge item">Item</span>
+                  <span className="htu-nest-title">{model.task}</span>
+                  {model.owner
+                    ? <Avatar name={model.owner} id={model.ownerId} size={20} />
+                    : <span className="htu-nest-noone" title="Nobody is assigned" aria-hidden="true" />}
+                </div>
+                <div className="htu-nest-arow">
+                  <span className="htu-nest-badge act">Activity</span>
+                  <span className="htu-nest-hours">{model.hours.toFixed(1)}h</span>
+                  <span className="htu-nest-comment">{model.comment}</span>
+                  <span className="htu-nest-date">{model.date ? fmtDay(model.date) : '—'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── the loop, terse ───────────────────────────────── */}
+        <div className="bx-panel htu-card">
+          <div className="htu-lbl">The loop</div>
+          <div className="htu-loop">
+            {FLOWS.map((f, i) => (
+              <span key={f.n} className="htu-loop-cell">
+                <button type="button" className="htu-loop-chip" onClick={() => go(f.view)}>
+                  <span className="htu-loop-num">{f.n}</span>
+                  <span className="htu-loop-text">
+                    <span className="htu-loop-title">{f.title}</span>
+                    <span className="htu-loop-where">{f.where}</span>
+                  </span>
+                </button>
+                {i < FLOWS.length - 1 && <span className="htu-loop-arrow" aria-hidden="true">→</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* ── status language + shortcuts ───────────────────── */}
+        <div className="htu-pair">
+          <div className="bx-panel htu-card">
+            <div className="htu-lbl">Status language</div>
+            <div className="htu-statuses">
+              {STATUS_GUIDE.map((s) => (
+                <div key={s.key} className="htu-status-row">
+                  <span className={`bx-st st-${s.key} htu-status-pill`}>{s.label}</span>
+                  <span className="htu-status-when">{s.when}</span>
+                </div>
+              ))}
+            </div>
+            <div className="htu-foot">
+              Four of those are the board's columns. <strong>Stuck</strong> is not — it is
+              printed over whatever column the task is in, so a card that says "Working on it"
+              twelve days late cannot get away with it.
+            </div>
+          </div>
+
+          <div className="bx-panel htu-card">
+            <div className="htu-lbl">Shortcuts</div>
+            <div className="htu-keys">
+              {SHORTCUTS.map((k) => (
+                <div key={k.k} className="htu-key-row">
+                  <span className="htu-keycap">{k.k}</span>
+                  <span className="htu-key-act">{k.a}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <Reference />
       </div>
     </>
   );
 }
 
-// ─── Overview ────────────────────────────────────────────────
-
-function Overview() {
+/**
+ * Everything the mockup had no room for.
+ *
+ * The four panels above are the whole of the Explorer's How-to-use tab. They
+ * answer "what is this shaped like" in ten seconds, which is what somebody
+ * wants the first time. They do not answer "is this a project or a task?",
+ * which is what somebody wants the fifth time — so the long-form guide stayed,
+ * re-drawn in the same card idiom and folded shut, rather than being deleted
+ * to match a screenshot.
+ */
+function Reference() {
   return (
-    <section id="htu-overview" className="review-section htu-section">
-      <h2 className="review-h2">Why this guide exists</h2>
-      <p className="htu-lede">
-        Task Monitor gives you a lot of containers — Workspaces, Projects, Phases, Tasks, Subtasks, Activities,
-        Tags, Templates, Dependencies. The power isn't the containers themselves; it's <strong>using each one
-        for what it was built for</strong>. This page is the playbook: read it once, refer back when in doubt.
-      </p>
-
-      <div className="htu-overview-grid">
-        <div className="htu-callout htu-callout-info">
-          <div className="htu-callout-title"><span className="htu-callout-mark">◆</span>The one-sentence summary</div>
-          <p className="htu-callout-body">
-            <strong>Workspaces</strong> separate who can see what. <strong>Projects</strong> are real-world
-            initiatives with an outcome. <strong>Phases</strong> are stages a project moves through.
-            <strong> Tasks</strong> are the units of work that get done. <strong>Subtasks</strong> are a
-            checklist inside a task. <strong>Activities</strong> are time-stamped records of work performed.
-          </p>
+    <>
+      <Fold label="Decide what goes where" note="stop at the first yes">
+        <div className="htu-steps">
+          {DECISION_TREE.map((step, i) => (
+            <div key={i} className="htu-step">
+              <span className="htu-step-n">{i + 1}</span>
+              <div className="htu-step-body">
+                <div className="htu-step-q">{step.q}</div>
+                <div className="htu-step-a yes"><strong>Yes →</strong> {step.yes}</div>
+                {step.no && <div className="htu-step-a no"><strong>No →</strong> {step.no}</div>}
+              </div>
+            </div>
+          ))}
         </div>
+      </Fold>
 
-        <div className="htu-callout htu-callout-tip">
-          <div className="htu-callout-title"><span className="htu-callout-mark">✦</span>Pro tip — the "shape" test</div>
-          <p className="htu-callout-body">
-            Ask: <em>"What shape is this thing?"</em>
-          </p>
-          <ul className="htu-list">
-            <li><strong>A boundary</strong> (who's in, who's out) → Workspace</li>
-            <li><strong>An outcome</strong> (a thing being delivered) → Project</li>
-            <li><strong>A stage</strong> (a milestone within an outcome) → Phase</li>
-            <li><strong>A unit of work</strong> (someone does it, then it's done) → Task</li>
-            <li><strong>A step inside a unit</strong> (a checkbox) → Subtask</li>
-            <li><strong>A record of time spent</strong> (yesterday I…) → Activity</li>
-          </ul>
+      <Fold label="The containers" note={`${CONCEPTS.length} of them, and when each one is the right one`}>
+        <div className="htu-concepts">
+          {CONCEPTS.map((c, i) => (
+            <ConceptCard key={c.name} concept={c} paletteClass={CHIP_PALETTE[i % CHIP_PALETTE.length]} />
+          ))}
         </div>
-      </div>
-    </section>
+      </Fold>
+
+      <Fold label="Real situations" note="the call, and how it would be set up">
+        <div className="htu-cases">
+          {SCENARIOS.map((s, i) => (
+            <div key={i} className="htu-case">
+              <div className="htu-case-head">
+                <span className="htu-case-title">“{s.title}”</span>
+                <span className="htu-case-verdict">{s.verdict}</span>
+              </div>
+              <div className="htu-case-why"><strong>Why:</strong> {s.reason}</div>
+              <ul className="htu-list">
+                {s.structure.map((line, j) => <li key={j}>{line}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Fold>
+
+      <Fold label="The rhythms" note="what to do when">
+        <div className="htu-flows">
+          {WORKFLOWS.map((w, i) => (
+            <div key={i} className="htu-flow">
+              <div className="htu-flow-title">{w.title}</div>
+              <ol className="htu-ol">
+                {w.steps.map((s, j) => <li key={j}>{s}</li>)}
+              </ol>
+            </div>
+          ))}
+        </div>
+      </Fold>
+
+      <Fold label="Every page, in one line each" note={`${VIEWS_GUIDE.length} pages`}>
+        <div className="htu-pages">
+          {VIEWS_GUIDE.map((v, i) => (
+            <div key={v.name} className="htu-page">
+              <span className={`htu-page-icon ${CHIP_PALETTE[i % CHIP_PALETTE.length]}`}>
+                <NavIcon name={v.icon} size={16} />
+              </span>
+              <span className="htu-page-text">
+                <span className="htu-page-name">{v.name}</span>
+                <span className="htu-page-desc">{v.text}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </Fold>
+
+      <Fold label="Principles" note="the habits that make the rest work">
+        <div className="htu-rules">
+          {PRINCIPLES.map((p, i) => (
+            <div key={i} className="htu-rule">
+              <div className="htu-rule-title">{p.title}</div>
+              <div className="htu-rule-body">{p.body}</div>
+            </div>
+          ))}
+        </div>
+      </Fold>
+
+      <Fold label="What to avoid" note={`${ANTIPATTERNS.length} ways this goes wrong`}>
+        <div className="htu-traps">
+          {ANTIPATTERNS.map((a, i) => (
+            <div key={i} className="htu-trap">
+              <div className="htu-trap-bad">
+                <Icon name="xCircle" size={15} className="htu-trap-icon bad" /> <strong>{a.bad}</strong>
+              </div>
+              <div className="htu-trap-why"><strong>Why it bites:</strong> {a.why}</div>
+              <div className="htu-trap-fix">
+                <Icon name="checkCircle" size={15} className="htu-trap-icon good" /> <strong>Instead:</strong> {a.instead}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Fold>
+
+      <Fold label="Glossary" note={`${GLOSSARY.length} words`}>
+        <table className="htu-gloss">
+          <tbody>
+            {GLOSSARY.map(([term, def]) => (
+              <tr key={term}>
+                <td className="htu-gloss-term">{term}</td>
+                <td className="htu-gloss-def">{def}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Fold>
+    </>
   );
 }
 
-// ─── The Views ───────────────────────────────────────────────
-
-const VIEWS_GUIDE = [
-  { icon: 'dashboard', name: 'Dashboard', text: 'Your at-a-glance home: today\'s focus, what\'s overdue, what\'s in progress, and quick stats per project.' },
-  { icon: 'projects',  name: 'Projects',  text: 'Create and manage projects + their phases. Save a project as a template, or start a New project from a saved template. Share a project via invite link, and open its WBS, Log, or AI helpers.' },
-  { icon: 'board',     name: 'Kanban',    text: 'Drag tasks across Todo → Doing → Done. Filter by tag, group by phase, start a timer, or quick-add from a template. Nested under "Board" in the sidebar alongside Calendar, Gantt chart, and WBS.' },
-  { icon: 'calendar',  name: 'Calendar',  text: 'Month grid by plan end date. Drag a task to reschedule, filter by status (All / To do / Ongoing / Done), and add a new task.' },
-  { icon: 'gantt',     name: 'Gantt',     text: 'Timeline of plan vs. actual. Drag bars to resize/move, see dependency arrows, and filter by a date period.' },
-  { icon: 'wbs',       name: 'WBS',       text: 'Work-breakdown structure: Project → Phase → Task → Subtask with duration, dates, resource, and % complete, plus a Gantt-style timeline. Click any row for its activity log; filter by status or date.' },
-  { icon: 'goals',     name: 'Goals',     text: 'Strategic-plan one-pagers — initiative, KPI, change agenda, and deliverables linked to projects for live progress. Pick your own banner + card colors.' },
-  { icon: 'messages',  name: 'Messages',  text: 'Direct and group chat with workspace members — real-time, closed to the workspace. Add or remove people from a group.' },
-  { icon: 'minutes',   name: 'Minutes',   text: 'Meeting minutes — attendees, notes, decisions, action items, and a boss-focused "Priority" panel. Filter by project from the top bar.' },
-  { icon: 'list',      name: 'Activity Log', text: 'A flat, sortable table of every logged activity, with bulk actions and CSV export.' },
-  { icon: 'clock',     name: 'Work Performed', text: 'Swimlane of activities by project over time — see who did what, when, and for how long.' },
-  { icon: 'review',    name: 'Review',    text: 'KPIs, hours-by-project, the daily-hours strip, and overdue / completed / bottleneck lists.' },
-  { icon: 'analytics', name: 'Analytics', text: 'Charts and trends — including the "Work performed" hero bar chart (hours per day, stacked by project, with totals) over 7 / 15 / 30 days.' },
-  { icon: 'settings',  name: 'Settings',  text: 'Per-device prefs (theme, default project, week start), workspaces + members, account, notifications, and data export. Admins also approve users here.' },
-];
-
-function Views() {
+/**
+ * One reference panel: the mockup's card and uppercase label, with the body
+ * folded away.
+ *
+ * `<details>` rather than a `useState` toggle, so the browser gives it the
+ * disclosure semantics, Enter and Space both work, and ⌘F finds text inside a
+ * closed one in the browsers that support it. Closed by default: eight open
+ * panels is the wall of text the four panels above exist to replace.
+ */
+function Fold({ label, note, children }) {
   return (
-    <section id="htu-views" className="review-section htu-section">
-      <h2 className="review-h2">The Views — what each page in the sidebar does</h2>
-      <p className="muted small" style={{ marginTop: 0, marginBottom: 16 }}>
-        The same projects, tasks and activities, seen through different lenses. Two cross-cutting helpers live in the top bar:
-        the <strong>project picker</strong> (scopes most views to one project, or <em>All projects</em>) and the
-        <strong> ✨ AI button</strong> ("Stuck? Don't know what to do next?" — it suggests your top 3 next actions and can draft a prompt for each).
-      </p>
-      <div className="htu-views-grid">
-        {VIEWS_GUIDE.map((v, i) => (
-          <div key={v.name} className="htu-view-card">
-            <span className={`htu-view-icon ${CHIP_PALETTE[i % CHIP_PALETTE.length]}`}><NavIcon name={v.icon} size={18} /></span>
-            <div>
-              <div className="htu-view-name">{v.name}</div>
-              <div className="htu-view-text">{v.text}</div>
+    <details className="bx-panel htu-card htu-fold">
+      <summary className="htu-lbl htu-fold-head">
+        {label}
+        {note && <span className="htu-lbl-note">{note}</span>}
+        <span className="htu-fold-mark" aria-hidden="true" />
+      </summary>
+      <div className="htu-fold-body">{children}</div>
+    </details>
+  );
+}
+
+function ConceptCard({ concept, paletteClass }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`htu-concept${open ? ' open' : ''}`}>
+      <button type="button" className="htu-concept-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className={`htu-concept-icon ${paletteClass}`}><Icon name={concept.icon} size={16} /></span>
+        <span className="htu-concept-name">{concept.name}</span>
+        <span className="htu-concept-toggle" aria-hidden="true">{open ? '▾' : '▸'}</span>
+      </button>
+      <div className="htu-concept-one">{concept.oneLine}</div>
+
+      {open && (
+        <div className="htu-concept-body">
+          <div className="htu-twocol">
+            <div className="htu-pane do">
+              <div className="htu-pane-lbl do"><Icon name="check" size={13} /> Use it when…</div>
+              <ul className="htu-list">
+                {concept.useWhen.map((u, i) => <li key={i}>{u}</li>)}
+              </ul>
+            </div>
+            <div className="htu-pane dont">
+              <div className="htu-pane-lbl dont"><Icon name="ban" size={13} /> Don't use it when…</div>
+              <ul className="htu-list">
+                {concept.dontUseWhen.map((u, i) => <li key={i}>{u}</li>)}
+              </ul>
             </div>
           </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
-// ─── Hierarchy ───────────────────────────────────────────────
+          <div className="htu-egs">
+            <div className="htu-pane-lbl">Examples</div>
+            {concept.examples.map((ex, i) => (
+              <div key={i} className={`htu-eg ${ex.good ? 'good' : 'bad'}`}>
+                <span className="htu-eg-mark" aria-hidden="true">{ex.good ? '✓' : '✗'}</span>
+                <span dangerouslySetInnerHTML={{ __html: ex.good || ex.bad }} />
+              </div>
+            ))}
+          </div>
 
-function Hierarchy() {
-  return (
-    <section id="htu-hierarchy" className="review-section htu-section">
-      <h2 className="review-h2">The Hierarchy at a glance</h2>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Each level contains the next. Things only flow downward — a Subtask never contains a Project.
-      </p>
-
-      <div className="htu-hierarchy">
-        <HierarchyRow
-          level={1}
-          name="Workspace"
-          color="var(--c-purple)"
-          tagline="Who can see this? (the boundary)"
-          example="BRIDGED · AIM · Personal"
-        />
-        <HierarchyArrow />
-        <HierarchyRow
-          level={2}
-          name="Project"
-          color="var(--c-blue-deep)"
-          tagline="What outcome are we delivering?"
-          example="Q3 Member Onboarding Revamp"
-        />
-        <HierarchyArrow />
-        <HierarchyRow
-          level={3}
-          name="Phase"
-          color="var(--c-emerald)"
-          tagline="What stage of the project?"
-          example="Discovery · Build · Launch · Wrap-up"
-        />
-        <HierarchyArrow />
-        <HierarchyRow
-          level={4}
-          name="Task"
-          color="var(--c-accent)"
-          tagline="What unit of work needs to happen?"
-          example="Draft welcome-email copy"
-        />
-        <HierarchyArrow />
-        <HierarchyRow
-          level={5}
-          name="Subtask"
-          color="var(--c-accent-hover)"
-          tagline="What checkbox is inside this task?"
-          example="☐ Write subject line · ☐ Write body · ☐ Get review"
-        />
-        <HierarchyArrow />
-        <HierarchyRow
-          level={6}
-          name="Activity"
-          color="var(--c-danger)"
-          tagline="What time did I actually spend, and on what?"
-          example="May 27 · 1.5h · Drafted v1 of welcome email"
-        />
-      </div>
-
-      <div className="htu-callout htu-callout-info" style={{ marginTop: 18 }}>
-        <div className="htu-callout-title">Cross-cutting helpers (live next to the hierarchy)</div>
-        <ul className="htu-list">
-          <li><strong>Tags</strong> — labels that cut across projects (e.g. <code>#blocker</code>, <code>#deep-work</code>, <code>#client-x</code>).</li>
-          <li><strong>Dependencies</strong> — a task that can't start until another is done.</li>
-          <li><strong>Recurring tasks</strong> — a task that respawns itself on a schedule.</li>
-          <li><strong>Templates</strong> — reusable task or project blueprints for repeated work.</li>
-          <li><strong>Saved views</strong> — a filter combo pinned to the sidebar.</li>
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function HierarchyRow({ level, name, color, tagline, example }) {
-  return (
-    <div className="htu-hier-row" style={{ marginLeft: (level - 1) * 14 }}>
-      <div className="htu-hier-dot" style={{ background: color }}>{level}</div>
-      <div className="htu-hier-text">
-        <div className="htu-hier-name">{name}</div>
-        <div className="htu-hier-tagline">{tagline}</div>
-        <div className="htu-hier-example"><span className="muted small">Example:</span> {example}</div>
-      </div>
+          <div className="htu-thumb"><strong>Rule of thumb:</strong> {concept.rule}</div>
+        </div>
+      )}
     </div>
   );
 }
 
-function HierarchyArrow() {
-  return <div className="htu-hier-arrow" aria-hidden="true">↓</div>;
-}
+// ─── Reference data ──────────────────────────────────────────
+// The long answers. Rendered by <Reference /> above, inside the mockup's
+// own card idiom; the CONTENT is what the page carried before the port.
 
-// ─── Concepts ────────────────────────────────────────────────
+const DECISION_TREE = [
+  {
+    q: 'Does this need to be hidden from some current members of my org?',
+    yes: 'New Workspace',
+    no:  null,
+    next: 'Q2',
+  },
+  {
+    q: 'Does it have a clear "done" or "shipped" outcome, and does it group multiple related tasks?',
+    yes: 'New Project',
+    no:  null,
+    next: 'Q3',
+  },
+  {
+    q: 'Is it a unit of work that one person will actively pick up and finish?',
+    yes: 'New Task (inside the right project)',
+    no:  null,
+    next: 'Q4',
+  },
+  {
+    q: 'Is it a small step inside a task that\'s already in motion?',
+    yes: 'New Subtask on that task',
+    no:  null,
+    next: 'Q5',
+  },
+  {
+    q: 'Is it a record of time you already spent on a specific task?',
+    yes: 'New Activity on that task',
+    no:  null,
+    next: 'Q6',
+  },
+  {
+    q: 'Is it a label that cuts across projects (e.g. #blocker, #client-x)?',
+    yes: 'New Tag on the relevant tasks',
+    no:  'Probably belongs in a notes tool, not Task Monitor. Or sharpen it until it fits one of the above.',
+  },
+];
 
 const CONCEPTS = [
   {
@@ -652,144 +930,6 @@ const CONCEPTS = [
   },
 ];
 
-function Concepts() {
-  return (
-    <section id="htu-concepts" className="review-section htu-section">
-      <h2 className="review-h2">The Concepts — when to use each one</h2>
-      <p className="muted small" style={{ marginTop: 0, marginBottom: 16 }}>
-        Each card answers: <em>what is this thing, when do I reach for it, when do I not, and what does "right" look like</em>.
-      </p>
-
-      <div className="htu-concept-grid">
-        {CONCEPTS.map((c, i) => (
-          <ConceptCard key={c.name} concept={c} paletteClass={CHIP_PALETTE[i % CHIP_PALETTE.length]} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ConceptCard({ concept, paletteClass }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`htu-concept-card ${open ? 'open' : ''}`}>
-      <button className="htu-concept-header" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className={`htu-concept-icon ${paletteClass}`}><Icon name={concept.icon} size={17} /></span>
-        <span className="htu-concept-name">{concept.name}</span>
-        <span className="htu-concept-toggle">{open ? '▾' : '▸'}</span>
-      </button>
-      <div className="htu-concept-oneline">{concept.oneLine}</div>
-
-      {open && (
-        <div className="htu-concept-body">
-          <div className="htu-twocol">
-            <div className="htu-twocol-pane htu-pane-do">
-              <div className="htu-pane-label htu-pane-label-do"><Icon name="check" size={13} /> Use it when…</div>
-              <ul className="htu-list">
-                {concept.useWhen.map((u, i) => <li key={i}>{u}</li>)}
-              </ul>
-            </div>
-            <div className="htu-twocol-pane htu-pane-dont">
-              <div className="htu-pane-label htu-pane-label-dont"><Icon name="ban" size={13} /> Don't use it when…</div>
-              <ul className="htu-list">
-                {concept.dontUseWhen.map((u, i) => <li key={i}>{u}</li>)}
-              </ul>
-            </div>
-          </div>
-
-          <div className="htu-examples">
-            <div className="htu-pane-label">Examples</div>
-            {concept.examples.map((ex, i) => (
-              <div key={i} className={`htu-example ${ex.good ? 'good' : 'bad'}`}>
-                <span className="htu-example-mark">{ex.good ? '✓' : '✗'}</span>
-                <span dangerouslySetInnerHTML={{ __html: ex.good || ex.bad }} />
-              </div>
-            ))}
-          </div>
-
-          <div className="htu-rule">
-            <strong>Rule of thumb:</strong> {concept.rule}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Decision Guide ──────────────────────────────────────────
-
-const DECISION_TREE = [
-  {
-    q: 'Does this need to be hidden from some current members of my org?',
-    yes: 'New Workspace',
-    no:  null,
-    next: 'Q2',
-  },
-  {
-    q: 'Does it have a clear "done" or "shipped" outcome, and does it group multiple related tasks?',
-    yes: 'New Project',
-    no:  null,
-    next: 'Q3',
-  },
-  {
-    q: 'Is it a unit of work that one person will actively pick up and finish?',
-    yes: 'New Task (inside the right project)',
-    no:  null,
-    next: 'Q4',
-  },
-  {
-    q: 'Is it a small step inside a task that\'s already in motion?',
-    yes: 'New Subtask on that task',
-    no:  null,
-    next: 'Q5',
-  },
-  {
-    q: 'Is it a record of time you already spent on a specific task?',
-    yes: 'New Activity on that task',
-    no:  null,
-    next: 'Q6',
-  },
-  {
-    q: 'Is it a label that cuts across projects (e.g. #blocker, #client-x)?',
-    yes: 'New Tag on the relevant tasks',
-    no:  'Probably belongs in a notes tool, not Task Monitor. Or sharpen it until it fits one of the above.',
-  },
-];
-
-function Decision() {
-  return (
-    <section id="htu-decision" className="review-section htu-section">
-      <h2 className="review-h2">Decision Guide — what kind of thing is this?</h2>
-      <p className="muted small" style={{ marginTop: 0, marginBottom: 16 }}>
-        Walk down this list top-to-bottom. Stop at the first <strong>Yes</strong>.
-      </p>
-
-      <div className="htu-decision">
-        {DECISION_TREE.map((step, i) => (
-          <div key={i} className="htu-decision-step">
-            <div className="htu-decision-num">{i + 1}</div>
-            <div className="htu-decision-body">
-              <div className="htu-decision-q">{step.q}</div>
-              <div className="htu-decision-answers">
-                <div className="htu-decision-yes">
-                  <strong>Yes →</strong> {step.yes}
-                </div>
-                {step.no && (
-                  <div className="htu-decision-no">
-                    <strong>No →</strong> {step.no}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ─── Real-World Scenarios ────────────────────────────────────
-
 const SCENARIOS = [
   {
     title: 'A teammate says: "Let\'s redo our member onboarding."',
@@ -901,35 +1041,6 @@ const SCENARIOS = [
   },
 ];
 
-function Scenarios() {
-  return (
-    <section id="htu-scenarios" className="review-section htu-section">
-      <h2 className="review-h2">Real-World Scenarios — "what should this be?"</h2>
-      <p className="muted small" style={{ marginTop: 0, marginBottom: 16 }}>
-        Concrete situations you'll actually hit, with the call and the structure I'd set up.
-      </p>
-
-      <div className="htu-scenarios">
-        {SCENARIOS.map((s, i) => (
-          <div key={i} className="htu-scenario">
-            <div className="htu-scenario-head">
-              <div className="htu-scenario-title">"{s.title}"</div>
-              <span className="htu-scenario-verdict">→ {s.verdict}</span>
-            </div>
-            <div className="htu-scenario-reason"><strong>Why:</strong> {s.reason}</div>
-            <div className="htu-scenario-structure-label">How I'd set it up:</div>
-            <ul className="htu-list">
-              {s.structure.map((line, j) => <li key={j}>{line}</li>)}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ─── Workflows ───────────────────────────────────────────────
-
 const WORKFLOWS = [
   {
     title: 'When a task comes due',
@@ -996,25 +1107,22 @@ const WORKFLOWS = [
   },
 ];
 
-function Workflows() {
-  return (
-    <section id="htu-workflows" className="review-section htu-section">
-      <h2 className="review-h2">Workflows — the rhythms that make it work</h2>
-      <div className="htu-workflows">
-        {WORKFLOWS.map((w, i) => (
-          <div key={i} className="htu-workflow">
-            <h3 className="htu-workflow-title">{w.title}</h3>
-            <ol className="htu-ol">
-              {w.steps.map((s, j) => <li key={j}>{s}</li>)}
-            </ol>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ─── Principles ──────────────────────────────────────────────
+const VIEWS_GUIDE = [
+  { icon: 'dashboard', name: 'Dashboard', text: 'Your at-a-glance home: today\'s focus, what\'s overdue, what\'s in progress, and quick stats per project.' },
+  { icon: 'projects',  name: 'Projects',  text: 'Create and manage projects + their phases. Save a project as a template, or start a New project from a saved template. Share a project via invite link, and open its WBS, Log, or AI helpers.' },
+  { icon: 'board',     name: 'Kanban',    text: 'Drag tasks across Todo → Doing → Done. Filter by tag, group by phase, start a timer, or quick-add from a template. Nested under "Board" in the sidebar alongside Calendar, Gantt chart, and WBS.' },
+  { icon: 'calendar',  name: 'Calendar',  text: 'Month grid by plan end date. Drag a task to reschedule, filter by status (All / To do / Ongoing / Done), and add a new task.' },
+  { icon: 'gantt',     name: 'Gantt',     text: 'Timeline of plan vs. actual. Drag bars to resize/move, see dependency arrows, and filter by a date period.' },
+  { icon: 'wbs',       name: 'WBS',       text: 'Work-breakdown structure: Project → Phase → Task → Subtask with duration, dates, resource, and % complete, plus a Gantt-style timeline. Click any row for its activity log; filter by status or date.' },
+  { icon: 'goals',     name: 'Goals',     text: 'Strategic-plan one-pagers — initiative, KPI, change agenda, and deliverables linked to projects for live progress. Pick your own banner + card colors.' },
+  { icon: 'messages',  name: 'Messages',  text: 'Direct and group chat with workspace members — real-time, closed to the workspace. Add or remove people from a group.' },
+  { icon: 'minutes',   name: 'Minutes',   text: 'Meeting minutes — attendees, notes, decisions, action items, and a boss-focused "Priority" panel. Filter by project from the top bar.' },
+  { icon: 'list',      name: 'Activity Log', text: 'A flat, sortable table of every logged activity, with bulk actions and CSV export.' },
+  { icon: 'clock',     name: 'Work Performed', text: 'Swimlane of activities by project over time — see who did what, when, and for how long.' },
+  { icon: 'review',    name: 'Review',    text: 'KPIs, hours-by-project, the daily-hours strip, and overdue / completed / bottleneck lists.' },
+  { icon: 'analytics', name: 'Analytics', text: 'Charts and trends — including the "Work performed" hero bar chart (hours per day, stacked by project, with totals) over 7 / 15 / 30 days.' },
+  { icon: 'settings',  name: 'Settings',  text: 'Per-device prefs (theme, default project, week start), workspaces + members, account, notifications, and data export. Admins also approve users here.' },
+];
 
 const PRINCIPLES = [
   {
@@ -1059,24 +1167,6 @@ const PRINCIPLES = [
   },
 ];
 
-function Principles() {
-  return (
-    <section id="htu-principles" className="review-section htu-section">
-      <h2 className="review-h2">Principles & Best Practices</h2>
-      <div className="htu-principle-grid">
-        {PRINCIPLES.map((p, i) => (
-          <div key={i} className="htu-principle">
-            <div className="htu-principle-title"><span className="htu-principle-mark">◆</span>{p.title}</div>
-            <div className="htu-principle-body">{p.body}</div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ─── Anti-patterns ───────────────────────────────────────────
-
 const ANTIPATTERNS = [
   {
     bad: 'A project called "Stuff to do".',
@@ -1120,25 +1210,6 @@ const ANTIPATTERNS = [
   },
 ];
 
-function AntiPatterns() {
-  return (
-    <section id="htu-antipatterns" className="review-section htu-section">
-      <h2 className="review-h2">Anti-patterns — what to avoid</h2>
-      <div className="htu-antipattern-list">
-        {ANTIPATTERNS.map((a, i) => (
-          <div key={i} className="htu-antipattern">
-            <div className="htu-antipattern-bad"><Icon name="xCircle" size={15} className="htu-ap-icon htu-ap-icon-bad" /> <strong>{a.bad}</strong></div>
-            <div className="htu-antipattern-why"><strong>Why it bites:</strong> {a.why}</div>
-            <div className="htu-antipattern-instead"><Icon name="checkCircle" size={15} className="htu-ap-icon htu-ap-icon-good" /> <strong>Instead:</strong> {a.instead}</div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ─── Glossary ────────────────────────────────────────────────
-
 const GLOSSARY = [
   ['Workspace',  'The top-level container. A boundary for who can see what. Like a Slack workspace or a Google Drive shared drive.'],
   ['Project',    'A real-world initiative with an outcome. Lives inside a Workspace. Has color, phases, and contains tasks.'],
@@ -1155,21 +1226,3 @@ const GLOSSARY = [
   ['Plan dates', 'The intended start and end dates for a task. Used by Gantt and Calendar.'],
   ['Actual dates', 'The real start and end dates a task actually ran. Used for variance analysis.'],
 ];
-
-function Glossary() {
-  return (
-    <section id="htu-glossary" className="review-section htu-section">
-      <h2 className="review-h2">Glossary</h2>
-      <table className="htu-glossary">
-        <tbody>
-          {GLOSSARY.map(([term, def]) => (
-            <tr key={term}>
-              <td className="htu-glossary-term">{term}</td>
-              <td className="htu-glossary-def">{def}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}

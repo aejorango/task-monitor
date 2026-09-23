@@ -8,8 +8,15 @@
 // fourth copy is how an imported task came to land in To Do while the preview
 // promised otherwise.
 
-/** The only statuses a task may have. Anything else is not a status. */
-export const TASK_STATUSES = ['todo', 'doing', 'done'];
+/**
+ * The only statuses a task may have. Anything else is not a status.
+ *
+ * `review` arrived with the Board Explorer's fourth column (T-0147). It is a
+ * real state, not a label: work that is finished as far as the person doing
+ * it is concerned and is waiting on somebody else. Existing tasks were NOT
+ * migrated — there is nothing to migrate to, they simply stay where they are.
+ */
+export const TASK_STATUSES = ['todo', 'doing', 'review', 'done'];
 
 /** `value` if it is a real status, otherwise `fallback`. */
 export function normalizeTaskStatus(value, fallback = 'todo') {
@@ -36,6 +43,17 @@ export function statusStamps(status, { today, current = {} } = {}) {
       progress: current.progress ?? 0,
       actualStartDate: startDate || today || null,
       actualEndDate: endDate,
+    };
+  }
+  if (status === 'review') {
+    // Handed over, not finished. It must have STARTED — you cannot review
+    // work nobody did — but it has no end date, because the thing that ends
+    // it is somebody else accepting it. The progress floor is 90 rather than
+    // 100 so a review queue does not read as delivered on every chart.
+    return {
+      progress: Math.max(current.progress ?? 0, 90),
+      actualStartDate: startDate || today || null,
+      actualEndDate: null,
     };
   }
   if (status === 'done') {

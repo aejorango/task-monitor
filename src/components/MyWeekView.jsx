@@ -23,6 +23,7 @@ import { DAY_UNSCHEDULED } from '../services/workload';
 import { useToast } from './Toast';
 import TaskEditor from './TaskEditor';
 import Icon from './Icon';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 const PRIORITY_DOT = { high: 'var(--c-danger)', medium: 'var(--c-amber)', low: 'var(--c-emerald)' };
 
@@ -51,31 +52,25 @@ export default function MyWeekView() {
 
   return (
     <div className="myweek">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">My Week</h1>
-          <p className="page-subtitle">
-            Everything assigned to you, from every workspace you are in. Drag a task
-            to another day to move it.
-          </p>
-        </div>
-        <div className="page-actions myweek-nav">
+      <PageSubtitle>Assigned to you, from every workspace you are in · drag a task to another day</PageSubtitle>
+      <PageActions>
+        <span className="myweek-nav">
           <button
-            className="btn btn-sm"
+            className="cmd"
             onClick={() => goToWeek((o) => o - 1)}
             aria-label="The week before this one"
           >←</button>
           <span className="myweek-title">{title}</span>
           <button
-            className="btn btn-sm"
+            className="cmd"
             onClick={() => goToWeek((o) => o + 1)}
             aria-label="The week after this one"
           >→</button>
-          {offset !== 0 && (
-            <button className="btn btn-sm btn-ghost" onClick={() => goToWeek(0)}>Back to this week</button>
-          )}
-        </div>
-      </div>
+        </span>
+        {offset !== 0 && (
+          <button className="cmd" onClick={() => goToWeek(0)}>Back to this week</button>
+        )}
+      </PageActions>
 
       {week.counts.total === 0 ? (
         <div className="empty-state">

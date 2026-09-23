@@ -85,29 +85,3 @@ export function taskChips(task, project) {
     .map((field) => ({ id: field.id, label: field.name, text: formatValue(field, task?.customValues?.[field.id]) }))
     .filter((chip) => chip.text !== '');
 }
-
-/** The column id a custom field uses in a table config. */
-export const columnIdFor = (fieldId) => `custom:${fieldId}`;
-
-/** The field id behind a column id, or null if it is not a custom column. */
-export function fieldIdOf(columnId) {
-  const s = String(columnId || '');
-  return s.startsWith('custom:') ? s.slice('custom:'.length) : null;
-}
-
-/**
- * Custom fields as task-table columns, in the same shape as the built-in ones.
- * Fed into the table's column catalogue so a custom field can be shown, sorted,
- * grouped, saved in a view and exported like anything else.
- */
-export function customFieldColumns(projects = []) {
-  return allFields(projects).map((field) => ({
-    id: columnIdFor(field.id),
-    label: field.label,
-    custom: true,
-    field,
-    align: field.type === 'number' ? 'right' : 'left',
-    value: (task) => sortValue(field, task?.customValues?.[field.id]),
-    text: (task) => formatValue(field, task?.customValues?.[field.id]) || '—',
-  }));
-}

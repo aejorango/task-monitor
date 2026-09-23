@@ -45,19 +45,24 @@ test('a limit of 3 holding 5 reads "5 / 3" and is marked over', () => {
   assert.match(s.title, /2 over the limit of 3/);
 });
 
+// The Board Explorer splits these: a plain white COUNT pill, and a separate
+// WIP chip at the far end of the head. One pill reading "4 / 3" made the
+// count and the policy the same number (T-0145).
 test('the header renders the state, and announces it', () => {
   const src = board();
   assert.match(src, /const wip = columnState\(project, column\.id, count\);/);
-  assert.match(src, /className=\{`count\$\{wip\.over \? ' is-over' : wip\.at \? ' is-at' : ''\}`\}/);
+  assert.match(src, /className=\{`bx-col-wip\$\{wip\.over \? ' over' : wip\.at \? ' at' : ''\}`\}/);
   assert.match(src, /aria-label=\{`\$\{column\.label\}: \$\{wip\.title\}`\}/,
     'a colour alone is not a signal — a screen reader needs the sentence');
-  assert.match(src, />\{wip\.text\}</);
+  assert.match(src, /WIP \{wip\.count\}\/\{wip\.limit\}/);
+  assert.match(src, /\{wip\.limit != null && \(/,
+    'no limit, no chip — a count with nothing to compare it to is not a policy');
 });
 
 test('over and at look different from each other, and from normal', () => {
   const css = read('src', 'App.css');
-  assert.match(css, /\.column-head \.count\.is-at \{[\s\S]*?--c-warn/);
-  assert.match(css, /\.column-head \.count\.is-over \{[\s\S]*?--c-danger/);
+  assert.match(css, /\.bx-col-wip\.at\s*\{[\s\S]*?--c-warn/);
+  assert.match(css, /\.bx-col-wip\.over\s*\{[\s\S]*?--c-danger/);
 });
 
 // A limit belongs to a project, so across every project at once "5 / 3" would
@@ -113,7 +118,7 @@ test('a card that has sat in progress too long says so', async () => {
   const ui = await card({ actual: { startDate: addDaysISO(TODAY, -8) } });
   const badge = ui.container.querySelector('.card-ageing');
   assert.ok(badge, 'this is the signal the audit asked for');
-  assert.match(badge.textContent, /8d in progress/);
+  assert.match(badge.textContent, /8d idle/);
   assert.match(badge.getAttribute('title'), /longer than 5/);
   ui.unmount();
 });
@@ -169,12 +174,19 @@ test('the project editor asks in plain language, with no jargon', () => {
 });
 
 test('the editor uses the board’s own column names', () => {
-  const src = read('src', 'components', 'ProjectsView.jsx');
-  assert.match(src, /const WIP_LABEL = \{ todo: 'To Do', doing: 'In Progress', done: 'Done' \};/);
-  const boardCols = board().match(/label: '([^']+)'/g) || [];
-  for (const label of ["'To Do'", "'In Progress'", "'Done'"]) {
-    assert.ok(boardCols.some((c) => c.includes(label.slice(1, -1))), `board lost ${label}`);
-  }
+  // The board builds its columns from TASK_STATUSES through COLUMN_LABEL
+  // (T-0147), so the two maps are compared directly rather than by scraping
+  // `label:` entries that no longer exist.
+  const editor = read('src', 'components', 'ProjectsView.jsx');
+  const names = (src, decl) => {
+    const line = src.match(new RegExp(`const ${decl} = \\{([^}]*)\\}`));
+    return Object.fromEntries((line[1].match(/(\w+):\s*'([^']+)'/g) || [])
+      .map((pair) => pair.split(/:\s*/).map((x) => x.replace(/'/g, ''))));
+  };
+  assert.deepEqual(names(editor, 'WIP_LABEL'), names(board(), 'COLUMN_LABEL'),
+    'the project editor and the board must call a column the same thing');
+  assert.deepEqual(Object.keys(names(board(), 'COLUMN_LABEL')),
+    ['todo', 'doing', 'review', 'done']);
 });
 
 test('the editor stores only real limits, through the one normaliser', () => {
@@ -189,4 +201,27 @@ test('a created project carries the fields, cleaned', () => {
   assert.match(firebase, /wipLimits:\s+normalizeLimits\(project\.wipLimits\)/);
   assert.match(firebase, /wipAgeingDays: project\.wipAgeingDays \?\? null/);
   assert.match(firebase, /import \{ normalizeLimits \} from '\.\/wipLimits'/);
+});
+
+/* ── T-0148: the per-column "+ Add item" is gone ──────────────────────────
+   Ace asked for it: the mockup's own column ends with one, but four dashed
+   buttons on a board that is now divided into project bands is four buttons
+   per band. What must NOT go with it is the write path — the toolbar's
+   "+ New item" and ⌘K → New task both still land in the quick-add form, and
+   that form still passes a status to addTask. */
+
+test('the per-column add button is gone, and took nothing with it', () => {
+  const board = fs.readFileSync(path.join(root, 'src', 'components', 'Board.jsx'), 'utf8');
+  const form  = fs.readFileSync(path.join(root, 'src', 'components', 'TaskForm.jsx'), 'utf8');
+
+  assert.doesNotMatch(board, /\+ Add item/, 'removed on request in T-0148');
+  assert.doesNotMatch(board, /onAdd\(column\.id\)/);
+
+  // The quick-add still exists and is still reachable — it is just no longer
+  // a strip standing open on every visit.
+  assert.match(board, /useQuickCreate\('task'/, 'the palette and the toolbar both land here');
+  assert.match(board, /\{quickAddSeed && \(/, 'shown on request rather than always');
+  assert.match(board, /<TaskForm /);
+  assert.match(form, /status = 'todo'/, 'a board with no column asking still defaults to To Do');
+  assert.match(form, /^\s*status,$/m, 'addTask must receive it, or the form is a lie');
 });

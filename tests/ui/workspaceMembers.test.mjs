@@ -25,15 +25,26 @@ test('the Account ID box is behind an Advanced toggle, for superadmins only', ()
   assert.match(advanced, /<summary/);
 });
 
+// T-0155 moved this onto the Access-control layout. The rule is unchanged:
+// nobody is ever shown a Firebase UID unless they are a superadmin who asked.
 test('a member row never shows a raw UID to a non-superadmin', () => {
-  const row = modal.slice(modal.indexOf('ws-members-list'), modal.indexOf('Invited — waiting'));
-  assert.match(row, /\{isSuperadmin && \(/, 'the UID line must be gated');
+  // The row is a template literal, so anchor on the map that builds it — that
+  // way both the label lookup and the markup are inside the slice.
+  const row = modal.slice(
+    modal.indexOf('(workspace.members || []).map'),
+    modal.indexOf('className="ac-foot"'),
+  );
+  assert.match(row, /isSuperadmin \? uid : '—'/, 'the UID must be gated behind superadmin');
   assert.match(row, /memberLabel\(/, 'and the name comes from memberLabel');
 });
 
 test('invitations that have not been taken up are listed', () => {
-  assert.match(modal, /Invited — waiting for them to sign in/);
-  assert.match(modal, /Joins as \{inv\.role\} when they next open the app/);
+  assert.match(modal, /Pending invites/);
+  assert.match(modal, /Joins as \{ROLE_TITLE\[inv\.role\] \|\| inv\.role\} when they next sign in/);
+  assert.match(modal, /Nobody is waiting to join/, 'and an empty state that says so');
+  // There is no expiry on an invitation and no email is sent; the card must
+  // not borrow the mockup's "expires in 6 days".
+  assert.doesNotMatch(modal, /expires in/, 'an invitation carries no expiry field');
 });
 
 test('an admin can withdraw an invitation', () => {
@@ -62,8 +73,19 @@ test('errors are shown in the form, not in an alert box', () => {
   assert.match(inviteFn, /friendlyError/);
 });
 
-test('the modal copy no longer tells people to swap Account IDs', () => {
-  const sub = modal.slice(modal.indexOf('<p className="modal-sub">'), modal.indexOf('<div className="ws-members-list">'));
-  assert.doesNotMatch(sub, /Account ID/);
-  assert.match(sub, /email\s+address/);
+test('nothing outside the superadmin escape hatch mentions an Account ID', () => {
+  // The intro paragraph went in T-0155 — what each role can do is now stated
+  // precisely in the Role definitions card instead of loosely in a sentence.
+  // What must not come back is telling an ordinary admin to swap UIDs.
+  // Only what is RENDERED counts — a code comment explaining the escape hatch
+  // is not copy anybody reads on screen.
+  const beforeAdvanced = modal
+    .slice(0, modal.indexOf('Add by Account ID (advanced)'))
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .join('\n');
+  assert.doesNotMatch(beforeAdvanced, /Account ID/,
+    'inviting is by email; a UID is a superadmin escape hatch, not the route');
+  assert.match(modal, /the invitation is\s+waiting for them when they sign in with that address/,
+    'and the page still explains that inviting is by email address');
 });

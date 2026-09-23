@@ -5,8 +5,9 @@ import { TASK_STATUSES, normalizeTaskStatus, statusStamps } from './taskStatus.j
 
 const TODAY = '2026-09-21';
 
-test('there are three statuses, and nothing else is one', () => {
-  assert.deepEqual(TASK_STATUSES, ['todo', 'doing', 'done']);
+test('there are four statuses, and nothing else is one', () => {
+  // `review` arrived with the Board Explorer's fourth column (T-0147).
+  assert.deepEqual(TASK_STATUSES, ['todo', 'doing', 'review', 'done']);
   assert.equal(normalizeTaskStatus('done'), 'done');
   assert.equal(normalizeTaskStatus('Done'), 'todo', 'case is the caller’s job to normalise');
   assert.equal(normalizeTaskStatus('shipped'), 'todo');

@@ -4,32 +4,83 @@
 //   - right edge (resize end)
 //   - middle     (move whole bar)
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTasks, useProjects } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
-import TaskActivitiesModal from './TaskActivitiesModal';
 import TaskEditor from './TaskEditor';
 import TaskQuickAdd from './TaskQuickAdd';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
 import { tagFilterState } from '../services/tagFilter';
-import TagFilterBar from './TagFilterBar';
+import Avatar from './Avatar';
+import Icon from './Icon';
+import { scopeTasks, scopeOf } from '../services/boardScope';
+import { weekDays } from '../services/timesheet';
+import { readSettings } from '../hooks/useSettings';
 import { useToast } from './Toast';
 // The bar geometry and what a drag means live in a pure module, so a task with
 // only a due date is a one-day milestone here and in its tests alike (BUG-014).
 import {
   effectivePlan, planBar, dragOrigin, dragTo, dragPatch, planLabel, shiftIso,
 } from '../services/ganttGeometry';
+import { PageActions, PageSubtitle } from './PageHeader';
 
-const ZOOMS = [
-  { id: 'day',   label: 'Day',   dayWidth: 36 },
-  { id: 'week',  label: 'Week',  dayWidth: 16 },
-  { id: 'month', label: 'Month', dayWidth: 6 },
-];
+// The label column, in one place: the ruler pads by it, the arrow overlay is
+// offset by it, every row's grid starts with it, and the CSS reads it back as
+// `--gc-label-w`. Wider than the mockup's 220 on purpose — a Gantt whose task
+// names are all cut off at the same word is a chart you cannot read.
+const LABEL_W = 288;
+
+/** ISO week number — what "W26" means. */
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t - jan1) / 86400000 + 1) / 7);
+}
+
+/**
+ * The columns across the top, and how many days each is worth.
+ *
+ * Widths are `<days>fr`, so a 31-day month is wider than a 30-day one and a
+ * part-week at either end is narrower — the bars underneath are positioned as
+ * a share of the same total, so a bar's left edge always lands on its date.
+ * Equal columns would put them a day or two out at the ends.
+ */
+function rulerColumns(min, totalDays, mode) {
+  const cols = [];
+  for (let i = 0; i < totalDays; i += 1) {
+    const d = addDays(min, i);
+    const key = mode === 'week'
+      ? `${d.getFullYear()}-W${isoWeek(d)}`
+      : `${d.getFullYear()}-${d.getMonth()}`;
+    const last = cols[cols.length - 1];
+    if (last && last.key === key) { last.days += 1; continue; }
+    cols.push({
+      key,
+      days: 1,
+      label: mode === 'week'
+        ? `W${isoWeek(d)}`
+        : d.toLocaleString('en', { month: 'short' }),
+    });
+  }
+  return cols;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The one person a Gantt row can show — the first assignee, with a name. */
+function ownerOf(task, memberProfiles = {}) {
+  const uid = (task.assignedTo || [])[0];
+  if (uid) {
+    const p = memberProfiles[uid];
+    return { id: uid, name: p?.displayName || p?.email || uid, photo: p?.photoURL || null };
+  }
+  const ext = (task.assignedToExternal || [])[0];
+  return ext ? { id: `ext:${ext}`, name: ext, photo: null } : null;
+}
 
 function parseDate(str) {
   if (!str) return null;
@@ -46,11 +97,6 @@ function addDays(d, n) {
 }
 function fmtDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function fmtShort(d, zoomId) {
-  if (zoomId === 'month') return d.getDate() === 1 ? d.toLocaleString('en', { month: 'short' }) : '';
-  if (zoomId === 'week')  return d.getDay() === 1 ? `${d.getDate()}` : '';
-  return `${d.getDate()}`;
 }
 
 // Preset period helpers. Each returns { from, to } as YYYY-MM-DD strings.
@@ -73,15 +119,52 @@ function presetNext30() {
   const now = parseDate(todayLocal());
   return { from: fmtDate(now), to: fmtDate(addDays(now, 30)) };
 }
-function presetThisYear() {
-  const now = parseDate(todayLocal());
-  return {
-    from: fmtDate(new Date(now.getFullYear(), 0, 1)),
-    to:   fmtDate(new Date(now.getFullYear(), 11, 31)),
-  };
+/**
+ * This week — Monday to Sunday, or Sunday to Saturday.
+ *
+ * Which, is the reader's own week-start preference, and it is read through
+ * `weekDays` rather than worked out here: the Timesheet and My Week already
+ * ask that function what a week is, and a third answer on the Gantt would mean
+ * "this week" started on a different day depending on which page you asked.
+ * `readSettings()` is the non-hook reader, so this stays a plain function like
+ * its three neighbours.
+ */
+function presetThisWeek() {
+  const days = weekDays(todayLocal(), readSettings().weekStart ?? 1);
+  if (!days.length) return { from: '', to: '' };
+  return { from: days[0], to: days[days.length - 1] };
+}
+/**
+ * The period switch's settings, in the order the switch draws them.
+ *
+ * One list: the switch renders it, and `periodOf` reads the current dates
+ * back through it to decide which segment is lit. A second copy in the
+ * component is how a control comes to highlight nothing after a reload.
+ *
+ * "This week" sits first among the dated ones because it is the shortest
+ * window — the switch reads left to right from narrow to wide, and All is the
+ * escape at the head.
+ */
+const PERIODS = [
+  { id: 'all',     label: 'All',          icon: 'layers',   range: () => ({ from: '', to: '' }) },
+  { id: 'week',    label: 'This week',    icon: 'calendar', range: () => presetThisWeek() },
+  { id: 'month',   label: 'This month',   icon: 'calendar', range: () => presetThisMonth() },
+  { id: 'quarter', label: 'This quarter', icon: 'dashboard',     range: () => presetThisQuarter() },
+  { id: 'next30',  label: 'Next 30 days', icon: 'clock',    range: () => presetNext30() },
+];
+
+/** Which segment the current from/to is — or null for a hand-picked window. */
+function periodOf(from, to) {
+  if (!from && !to) return 'all';
+  const hit = PERIODS.find((p) => {
+    if (p.id === 'all') return false;
+    const r = p.range();
+    return r.from === from && r.to === to;
+  });
+  return hit ? hit.id : null;
 }
 
-export default function GanttView({ projectFilter, initialTagFilter }) {
+export default function GanttView({ projectFilter, initialTagFilter, route = {} }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const activeWorkspaceId = useActiveWorkspaceId();
@@ -90,19 +173,45 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
     () => workspaces.find((w) => w.id === activeWorkspaceId)?.memberProfiles || {},
     [workspaces, activeWorkspaceId],
   );
-  const [zoom, setZoom] = useState('day');
+  // The track column's width, measured — the chart has no fixed pixels-per-day
+  // any more, so the whole geometry is derived from this one number.
+  //
+  // A CALLBACK ref, not `useRef` + an effect. The effect version ran once on
+  // mount, and on mount this component is still loading its tasks and has
+  // returned the spinner — so the ruler did not exist, the ref was null, the
+  // observer was never attached and `trackW` stayed 0 for ever. dayWidth is
+  // then 0 and every bar is skipped: a chart of empty rows, with nothing in
+  // the console to say why. A callback ref fires when the node arrives,
+  // whenever that is.
+  const [trackW, setTrackW] = useState(0);
+  const roRef = useRef(null);
+  const trackRef = useCallback((el) => {
+    roRef.current?.disconnect();
+    roRef.current = null;
+    if (!el) return;
+    setTrackW(Math.round(el.getBoundingClientRect().width));
+    if (typeof ResizeObserver === 'undefined') return;
+    roRef.current = new ResizeObserver(([entry]) => {
+      setTrackW(Math.round(entry.contentRect.width));
+    });
+    roRef.current.observe(el);
+  }, []);
+  useEffect(() => () => roRef.current?.disconnect(), []);
   // A saved view stores the tag it was filtered by, and the router hands it
   // over here. Local state so the chip can be cleared, re-synced when the route
   // changes — the same shape the Board uses (BUG-018).
   const [tagFilter, setTagFilter] = useState(initialTagFilter || null);
   useEffect(() => { setTagFilter(initialTagFilter || null); }, [initialTagFilter]);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [viewingTask, setViewingTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   // Date-period filter. Both optional; either bound may be set independently.
-  const [periodFrom, setPeriodFrom] = useState('');
-  const [periodTo, setPeriodTo]     = useState('');
-  const zoomConf = ZOOMS.find((z) => z.id === zoom);
+  // It opens on THIS WEEK rather than All: a chart of every dated task back to
+  // the start of the project is a wall, and the window you almost always want
+  // first is the one you are in. `presetThisWeek` reads the week-start
+  // preference through `weekDays`, so the Gantt, the Timesheet and My Week
+  // cannot disagree about which day a week starts on.
+  const [periodFrom, setPeriodFrom] = useState(() => presetThisWeek().from);
+  const [periodTo, setPeriodTo]     = useState(() => presetThisWeek().to);
 
   const periodActive = !!(periodFrom || periodTo);
 
@@ -132,7 +241,9 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
       return true;
     };
 
-    return tasks
+    // The Board hub's toolbar applies here too — one definition of Mine and
+    // Stuck for all eight tabs (services/boardScope.js).
+    return scopeTasks(tasks, { scope: scopeOf(route), who: route.who, q: route.q, userId, today: todayLocal() })
       .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
       .filter((t) => t.plan?.startDate || t.plan?.endDate || t.actual?.startDate || t.actual?.endDate)
       .filter(inPeriod)
@@ -144,7 +255,7 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
         // 2. Within a project, earliest start first
         return earliestOf(a).localeCompare(earliestOf(b));
       });
-  }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo]);
+  }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo, route.onlyMine, route.stuckOnly, route.who, route.q, userId]);
 
   // The chip strip offers the tags on the rows this page would otherwise show,
   // and `rows` becomes the tag-filtered set. `missing` covers a saved view
@@ -222,27 +333,23 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
   if (rows.length === 0) {
     return (
       <>
-        <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} exportProps={exportProps} />
-        <GanttDateFilter
-          from={periodFrom} to={periodTo}
-          setFrom={setPeriodFrom} setTo={setPeriodTo}
-        />
-        <TagFilterBar state={tagState} onChange={setTagFilter} />
+        <PageHeader onNewTask={() => setQuickAddOpen(true)} exportProps={exportProps}
+        tagState={tagState} onClearTag={() => setTagFilter(null)} />
+        {/* The switch stays: an empty chart is usually a window that is too
+            narrow, and the control that widens it has to be on the page that
+            emptied. */}
+        <div className="bcard gantt-card" style={{ '--gc-label-w': `${LABEL_W}px` }}>
+          <div className="gantt-card-head">
+            <span className="gantt-card-title">Gantt</span>
+            <PeriodSwitch
+              from={periodFrom} to={periodTo}
+              setFrom={setPeriodFrom} setTo={setPeriodTo}
+            />
+          </div>
+        </div>
         <div className="empty-state">
           <div className="empty-state-icon">▭</div>
-          {tagState.active ? (
-            <>
-              <p>No scheduled tasks carry #{tagState.active}.</p>
-              <p className="small">
-                A task appears here once it has a plan or an actual date.{' '}
-                <button
-                  className="table-link"
-                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
-                  onClick={() => setTagFilter(null)}
-                >Clear the tag filter</button>{' '}to see everything.
-              </p>
-            </>
-          ) : periodActive ? (
+          {periodActive ? (
             <>
               <p>No tasks fall within the selected period.</p>
               <p className="small">
@@ -268,59 +375,55 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
     );
   }
 
-  const totalWidth   = range.total * zoomConf.dayWidth;
-  const phaseWidth   = 120;
-  const taskWidth    = 240;
-  const labelWidth   = phaseWidth + taskWidth;
-  // Rows must have an explicit width equal to their track sum — without it,
-  // a grid row with fixed-px tracks wider than its auto width just overflows
-  // visually, and that undersized box corrupts position:sticky's offset math
-  // for any frozen column past the first (it starts drifting off-screen on
-  // scroll instead of staying pinned next to the first).
-  const rowWidth     = labelWidth + totalWidth;
-  const rowHeight    = 40;       // CSS .gantt-row height
-  const groupHeight  = 32;       // CSS .gantt-row.group-header height
-  const headerHeight = 33;       // CSS .gantt-row.header height
+  // The chart fills the card. The mockup has no horizontal scroll, so there is
+  // no fixed pixels-per-day: the track column is measured and the day width
+  // falls out of it. Everything downstream — bars, the today line, the
+  // dependency arrows, the drag arithmetic — keeps working in pixels off that
+  // one number, so nothing had to learn percentages.
+  const dayWidth = trackW > 0 ? trackW / range.total : 0;
+  const ROW_H = 44;            // CSS .gc-row height — the mockup's own
 
-  // Build a flat layout array: group headers + task rows, interleaved in
-  // render order. Each entry has { kind, top, height, projectId?, task? }.
-  // `top` is the Y offset from the start of the body (after the column header
-  // row). The SVG overlay starts at the body's top — i.e. headerHeight below
-  // the .gantt container — so arrow math just uses entry.top + height / 2.
+  const GROUP_H = 38;          // CSS .gc-group height
+
+  // Segmented by project. `rows` is already sorted project-first, so a band
+  // goes in wherever the project changes. Each band carries the project's own
+  // span, which is the one number a reader wants from a group header — when
+  // this project starts and when it is meant to be done.
   const layout = [];
-  let cursorY = 0;
-  let lastProjectKey = '__none__';
+  let y = 0;
+  let lastProject = '\u0000';
   rows.forEach((t) => {
-    const projKey = t.projectId || '__none__';
-    if (projKey !== lastProjectKey) {
+    const key = t.projectId || '__none__';
+    if (key !== lastProject) {
+      lastProject = key;
+      const own = rows.filter((r) => (r.projectId || '__none__') === key);
+      const starts = own.map((r) => r.plan?.startDate || r.plan?.endDate).filter(Boolean).sort();
+      const ends   = own.map((r) => r.plan?.endDate || r.plan?.startDate).filter(Boolean).sort();
       layout.push({
         kind: 'group',
-        top: cursorY,
-        height: groupHeight,
+        top: y,
+        height: GROUP_H,
         projectId: t.projectId || null,
+        count: own.length,
+        from: starts[0] || null,
+        to: ends[ends.length - 1] || null,
       });
-      cursorY += groupHeight;
-      lastProjectKey = projKey;
+      y += GROUP_H;
     }
-    layout.push({
-      kind: 'task',
-      top: cursorY,
-      height: rowHeight,
-      task: t,
-    });
-    cursorY += rowHeight;
+    layout.push({ kind: 'task', task: t, top: y, height: ROW_H });
+    y += ROW_H;
   });
-  const bodyHeight = cursorY;
+  const bodyHeight = y;
 
-  // Index task rows for arrow Y computation.
+  // Index rows for arrow Y computation.
   const taskRowByTaskId = new Map();
   layout.forEach((entry) => {
     if (entry.kind === 'task') taskRowByTaskId.set(entry.task.id, entry);
   });
 
-  // Compute dependency arrows: from end of dep's plan bar to start of this
-  // task's plan bar. Coordinates are relative to the SVG, which sits inside
-  // the .gantt container at top: headerHeight, left: labelWidth.
+  // Dependency arrows: from the end of the dependency's plan bar to the start
+  // of this one. The SVG is laid over the track column only, so coordinates
+  // are in the track's own space and need no label offset.
   const arrows = [];
   rows.forEach((t) => {
     const depIds = t.dependsOn || [];
@@ -328,7 +431,7 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
     if (!myPlanStart) return;
     const myEntry = taskRowByTaskId.get(t.id);
     if (!myEntry) return;
-    const toX = Math.round(diffDays(range.min, myPlanStart) * zoomConf.dayWidth);
+    const toX = Math.round(diffDays(range.min, myPlanStart) * dayWidth);
     const toY = Math.round(myEntry.top + myEntry.height / 2);
 
     depIds.forEach((depId) => {
@@ -336,208 +439,138 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
       if (!depEntry) return;
       const depPlanEnd = parseDate(depEntry.task.plan?.endDate);
       if (!depPlanEnd) return;
-      const fromX = Math.round((diffDays(range.min, depPlanEnd) + 1) * zoomConf.dayWidth);
+      const fromX = Math.round((diffDays(range.min, depPlanEnd) + 1) * dayWidth);
       const fromY = Math.round(depEntry.top + depEntry.height / 2);
       arrows.push({ id: `${depId}->${t.id}`, fromX, fromY, toX, toY });
     });
   });
 
-  const dayHeaders = [];
-  const weekendCols = [];   // [{ left, width }] indices for shaded weekend strips
-  for (let i = 0; i < range.total; i++) {
-    const d = addDays(range.min, i);
-    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    const isToday = fmtDate(d) === fmtDate(today);
-    dayHeaders.push({ d, isWeekend, isToday, label: fmtShort(d, zoom) });
-    if (isWeekend) {
-      weekendCols.push({ left: i * zoomConf.dayWidth, width: zoomConf.dayWidth });
-    }
-  }
+  // Weeks while the window is short enough for them to be readable, months
+  // beyond that. Ten weeks of columns is about where the labels stop fitting.
+  const ruler = rulerColumns(range.min, range.total, range.total <= 77 ? 'week' : 'month');
+  const rulerCols = ruler.map((c) => `${c.days}fr`).join(' ');
+  // Where today sits across the track, as a share — the mockup's 2px red line.
+  const todayPct = ((diffDays(range.min, today) + 0.5) / range.total) * 100;
+  const todayVisible = todayPct >= 0 && todayPct <= 100;
 
   return (
     <>
-      <PageHeader zoom={zoom} setZoom={setZoom} onNewTask={() => setQuickAddOpen(true)} exportProps={exportProps} />
-      <GanttDateFilter
-        from={periodFrom} to={periodTo}
-        setFrom={setPeriodFrom} setTo={setPeriodTo}
-        visibleCount={rows.length}
-      />
-      <TagFilterBar state={tagState} onChange={setTagFilter} />
-
-      <div className="gantt" style={{ '--gantt-day-w': `${zoomConf.dayWidth}px`, position: 'relative' }}>
-        <div className="gantt-row header" style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px`, width: rowWidth }}>
-          <div className="gantt-label gantt-label-phase">Phase</div>
-          <div className="gantt-label" style={{ left: phaseWidth }}>Task</div>
-          <div className="gantt-track" style={{ display: 'grid', gridTemplateColumns: `repeat(${range.total}, ${zoomConf.dayWidth}px)` }}>
-            {dayHeaders.map((h, i) => (
-              <div
-                key={i}
-                className={`gantt-day-header ${h.isWeekend ? 'weekend' : ''} ${h.isToday ? 'today' : ''}`}
-              >{h.label}</div>
-            ))}
-          </div>
+      <PageHeader onNewTask={() => setQuickAddOpen(true)} exportProps={exportProps}
+        tagState={tagState} onClearTag={() => setTagFilter(null)} />
+      {/* The Board Explorer's chart, panel for panel: a titled head with the
+          ruler granularity on the right, a week/month ruler over a 220px
+          label column, 44px rows, and a legend band at the foot. */}
+      <div className="bcard gantt-card" style={{ '--gc-label-w': `${LABEL_W}px` }}>
+        <div className="gantt-card-head">
+          <span className="gantt-card-title">Gantt</span>
+          {/* The period is what the chart is OF, so it belongs on the chart
+              rather than in a filter bar above it. It replaced the ruler
+              granularity, which is now worked out from the window itself —
+              nobody needs to be asked whether eight weeks should be drawn in
+              weeks. */}
+          <PeriodSwitch
+            from={periodFrom} to={periodTo}
+            setFrom={setPeriodFrom} setTo={setPeriodTo}
+          />
         </div>
 
-        {/* Weekend column tint — paints Saturday and Sunday columns across
-            the full body height so weekends are visually distinct beneath
-            the task bars. Sits behind bars (z-index: 0) and is non-interactive. */}
-        {weekendCols.length > 0 && (
-          <div
-            className="gantt-weekend-overlay"
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              top: headerHeight,
-              left: labelWidth,
-              width: totalWidth,
-              height: bodyHeight,
-              pointerEvents: 'none',
-              zIndex: 0,
-            }}
-          >
-            {weekendCols.map((w, i) => (
-              <div
-                key={i}
-                className="gantt-weekend-col"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: w.left,
-                  width: w.width,
-                }}
-              />
-            ))}
-          </div>
-        )}
+        <div className="gc-ruler">
+          <span className="gc-ruler-pad" />
+          <span className="gc-ruler-cols" ref={trackRef} style={{ gridTemplateColumns: rulerCols }}>
+            {ruler.map((c) => <span key={c.key} className="gc-col">{c.label}</span>)}
+          </span>
+        </div>
 
-        {/* Dependency arrows overlay. Origin sits at (left: labelWidth, top:
-            headerHeight) inside the .gantt container, so arrow coordinates
-            are in the body's local space. */}
-        {arrows.length > 0 && (
-          <svg
-            className="gantt-arrows"
-            width={totalWidth}
-            height={bodyHeight}
-            style={{
-              position: 'absolute',
-              top: headerHeight,
-              left: labelWidth,
-              pointerEvents: 'none',
-            }}
-          >
-            <defs>
-              <marker
-                id="dep-arrow"
-                viewBox="0 0 10 10"
-                refX="9"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--c-text-3)" />
-              </marker>
-            </defs>
-            {arrows.map((a) => {
-              // Elbow: short horizontal from dep end, then vertical to target row,
-              // then horizontal to the target bar start. Use a small gap before
-              // the target X so the arrowhead doesn't overlap the bar.
-              const gap = 4;
-              const endX = a.toX - gap;
-              const midX = (a.fromX + endX) / 2;
-              const d = `M ${a.fromX} ${a.fromY}
-                         L ${midX} ${a.fromY}
-                         L ${midX} ${a.toY}
-                         L ${endX} ${a.toY}`;
+        <div className="gc-body">
+          {layout.map((entry, i) => {
+            if (entry.kind === 'group') {
+              const proj = projectById[entry.projectId];
               return (
-                <path
-                  key={a.id}
-                  d={d}
-                  fill="none"
-                  stroke="var(--c-text-3)"
-                  strokeWidth="1.5"
-                  strokeDasharray="3 3"
-                  markerEnd="url(#dep-arrow)"
-                />
-              );
-            })}
-          </svg>
-        )}
-
-        {layout.map((entry, i) => {
-          if (entry.kind === 'group') {
-            const proj = projectById[entry.projectId];
-            return (
-              <div
-                key={`g-${i}`}
-                className="gantt-row group-header"
-                style={{ gridTemplateColumns: `${phaseWidth + taskWidth}px ${totalWidth}px`, width: rowWidth }}
-              >
-                <div className="gantt-label">
-                  {proj ? (
-                    <span className="proj-tag">
-                      <span className="proj-dot" style={{ background: proj.color }} />
-                      {proj.name}
-                    </span>
-                  ) : (
-                    <span className="muted small">No project</span>
-                  )}
+                <div key={`g-${entry.projectId || 'none'}-${i}`} className="gc-group">
+                  <span className="gc-group-name">
+                    <span className="gc-dot" style={{ background: proj?.color || 'var(--c-text-muted)' }} />
+                    {proj?.name || 'No project'}
+                    <span className="gc-group-count">{entry.count}</span>
+                  </span>
+                  <span className="gc-group-span">
+                    {entry.from && entry.to ? `${entry.from} → ${entry.to}` : 'no dates'}
+                  </span>
                 </div>
-                {/* Empty track cell so the row spans the timeline area too */}
-                <div />
-              </div>
+              );
+            }
+            return (
+              <GanttRow
+                key={entry.task.id}
+                task={entry.task}
+                project={projectById[entry.task.projectId]}
+                range={range}
+                dayWidth={dayWidth}
+                trackWidth={trackW}
+                today={today}
+                alt={i % 2 === 1}
+                todayPct={todayVisible ? todayPct : null}
+                memberProfiles={memberProfiles}
+                onClick={() => setEditingTask(entry.task)}
+              />
             );
-          }
-          const t = entry.task;
-          const proj = projectById[t.projectId];
-          const phase = proj?.phases?.find((p) => p.id === t.phaseId);
-          return (
-            <GanttRow
-              key={t.id}
-              task={t}
-              project={proj}
-              phaseName={phase?.name || ''}
-              range={range}
-              zoomConf={zoomConf}
-              totalWidth={totalWidth}
-              phaseWidth={phaseWidth}
-              taskWidth={taskWidth}
-              rowWidth={rowWidth}
-              today={today}
-              onClick={() => setViewingTask(t)}
-            />
-          );
-        })}
-      </div>
+          })}
 
-      <div className="toolbar" style={{ marginTop: 16 }}>
-        <span className="small muted">Legend:</span>
-        <span className="badge" style={{ background: 'var(--c-doing)', color: 'white', opacity: 0.5 }}>Plan (draggable)</span>
-        <span className="badge" style={{ background: 'var(--c-done)', color: 'white' }}>Actual (done)</span>
-        <span className="badge" style={{ background: 'var(--c-doing)', color: 'white' }}>Actual (in progress)</span>
-        <span className="badge" style={{ background: 'var(--c-danger)', color: 'white' }}>Overdue</span>
-        <span className="small muted" style={{ marginLeft: 8 }}>Drag plan bar edges to resize, middle to move.</span>
+          {/* Dependency arrows, laid over the track column only. Drawn last so
+              they sit above the bars, and never over the label column. */}
+          {arrows.length > 0 && dayWidth > 0 && (
+            <svg
+              className="gantt-arrows"
+              width={trackW}
+              height={bodyHeight}
+              style={{ position: 'absolute', top: 0, left: LABEL_W, pointerEvents: 'none' }}
+              aria-hidden="true"
+            >
+              <defs>
+                <marker id="dep-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--c-text-3)" />
+                </marker>
+              </defs>
+              {arrows.map((a) => {
+                const gap = 4;
+                const endX = a.toX - gap;
+                const midX = (a.fromX + endX) / 2;
+                return (
+                  <path
+                    key={a.id}
+                    d={`M ${a.fromX} ${a.fromY} L ${midX} ${a.fromY} L ${midX} ${a.toY} L ${endX} ${a.toY}`}
+                    fill="none" stroke="var(--c-text-3)" strokeWidth="1.5"
+                    strokeDasharray="3 3" markerEnd="url(#dep-arrow)"
+                  />
+                );
+              })}
+            </svg>
+          )}
+        </div>
+
+      {/* The mockup's three, and only three. What a drag does is said once
+          already, in the line under the title — repeating it here is the
+          wall of legend the Explorer deliberately does not have. */}
+      <div className="gantt-legend">
+        <span className="gl"><span className="gl-line" />Today</span>
+        <span className="gl gl-late">▲ Past due</span>
+        <span className="gl"><span className="gl-swatch" style={{ background: 'var(--c-done)' }} />Complete</span>
+      </div>
       </div>
 
       {quickAddOpen && (
         <TaskQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
       )}
 
-      {viewingTask && !editingTask && (
-        <TaskActivitiesModal
-          task={viewingTask}
-          userId={userId}
-          onClose={() => setViewingTask(null)}
-          onEditTask={(t) => { setEditingTask(t); }}
-        />
-      )}
-
+      {/* Clicking a task opens the EDITOR, not the read-only activity list.
+          One click, one destination — the activity log is that editor's
+          Activity tab now, so the list is not lost, it just stopped being
+          a second modal in front of the thing you actually wanted. */}
       {editingTask && (
         <TaskEditor
           task={editingTask}
           projects={projects}
-          onClose={() => { setEditingTask(null); setViewingTask(null); }}
+          onClose={() => setEditingTask(null)}
         />
       )}
     </>
@@ -549,16 +582,14 @@ export default function GanttView({ projectFilter, initialTagFilter }) {
 // Exported for tests/ui/ganttMilestone.test.mjs and dev/gantt.html, which render
 // one row on its own — no Firestore, no sign-in, no whole timeline.
 export function GanttRow({
-  task, project, phaseName, range, zoomConf, totalWidth, phaseWidth, taskWidth,
-  rowWidth, today, onClick,
+  task, project, range, dayWidth, today, onClick,
+  alt = false, todayPct = null, trackWidth = 0, memberProfiles = {},
   // How a committed drag is saved. Defaults to the real write; dev/gantt.html
   // passes its own so the row can be driven with no Firestore behind it.
   onSavePlan = updateTask,
 }) {
   const toast = useToast();
   const planEnd   = parseDate(task.plan?.endDate);
-  const actStart  = parseDate(task.actual?.startDate);
-  const actEnd    = parseDate(task.actual?.endDate);
 
   // Drag state, in two halves on purpose (T-0134 / IMP-012).
   //
@@ -590,17 +621,12 @@ export function GanttRow({
   const span = drag
     ? { startDate: shiftIso(rangeMin, drag.startDay), endDate: shiftIso(rangeMin, drag.endDay), isMilestone: drag.startDay === drag.endDay, derived: null }
     : effectivePlan(task);
-  const bar = span ? planBar(task, { rangeMin, dayWidth: zoomConf.dayWidth, span }) : null;
+  const bar = span ? planBar(task, { rangeMin, dayWidth, span }) : null;
   const planLeft  = bar ? bar.left  : null;
   const planWidth = bar ? bar.width : null;
   const isMilestone = !drag && span?.isMilestone;
 
-  const actLeft   = actStart ? diffDays(range.min, actStart) * zoomConf.dayWidth : null;
-  const actEndOrToday = actEnd || (task.status !== 'done' ? today : null);
-  const actWidth  = actStart && actEndOrToday ? (diffDays(actStart, actEndOrToday) + 1) * zoomConf.dayWidth : null;
-
   const isOverdue = task.status !== 'done' && planEnd && planEnd < today;
-  const isInProgress = task.status === 'doing';
 
   // ── Drag handlers ────────────────────────────────────────────────────────
   // Keyed on the MODE, not on the drag: the mode is fixed for the whole
@@ -616,7 +642,7 @@ export function GanttRow({
     const onMove = (e) => {
       const live = dragRef.current;
       if (!live) return;
-      const dDays = Math.round((e.clientX - live.startX) / zoomConf.dayWidth);
+      const dDays = Math.round((e.clientX - live.startX) / dayWidth);
       setBothDrag({ ...live, ...dragTo(live.mode, live.origin, dDays) });
     };
     const onUp = async () => {
@@ -642,7 +668,7 @@ export function GanttRow({
     // `toast` and `setBothDrag` are stable for the life of the row; adding them
     // would put this back to re-installing on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dragMode, zoomConf.dayWidth, rangeMin, onSavePlan]);
+  }, [dragMode, dayWidth, rangeMin, onSavePlan]);
 
   const startDrag = (e, mode) => {
     // A milestone has an origin now — both ends on its one date — which is what
@@ -654,6 +680,8 @@ export function GanttRow({
     setBothDrag({ mode, startX: e.clientX, origin, startDay: origin.startDay, endDay: origin.endDay });
   };
 
+  const owner = ownerOf(task, memberProfiles);
+
   // Clicking the row's label area opens the activities modal. Bar drags are
   // not affected because drag handlers stopPropagation on the bar elements.
   const handleLabelClick = (e) => {
@@ -663,166 +691,152 @@ export function GanttRow({
     onClick();
   };
 
-  return (
-    <div
-      className="gantt-row task-row"
-      style={{ gridTemplateColumns: `${phaseWidth}px ${taskWidth}px ${totalWidth}px`, width: rowWidth }}
-    >
-      <div className="gantt-label gantt-label-phase" onClick={handleLabelClick}>
-        {phaseName ? (
-          <span className="phase-tag" title={phaseName}>{phaseName}</span>
-        ) : (
-          <span className="muted small">—</span>
-        )}
-      </div>
-      <div className="gantt-label" onClick={handleLabelClick} style={{ left: phaseWidth }}>
-        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <span style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</span>
-        </div>
-      </div>
-      <div ref={trackRef} className="gantt-track" style={{ height: 40, position: 'relative', userSelect: drag ? 'none' : 'auto' }}>
-        <div className="gantt-day-grid" />
+  // How far into the plan the work has actually got. The mockup fills the
+  // track from the left in the project's colour and leaves the rest as a
+  // tinted outline — one bar, not two stacked ones.
+  const donePct = task.status === 'done' ? 100 : Math.min(100, Math.max(0, task.progress || 0));
+  const color = project?.color || 'var(--c-doing)';
 
-        {planLeft != null && planWidth != null && (
+  // Clamp the bar to the window it is drawn in. A period filter moves the
+  // range's start forward, so a task that began before it has a NEGATIVE
+  // left — and an absolutely-positioned bar with a negative left is painted
+  // straight over the task names in the column to its left. Clamping keeps it
+  // inside the track and squares off the edge it was cut at, so a bar running
+  // out of the window reads as continuing rather than as starting there.
+  // The drag is unaffected: `dragOrigin` works from the task's real dates.
+  const trackPx = trackWidth > 0 ? trackWidth : null;
+  let drawLeft = planLeft;
+  let drawWidth = planWidth;
+  let cutStart = false;
+  let cutEnd = false;
+  if (drawLeft != null && drawWidth != null) {
+    if (drawLeft < 0) { drawWidth += drawLeft; drawLeft = 0; cutStart = true; }
+    if (trackPx != null && drawLeft + drawWidth > trackPx) {
+      drawWidth = trackPx - drawLeft;
+      cutEnd = true;
+    }
+    if (drawWidth <= 0) { drawLeft = null; drawWidth = null; }
+  }
+
+  return (
+    <div className={`gc-row${alt ? ' alt' : ''}`}>
+      <div className="gc-label" onClick={handleLabelClick}>
+        <span className="gc-dot" style={{ background: color }} />
+        <span className="gc-name" title={task.title}>{task.title}</span>
+        {owner && <Avatar id={owner.id} name={owner.name} photo={owner.photo} size={20} />}
+      </div>
+
+      <div ref={trackRef} className="gc-track" style={{ userSelect: drag ? 'none' : 'auto' }}>
+        {todayPct != null && (
+          <span className="gc-today" style={{ left: `${todayPct}%` }} aria-hidden="true" />
+        )}
+
+        {drawLeft != null && drawWidth != null && dayWidth > 0 && (
           <div
-            className={`gantt-bar plan${isMilestone ? ' milestone' : ''}`}
+            className={`gc-bar${isMilestone ? ' is-milestone' : ''}${cutStart ? ' cut-start' : ''}${cutEnd ? ' cut-end' : ''}`}
             style={{
-              left: planLeft,
-              width: planWidth,
-              background: project?.color || 'var(--c-doing)',
+              left: drawLeft,
+              width: drawWidth,   // a floor is `min-width` in CSS, in one place
+              // The tinted bed and its outline, in the project's own colour.
+              background: `color-mix(in srgb, ${color} 15%, transparent)`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 38%, transparent)`,
               cursor: drag?.mode === 'move' ? 'grabbing' : 'grab',
             }}
             onPointerDown={(e) => startDrag(e, 'move')}
             title={planLabel(span)}
             aria-label={`${task.title} — ${planLabel(span)}`}
           >
-            {/* Left resize handle */}
-            <div
-              className="gantt-handle gantt-handle-left"
-              onPointerDown={(e) => startDrag(e, 'resize-left')}
+            <div className="gc-handle gc-handle-l" onPointerDown={(e) => startDrag(e, 'resize-left')} />
+            <span
+              className="gc-fill"
+              style={{
+                width: `${donePct}%`,
+                background: task.status === 'done' ? 'var(--c-done)' : color,
+              }}
             />
-            <span style={{ pointerEvents: 'none', position: 'relative', zIndex: 1 }}>
-              {planWidth > 60 ? task.title : ''}
-            </span>
-            {/* Right resize handle */}
-            <div
-              className="gantt-handle gantt-handle-right"
-              onPointerDown={(e) => startDrag(e, 'resize-right')}
-            />
+            <div className="gc-handle gc-handle-r" onPointerDown={(e) => startDrag(e, 'resize-right')} />
           </div>
         )}
 
-        {actLeft != null && actWidth != null && (
-          <div
-            className={`gantt-bar actual ${isOverdue ? 'overdue' : isInProgress ? 'in-progress' : ''}`}
-            style={{ left: actLeft, width: actWidth }}
-            title={`Actual: ${task.actual?.startDate || '?'} → ${task.actual?.endDate || 'in progress'}`}
-          />
-        )}
-
-        {today >= range.min && today <= range.max && (
-          <div
-            className="gantt-today-line"
-            style={{ left: diffDays(range.min, today) * zoomConf.dayWidth + zoomConf.dayWidth / 2 - 1 }}
-          />
+        {/* The mockup's past-due marker: a small red triangle at the end of
+            an open bar whose date has gone. It says WHERE the overrun is, on
+            a chart where a late bar otherwise looks like any other. */}
+        {isOverdue && drawLeft != null && drawWidth != null && !cutEnd && (
+          <span
+            className="gc-late"
+            style={{ left: drawLeft + drawWidth }}
+            title={`Past due — planned to finish ${task.plan?.endDate}`}
+          >▲</span>
         )}
       </div>
     </div>
   );
 }
 
-function PageHeader({ zoom, setZoom, onNewTask, exportProps }) {
+function PageHeader({ onNewTask, exportProps, tagState, onClearTag }) {
   return (
-    <div className="page-header">
-      <div>
-        <h1 className="page-title">Gantt timeline</h1>
-        <p className="page-subtitle">Plan vs actual across all tasks with dates. Drag plan bars to adjust dates.</p>
-      </div>
-      <div className="page-actions">
-        {exportProps && <ExportButton {...exportProps} />}
-        {ZOOMS.map((z) => (
-          <button
-            key={z.id}
-            className={`chip ${zoom === z.id ? 'active' : ''}`}
-            onClick={() => setZoom(z.id)}
-          >{z.label}</button>
-        ))}
+    <>
+      {/* The chip strip is gone from this page, so a tag that came in on a
+          saved view is said HERE instead. It is still applied — dropping the
+          strip and the filter both would make the same saved view mean two
+          different things on the Board and on the chart (BUG-018). */}
+      <PageSubtitle>
+        {tagState?.active && (
+          <>
+            Filtered to <strong>#{tagState.active}</strong> ·{' '}
+            <button className="table-link" onClick={onClearTag}
+              style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+            >show all</button> ·{' '}
+          </>
+        )}
+        Plan against actual · drag a plan bar to move or resize it
+      </PageSubtitle>
+      <PageActions>
+        {exportProps && <ExportButton {...exportProps} className="cmd" />}
         {onNewTask && (
-          <button className="btn btn-primary btn-sm" onClick={onNewTask}>
-            + New task
+          <button className="cmd cmd-primary" onClick={onNewTask}>
+            <span className="cmd-icon">+</span>New task
           </button>
         )}
-      </div>
-    </div>
+      </PageActions>
+    </>
   );
 }
 
 // Date-period filter bar. Lets the user pin the Gantt window to a specific
 // period (presets or custom from/to). Tasks that don't overlap the window are
 // hidden, and the timeline is clamped to the chosen bounds.
-function GanttDateFilter({ from, to, setFrom, setTo, visibleCount }) {
-  const active = !!(from || to);
-
-  const applyPreset = (preset) => {
-    setFrom(preset.from);
-    setTo(preset.to);
-  };
-  const isPreset = (preset) => active && from === preset.from && to === preset.to;
-
-  const thisMonth   = presetThisMonth();
-  const thisQuarter = presetThisQuarter();
-  const next30      = presetNext30();
-  const thisYear    = presetThisYear();
-
+/**
+ * The period switch — the chart's own control, in its head.
+ *
+ * It replaced a five-chip filter bar above the chart. The four settings are
+ * `PERIODS`, and which one is lit is read back off the dates, so a window
+ * that came from a link or a reload still highlights correctly. A window
+ * somebody picked by hand lights nothing and says "Custom" rather than
+ * pretending to be one of the four.
+ */
+export function PeriodSwitch({ from, to, setFrom, setTo }) {
+  const period = periodOf(from, to);
   return (
-    <div className="toolbar gantt-date-filter">
-      <span className="small muted" style={{ fontWeight: 600 }}>Period:</span>
-
-      <button className={`chip ${!active ? 'active' : ''}`} onClick={() => { setFrom(''); setTo(''); }}>
-        All
-      </button>
-      <button className={`chip ${isPreset(thisMonth) ? 'active' : ''}`} onClick={() => applyPreset(thisMonth)}>
-        This month
-      </button>
-      <button className={`chip ${isPreset(thisQuarter) ? 'active' : ''}`} onClick={() => applyPreset(thisQuarter)}>
-        This quarter
-      </button>
-      <button className={`chip ${isPreset(next30) ? 'active' : ''}`} onClick={() => applyPreset(next30)}>
-        Next 30 days
-      </button>
-      <button className={`chip ${isPreset(thisYear) ? 'active' : ''}`} onClick={() => applyPreset(thisYear)}>
-        This year
-      </button>
-
-      <span className="gantt-date-inputs">
-        <label className="small muted">From</label>
-        <input
-          type="date"
-          className="input input-sm"
-          value={from}
-          max={to || undefined}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-        <label className="small muted">To</label>
-        <input
-          type="date"
-          className="input input-sm"
-          value={to}
-          min={from || undefined}
-          onChange={(e) => setTo(e.target.value)}
-        />
-      </span>
-
-      {active && (
-        <>
-          <button className="btn btn-sm btn-ghost" onClick={() => { setFrom(''); setTo(''); }}>
-            ✕ Clear
-          </button>
-          {typeof visibleCount === 'number' && (
-            <span className="small muted">{visibleCount} task{visibleCount === 1 ? '' : 's'} in range</span>
-          )}
-        </>
+    <span className="seg" role="group" aria-label="Period">
+      {PERIODS.map((p) => (
+        <button
+          key={p.id}
+          className={`seg-btn${period === p.id ? ' is-on' : ''}`}
+          aria-pressed={period === p.id}
+          onClick={() => { const r = p.range(); setFrom(r.from); setTo(r.to); }}
+        >
+          <Icon name={p.icon} size={14} />
+          <span className="seg-label">{p.label}</span>
+        </button>
+      ))}
+      {period === null && (
+        <span className="seg-btn is-on" title={`${from || '…'} → ${to || '…'}`}>
+          <Icon name="calendar" size={14} />
+          <span className="seg-label">Custom</span>
+        </span>
       )}
-    </div>
+    </span>
   );
 }
+

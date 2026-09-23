@@ -205,7 +205,9 @@ test('an icon-only row is given a name, a readable one is not', () => {
     'a bare ✕ means nothing to a screen reader');
 
   const dash = fs.readFileSync(path.join(componentsDir, 'DashboardView.jsx'), 'utf8');
-  assert.match(dash, /activateProps\(\(\) => setViewingTask\(task\)\)/,
+  // The row opens the EDITOR now, not the read-only activity list — one click,
+  // one destination. Still no explicit label: the row's own text is the name.
+  assert.match(dash, /activateProps\(\(\) => setEditingTask\(task\)\)/,
     'the queue row reads as a sentence already — a label would be noise');
 });
 

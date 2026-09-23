@@ -40,7 +40,8 @@ const card = (task) => mount(h(CardBody, {
   dragging: false,
 }));
 
-const chipIn = (ui) => ui.container.querySelector('.due-chip');
+// T-0148: the Board Explorer's own class. The chip is the same rule.
+const chipIn = (ui) => ui.container.querySelector('.bx-kc-due');
 
 test('a task due today says so', async () => {
   const ui = await card({ plan: { endDate: TODAY } });
@@ -73,7 +74,10 @@ test('a task due next month shows a date rather than a weekday', async () => {
 test('an overdue task says how many days late it is', async () => {
   const ui = await card({ plan: { endDate: inDays(-3) } });
   assert.equal(chipIn(ui).textContent.trim(), '3d late');
-  assert.ok(chipIn(ui).classList.contains('badge-soft-danger'));
+  // The Board Explorer puts the date in the card's footer rather than in a
+  // pill, so lateness is carried by `.late` (bold, red, mono) instead of the
+  // old badge tone class. Same claim, new place (T-0145).
+  assert.ok(chipIn(ui).classList.contains('late'));
   ui.unmount();
 });
 
@@ -82,12 +86,14 @@ test('an overdue task says how many days late it is', async () => {
 test('the bare Overdue badge is gone, and the card still marks itself overdue', async () => {
   const ui = await card({ plan: { endDate: inDays(-3) } });
   assert.doesNotMatch(text(ui.container), /\bOverdue\b/);
-  assert.ok(ui.container.querySelector('.task-card').classList.contains('overdue'),
+  // The mockup marks lateness on the DUE DATE — bold and red — rather than
+  // tinting the whole card, so that is where the styling keys off now.
+  assert.ok(chipIn(ui).classList.contains('late'),
     'the card styling must still key on lateness');
   ui.unmount();
 
   const fine = await card({ plan: { endDate: inDays(3) } });
-  assert.ok(!fine.container.querySelector('.task-card').classList.contains('overdue'));
+  assert.ok(!chipIn(fine).classList.contains('late'));
   fine.unmount();
 });
 

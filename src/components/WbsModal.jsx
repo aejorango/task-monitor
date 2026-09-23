@@ -63,8 +63,8 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
   // Task selected in the footer picker (for "+ Log activity" / "Edit task").
   const actionTask = projectTasks.find((t) => t.id === selectedTaskId) || null;
 
-  const STATUS_ICON  = { todo: '○', doing: '◉', done: '✓', blocked: '✕' };
-  const STATUS_CLS   = { todo: 'badge-soft-muted', doing: 'badge-soft-info', done: 'badge-soft-success', blocked: 'badge-soft-danger' };
+  const STATUS_ICON  = { todo: '○', doing: '◉', review: '◐', done: '✓', blocked: '✕' };
+  const STATUS_CLS   = { todo: 'badge-soft-muted', doing: 'badge-soft-info', review: 'badge-soft-info', done: 'badge-soft-success', blocked: 'badge-soft-danger' };
   const PRIO_CLS     = { high: 'badge-soft-danger', medium: 'badge-soft-warn', low: 'badge-soft-muted' };
 
   // ── CSV export ──────────────────────────────────────────────────────────

@@ -46,6 +46,8 @@ import { friendlyError } from '../services/access';
 import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
 import { activateProps } from '../hooks/useActivate';
+import { displayStatus, STATUS_TEXT } from '../services/boardScope';
+import { TASK_STATUSES } from '../services/taskStatus';
 
 // ── Small formatters ────────────────────────────────────────────────────────
 function daysBetween(fromYmd, toYmd) {
@@ -126,6 +128,9 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [subtaskInput, setSubtaskInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [actFilter, setActFilter] = useState('all');
+  // Which right-hand tab is open. The mockup's own MTABS order.
+  const [mtab, setMtab] = useState('details');
+  const [assignOpen, setAssignOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
 
   const selectedProject = projects.find((p) => p.id === projectId);
@@ -464,598 +469,525 @@ export default function TaskEditor({ task, projects, onClose }) {
     }
   };
 
-  return (
-    <>
-    <div className="modal-backdrop" {...modal.backdropProps}>
-      <div className="pe-modal" {...modal.dialogProps}>
+  // ── The five right-hand tabs, straight from the mockup's MTABS ───────────
+  const fileCount = attachments.length;
+  const mtabs = [
+    { key: 'details',  icon: '▤', label: 'Details' },
+    { key: 'ai',       icon: '✦', label: 'AI' },
+    { key: 'activity', icon: '⏱', label: 'Activity', count: activities.length ? String(activities.length) : '' },
+    { key: 'subitems', icon: '✓', label: 'Subitems', count: subtasks.length ? `${doneSubtasks}/${subtasks.length}` : '' },
+    { key: 'files',    icon: '◫', label: 'Files',    count: fileCount ? String(fileCount) : '' },
+  ];
 
-        {/* ── Hero header ── */}
-        <header className="pe-hero">
-          <span className="pe-hero-glow" aria-hidden="true" />
-          <div className="pe-hero-inner">
-            {/* Plain-text trail — no chips, no dots. The task editor's
-                breadcrumb is a path, not a set of filter pills. */}
-            <div className="pe-crumbs te-crumbs">
-              <span className="pe-crumb">{workspace?.name || 'Workspace'}</span>
-              <span className="pe-crumb-sep">/</span>
-              {selectedProject && (
-                <>
-                  <span className="pe-crumb">{selectedProject.name}</span>
-                  <span className="pe-crumb-sep">/</span>
-                </>
-              )}
-              {selectedPhase && (
-                <>
-                  <span className="pe-crumb">{selectedPhase.name}</span>
-                  <span className="pe-crumb-sep">/</span>
-                </>
-              )}
-              <span className="pe-crumb pe-crumb-accent">Task</span>
-            </div>
+  // What the status FIELD prints. The same function the Kanban card, the WBS
+  // and the Dashboard ask, so the editor cannot disagree with the board about
+  // whether this task is stuck — and it is why the field can read "Stuck",
+  // which is exactly what the mockup draws. The select underneath still writes
+  // the real status; this is what to print, not what to write.
+  const shown = displayStatus(
+    { ...task, status, plan: { startDate: planStart || null, endDate: planEnd || null } },
+    new Set(blockedBy.map((d) => d.id)),
+    today,
+  );
 
-            <div className="pe-hero-main">
-              <div className="pe-hero-id">
-                <div className="pe-mode">Edit task</div>
-                <div className="pe-name-row">
-                  <span className="pe-name-dot" style={{ background: accent, boxShadow: `0 0 0 3px ${accent}40` }} />
-                  <input
-                    className="pe-name-input"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Untitled task"
-                    aria-label="Task title"
-                  />
-                </div>
-                <div className="pe-pills">
-                  <span className={`pe-pill pe-pill-${statusMeta.tone}`}>● {statusMeta.label}</span>
-                  <span className={`pe-pill pe-pill-${priorityMeta.tone}`}>{priorityMeta.label}</span>
-                  {overdueDays !== null && overdueDays > 0 && (
-                    <span className="pe-pill pe-pill-red">⚠ {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue</span>
-                  )}
-                  {blockedBy.length > 0 && (
-                    <span className="pe-pill pe-pill-red">
-                      ⛔ blocked by {blockedBy.length} task{blockedBy.length === 1 ? '' : 's'}
-                    </span>
-                  )}
-                  {recurrence && <span className="pe-pill pe-pill-ghost">🔁 {recurrence.rule}</span>}
-                  <span className="pe-hero-meta">
-                    {`TSK-${String(task.id).slice(-4).toUpperCase()}`}
-                    {createdAt && ` · created ${createdAt.toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
-                    {task.requestedBy && ` by ${task.requestedBy}`}
-                  </span>
-                </div>
+  // "4 of 13" — this task's place among its project's tasks. A real number:
+  // the mockup's own count is of the board it was opened from, which the modal
+  // does not know, so it counts the project instead and ↑↓ walk that list.
+  const siblings = (selectedProject ? projectTasks : allTasks)
+    .slice()
+    .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  const myIndex = siblings.findIndex((t) => t.id === task.id);
+  const goSibling = (step) => {
+    const next = siblings[myIndex + step];
+    if (!next) return;
+    onClose();
+    requestOpenTask(next.id);
+  };
+
+  const tabPanel = () => {
+    if (mtab === 'ai') {
+      return (
+        <div className="te-ai-stack">
+          <TaskAiPanel
+            task={{ ...task, title, description, priority, tags, requestedBy }}
+            project={selectedProject}
+            subtasks={subtasks}
+            onAddSubtasks={(newSubs) => setSubtasks([...subtasks, ...newSubs])}
+          />
+        </div>
+      );
+    }
+
+    if (mtab === 'subitems') {
+      const stop = { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => e.stopPropagation() };
+      return (
+        <>
+        <div className="te-card" style={{ padding: '15px 17px' }}>
+          <div className="te-subs">
+            {subtasks.length === 0 && (
+              <p className="te-empty">No subitems yet. Break the work down so “done” is checkable.</p>
+            )}
+            {subtasks.map((s, i) => (
+              <div
+                key={s.id}
+                className="te-item te-sub"
+                {...activateProps(() => toggleSubtask(s.id), {
+                  label: `${s.done ? 'Mark not done' : 'Mark done'}: ${s.text}`,
+                })}
+              >
+                <span className={`te-box ${s.done ? 'is-done' : ''}`} aria-hidden="true">{s.done ? '✓' : ''}</span>
+                <span className={`te-sub-title ${s.done ? 'is-done' : ''}`}>{s.text}</span>
+                <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); moveSubtask(i, -1); }} disabled={i === 0} aria-label={`Move “${s.text}” up`}>↑</button>
+                <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); moveSubtask(i, 1); }} disabled={i === subtasks.length - 1} aria-label={`Move “${s.text}” down`}>↓</button>
+                <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); promoteSubtask(s); }} aria-label={`Promote “${s.text}” to a task`} title="Promote to a full task">↗</button>
+                <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); removeSubtask(s.id); }} aria-label={`Remove “${s.text}”`}>✕</button>
               </div>
-              <PresenceStack taskId={task.id} workspaceId={task.workspaceId} />
-              <button type="button" className="pe-close" onClick={onClose} aria-label="Close">✕</button>
-            </div>
+            ))}
+            <form className="te-sub-add" onSubmit={(e) => { e.preventDefault(); addSubtask(); }}>
+              <input
+                className="te-fld"
+                value={subtaskInput}
+                onChange={(e) => setSubtaskInput(e.target.value)}
+                placeholder="+ Add subitem"
+                aria-label="New subitem"
+              />
+            </form>
           </div>
-        </header>
+        </div>
 
-        {/* ── Body ── */}
-        <div className="pe-body">
-
-          {/* LEFT — the form */}
-          <div className="pe-main">
-
-            <div className="pe-kpis">
-              {kpis.map((k) => (
-                <div key={k.label} className={`pe-kpi pe-tone-${k.tone}`}>
-                  <div className="pe-kpi-label">{k.label}</div>
-                  <div className="pe-kpi-value">{k.value}</div>
-                  <div className="pe-kpi-delta">{k.delta}</div>
-                </div>
+        {/* A promoted subtask left the checklist but not the task (T-0141) —
+            so it is listed here, under the same heading, and still counts
+            towards the rollup above. */}
+        {tree.hasChildren && (
+          <div className="te-card" style={{ padding: '15px 17px', marginTop: 14 }}>
+            <div className="te-children-head">
+              <span className="te-lbl" style={{ margin: 0 }}>
+                Inside this task · {tree.childrenDone}/{tree.childCount} done
+              </span>
+              <span className="te-fsize">
+                {tree.hours.toFixed(1)}h logged across all of it
+              </span>
+            </div>
+            <div className="te-subs">
+              {tree.children.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="te-item te-child"
+                  // Close this editor and ask whatever is on screen to open the
+                  // child — the same two steps search results and the inbox
+                  // use, so all three behave identically.
+                  onClick={() => { onClose(); requestOpenTask(c.id); }}
+                  title={`Open “${c.title}”`}
+                >
+                  <span className="te-item-title">{c.title}</span>
+                  <span className="te-state">{STATUS_META[c.status]?.label || c.status}</span>
+                  <span className="te-fsize">{(c.hours || 0).toFixed(1)}h</span>
+                </button>
               ))}
             </div>
+          </div>
+        )}
+        </>
+      );
+    }
 
-            {/* Where this task lives — workspace → project → phase → task */}
-            <section className="pe-card">
-              <h4 className="pe-sect"><span className="pe-sect-mark">⌗</span>Where this task lives</h4>
-
-              <div className="pe-tree-row">
-                <span className="pe-kind pe-kind-ws">WS</span>
-                <div className="pe-tree-body">
-                  <div className="pe-tree-name">{workspace?.name || 'Workspace'}</div>
-                  <div className="pe-tree-meta">
-                    {(workspace?.members || []).length} member{(workspace?.members || []).length === 1 ? '' : 's'} · {wsProjectCount} project{wsProjectCount === 1 ? '' : 's'}
-                  </div>
-                </div>
+    if (mtab === 'files') {
+      return (
+        <div className="te-card" style={{ padding: '15px 17px' }}>
+          <div className="te-subs">
+            {attachments.length === 0 && (
+              <p className="te-empty">Nothing attached. Files added to an activity entry show up here.</p>
+            )}
+            {attachments.map((f, i) => (
+              <div key={`${f.url}-${i}`} className="te-item">
+                <span className="te-ftype">{fileKind(f)}</span>
+                <a className="te-item-title" href={f.url} target="_blank" rel="noreferrer">{f.name || f.url}</a>
+                {f._date && <span className="te-fsize">{fmtDay(f._date)}</span>}
+                <AddToNotebookButton url={f.url} project={selectedProject} workspace={workspace} />
               </div>
+            ))}
+            <p className="te-hint" style={{ marginTop: 4 }}>
+              Attach files when you log an activity — that keeps every file next to the work it came from.
+            </p>
+          </div>
+        </div>
+      );
+    }
 
-              {selectedProject ? (
-                <div className="pe-tree-row pe-tree-proj">
-                  <span className="pe-kind pe-kind-proj">PROJ</span>
-                  <div className="pe-tree-body">
-                    <div className="pe-tree-name">{selectedProject.name}</div>
-                    <div className="pe-tree-meta">
-                      {projectTasks.length} task{projectTasks.length === 1 ? '' : 's'} · {projectDone} done
-                    </div>
-                  </div>
-                  <TreeBar pct={projectTasks.length ? Math.round(projectDone / projectTasks.length * 100) : 0} color={selectedProject.color || 'var(--c-blue-deep)'} />
-                </div>
-              ) : (
-                <div className="pe-tree-row pe-tree-proj">
-                  <span className="pe-kind pe-kind-proj">PROJ</span>
-                  <div className="pe-tree-body">
-                    <div className="pe-tree-name">No project</div>
-                    <div className="pe-tree-meta">Pick one below to file this task.</div>
-                  </div>
-                </div>
-              )}
+    if (mtab === 'activity') {
+      return (
+        <div>
+          <div className="te-log-head">
+            <span className="te-log-icon" aria-hidden="true">⏱</span>
+            <span className="te-log-title">Activity log</span>
+            <span className="te-count" style={{ marginLeft: 'auto' }}>{activities.length}</span>
+          </div>
 
-              {selectedPhase && (
-                <div className="pe-tree-row pe-tree-phase">
-                  <span className="pe-kind pe-kind-phase">PHASE</span>
-                  <div className="pe-tree-body">
-                    <div className="pe-tree-name">{selectedPhase.name}</div>
-                    <div className="pe-tree-meta">
-                      {phaseTasks.length} task{phaseTasks.length === 1 ? '' : 's'} · {phaseDone} done
-                    </div>
-                  </div>
-                  <TreeBar pct={phaseTasks.length ? Math.round(phaseDone / phaseTasks.length * 100) : 0} color="var(--c-emerald)" />
-                </div>
-              )}
+          <div className="te-filters">
+            {ACT_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`te-chip${actFilter === f.key ? ' is-on' : ''}`}
+                onClick={() => setActFilter(f.key)}
+              >{f.label}</button>
+            ))}
+          </div>
 
-              <div className={`pe-tree-row pe-tree-current ${selectedPhase ? 'te-tree-task' : 'pe-tree-phase'}`}>
-                <span className="pe-kind pe-kind-task">TASK</span>
-                <div className="pe-tree-body">
-                  <div className="pe-tree-name">{title.trim() || 'Untitled task'}</div>
-                  <div className="pe-tree-meta">
-                    this task · {loggedHours.toFixed(1)}h logged · {priorityMeta.label.toLowerCase()}
-                    {explainRollup(tree) && <> · {explainRollup(tree)}</>}
-                  </div>
-                </div>
-                <TreeBar pct={progressPct} color="var(--c-accent)" />
+          <div className="te-log-list">
+            {shownActivities.length === 0 ? (
+              <p className="te-empty">
+                {activities.length === 0 ? 'Nothing logged yet.' : 'Nothing matches this filter.'}
+              </p>
+            ) : (
+              <ActivityTimeline activities={shownActivities} onSelect={setEditingActivity} />
+            )}
+          </div>
 
-                {tree.hasChildren && (
-                  <div className="pe-children">
-                    <div className="pe-children-head">
-                      <span className="pe-children-title">
-                        Inside this task · {tree.childrenDone}/{tree.childCount} done
-                      </span>
-                      <span className="muted small">
-                        {tree.hours.toFixed(1)}h logged across all of it
-                      </span>
-                    </div>
-                    <ul className="pe-children-list">
-                      {tree.children.map((c) => (
-                        <li key={c.id}>
-                          <button
-                            type="button"
-                            className="pe-child"
-                            // Close this editor and ask whatever is on screen
-                            // to open the child — the same two steps search
-                            // results and the inbox use, so all three behave
-                            // identically.
-                            onClick={() => { onClose(); requestOpenTask(c.id); }}
-                            title={`Open “${c.title}”`}
-                          >
-                            <span className={`pe-child-dot is-${c.status}`} aria-hidden="true" />
-                            <span className="pe-child-title">{c.title}</span>
-                            <span className="pe-child-meta">
-                              {STATUS_META[c.status]?.label || c.status}
-                              {c.totalHoursLogged > 0 && ` · ${c.totalHoursLogged}h`}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+          <LogComposer
+            userId={userId}
+            task={{ ...task, title: title.trim() || task.title, projectId: projectId || null, phaseId: phaseId || null, status }}
+          />
+        </div>
+      );
+    }
+
+    // Details
+    return (
+      <>
+        <div className="te-card" style={{ padding: '4px 18px' }}>
+          <div className="te-row">
+            <span className="te-lbl">Phase</span>
+            <span className="te-row-val">
+              <select value={phaseId} onChange={(e) => setPhaseId(e.target.value)} aria-label="Phase">
+                <option value="">— none —</option>
+                {(selectedProject?.phases || []).map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+              </select>
+            </span>
+          </div>
+          <div className="te-row">
+            <span className="te-lbl">Priority</span>
+            <span className="te-row-val">
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Priority">
+                {Object.entries(PRIORITY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+              </select>
+            </span>
+          </div>
+          <div className="te-row">
+            <label className="te-lbl" htmlFor="te-estimate">Estimated hours</label>
+            <span className="te-row-val is-strong">
+              <input
+                id="te-estimate"
+                type="number" min="0" step="0.25" value={estimate}
+                onChange={(e) => setEstimate(e.target.value)}
+                placeholder="Leave blank if you have not estimated it"
+              />
+            </span>
+          </div>
+          <div className="te-row">
+            <span className="te-lbl">Logged</span>
+            <span className="te-row-val is-strong">{formatHours(loggedHours)}</span>
+          </div>
+          <div className="te-row">
+            <span className="te-lbl">Remaining</span>
+            <span className="te-row-val is-strong">
+              {effort.state === 'none' ? '—' : formatVariance(effort)}
+            </span>
+          </div>
+          <div className="te-row">
+            <span className="te-lbl">Progress</span>
+            <span className="te-row-val">
+              {progressPct}%
+              {/* Where the number came from. A percentage that moved for an
+                  invisible reason is a percentage nobody trusts — and this one
+                  counts the checklist AND anything promoted out of it. */}
+              {explainRollup(tree) && <> · {explainRollup(tree)}</>}
+            </span>
+          </div>
+          <div className="te-row">
+            <span className="te-lbl">Requested by</span>
+            <span className="te-row-val">
+              <input value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="—" aria-label="Requested by" />
+            </span>
+          </div>
+          <div className="te-row">
+            <span className="te-lbl">Actual</span>
+            <span className="te-row-val">
+              <input type="date" value={actualStart} onChange={(e) => setActualStart(e.target.value)} aria-label="Actual start" />
+              <input type="date" value={actualEnd} onChange={(e) => setActualEnd(e.target.value)} aria-label="Actual end" />
+            </span>
+          </div>
+        </div>
+
+
+        <div className="te-card" style={{ padding: '15px 18px', marginTop: 14 }}>
+          <span className="te-lbl">Dependencies &amp; relations</span>
+          {dependsOnTasks.length === 0 && blocksTasks.length === 0 && links.length === 0 && (
+            <p className="te-empty">Nothing linked yet.</p>
+          )}
+          <div className="te-subs">
+            {dependsOnTasks.map((d) => (
+              <div key={d.id} className="te-item">
+                <span className="te-rel tone-red">Blocked by</span>
+                <span className="te-item-title">{d.title}</span>
+                <span className="te-state">{STATUS_TEXT[d.status] || d.status}</span>
+                <button type="button" className="te-iconbtn te-sub-btn" onClick={() => removeDep(d.id)} aria-label={`Remove dependency ${d.title}`}>✕</button>
               </div>
-            </section>
-
-            {/* Details */}
-            <section className="pe-card">
-              <h4 className="pe-sect"><span className="pe-sect-mark">◈</span>Details</h4>
-
-              <div className="pe-grid3">
-                <div>
-                  <label className="pe-lbl" htmlFor="te-project">Project</label>
-                  <select
-                    id="te-project"
-                    className="select pe-input"
-                    value={projectId}
-                    onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }}
-                  >
-                    <option value="">— None —</option>
-                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="pe-lbl" htmlFor="te-phase">Phase</label>
-                  <select
-                    id="te-phase"
-                    className="select pe-input"
-                    value={phaseId}
-                    onChange={(e) => setPhaseId(e.target.value)}
-                    disabled={!selectedProject}
-                  >
-                    <option value="">— None —</option>
-                    {selectedProject?.phases?.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="pe-lbl" htmlFor="te-status">Status</label>
-                  <select id="te-status" className="select pe-input" value={status} onChange={(e) => setStatus(e.target.value)}>
-                    <option value="todo">To do</option>
-                    <option value="doing">In progress</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="pe-lbl" htmlFor="te-priority">Priority</label>
-                  <select id="te-priority" className="select pe-input" value={priority} onChange={(e) => setPriority(e.target.value)}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="pe-lbl" htmlFor="te-requested">Requested by</label>
-                  <input id="te-requested" className="input pe-input" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="—" />
-                </div>
-                <div>
-                  <span className="pe-lbl">Progress</span>
-                  <div className="pe-fld pe-fld-strong">
-                    {progressPct}%
-                    {completionPct !== null && (
-                      <span className="pe-fld-note">· from {doneSubtasks}/{subtasks.length} subtasks</span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="pe-lbl" htmlFor="te-plan-start">Plan start</label>
-                  <input id="te-plan-start" type="date" className="input pe-input" value={planStart} onChange={(e) => setPlanStart(e.target.value)} />
-                </div>
-                <div>
-                  <label className="pe-lbl" htmlFor="te-plan-end">Plan end</label>
-                  <input
-                    id="te-plan-end"
-                    type="date"
-                    className={`input pe-input${overdueDays !== null && overdueDays > 0 ? ' te-input-danger' : ''}`}
-                    value={planEnd}
-                    onChange={(e) => setPlanEnd(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="pe-lbl" htmlFor="te-estimate">Estimated hours</label>
-                  <input
-                    id="te-estimate"
-                    type="number" min="0" step="0.25"
-                    className="input pe-input"
-                    value={estimate}
-                    placeholder="e.g. 8"
-                    onChange={(e) => setEstimate(e.target.value)}
-                  />
-                  <span className="pe-fld-note">Leave blank if you have not estimated it</span>
-                </div>
-                <div>
-                  <span className="pe-lbl">Logged hours</span>
-                  <div className="pe-fld pe-fld-strong">
-                    {loggedHours.toFixed(1)}h
-                    <span className="pe-fld-note">· {activities.length} session{activities.length === 1 ? '' : 's'}</span>
-                  </div>
-                  {/* The other half of plan-versus-actual: the app compared
-                      dates and never effort, so it could say a task finished
-                      late but never that it cost three times what it should
-                      (T-0137). */}
-                  {effort.state !== 'none' && (
-                    <div className={`pe-fld te-variance is-${effort.state}`}>
-                      {formatVariance(effort)}
-                      <span className="pe-fld-note">· against {formatHours(effort.estimate)}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="pe-lbl" htmlFor="te-actual-start">Actual start</label>
-                  <input id="te-actual-start" type="date" className="input pe-input" value={actualStart} onChange={(e) => setActualStart(e.target.value)} />
-                </div>
-                <div>
-                  <label className="pe-lbl" htmlFor="te-actual-end">Actual end</label>
-                  <input id="te-actual-end" type="date" className="input pe-input" value={actualEnd} onChange={(e) => setActualEnd(e.target.value)} />
-                </div>
-                <div>
-                  <span className="pe-lbl">Due</span>
-                  <div className={`pe-fld${overdueDays !== null && overdueDays > 0 ? ' pe-fld-danger' : ''}`}>
-                    {planEnd ? fmtDay(planEnd) : '— no due date'}
-                    {overdueDays !== null && overdueDays > 0 && <span className="pe-fld-note">· overdue</span>}
-                  </div>
-                </div>
+            ))}
+            {blocksTasks.map((b) => (
+              <div key={b.id} className="te-item">
+                <span className="te-rel tone-amber">Blocks</span>
+                <span className="te-item-title">{b.title}</span>
+                <span className="te-state">{STATUS_TEXT[b.status] || b.status}</span>
               </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <DepPicker candidates={dependsOnCandidates} onAdd={addDep} />
+          </div>
+          {blockedBy.length > 0 && (
+            <p className="te-bottleneck" style={{ marginTop: 10 }}>
+              <span aria-hidden="true">⚠</span>
+              <span>Blocked by {blockedBy.length} unfinished {blockedBy.length === 1 ? 'task' : 'tasks'}.</span>
+            </p>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <LinksEditor
+              links={links}
+              onChange={setLinks}
+              candidates={allTasks.filter((t) => t.id !== task.id)}
+            />
+          </div>
+        </div>
 
-              <div className="pe-block">
-                <TaskAssigneeSection
-                  project={selectedProject}
-                  assignedTo={assignedTo}
-                  assignedToExternal={assignedToExternal}
-                  onChange={({ assignedTo: a, assignedToExternal: e }) => {
-                    setAssignedTo(a);
-                    setAssignedToExternal(e);
-                  }}
-                />
-              </div>
+        <div className="te-card" style={{ padding: '15px 18px', marginTop: 14 }}>
+          <span className="te-lbl">Tags</span>
+          <div className="te-tags">
+            {tags.map((t) => (
+              <button key={t} type="button" className="te-tag" onClick={() => removeTag(t)} aria-label={`Remove tag ${t}`}>
+                #{t} <span aria-hidden="true">✕</span>
+              </button>
+            ))}
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); addTag(tagInput); }}>
+            <input
+              className="te-fld" value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              placeholder="+ Add tag" aria-label="New tag" list="te-tag-suggestions"
+            />
+            <datalist id="te-tag-suggestions">
+              {tagSuggestions.map((t) => <option key={t} value={t} />)}
+            </datalist>
+          </form>
+        </div>
 
-              <div className="pe-block">
-                <span className="pe-lbl">Description</span>
-                <MarkdownEditor value={description} onChange={setDescription} rows={4} placeholder="What is this task about?" />
-              </div>
-
-              <div className="pe-block">
-                <span className="pe-lbl">Tags</span>
-                <div className="tag-input-wrap">
-                  {tags.map((t) => (
-                    <span key={t} className="tag-pill">
-                      #{t} <button type="button" onClick={() => removeTag(t)} aria-label="Remove">×</button>
-                    </span>
-                  ))}
-                  <input
-                    className="tag-input"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
-                      if (e.key === 'Backspace' && !tagInput && tags.length) {
-                        e.preventDefault(); removeTag(tags[tags.length - 1]);
-                      }
-                    }}
-                    placeholder={tags.length === 0 ? 'Type a tag and press Enter…' : ''}
-                  />
-                </div>
-                {tagSuggestions.length > 0 && (
-                  <div className="tag-suggestions">
-                    {tagSuggestions.slice(0, 6).map((s) => (
-                      <button key={s} type="button" className="tag-suggest-item" onClick={() => addTag(s)}>
-                        #{s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Subtasks */}
-            <section className="pe-card">
-              <div className="te-sect-head">
-                <h4 className="pe-sect"><span className="pe-sect-mark">☑</span>Subtasks</h4>
-                <span className="pe-side-count">{doneSubtasks}/{subtasks.length}</span>
-                <div className="pe-bar te-sub-bar">
-                  <span style={{ width: `${completionPct ?? 0}%`, background: 'var(--c-accent)' }} />
-                </div>
-                <span className="te-sect-pct">{completionPct ?? 0}%</span>
-              </div>
-
-              <div className="te-subs">
-                {subtasks.map((s, i) => (
-                  <div
-                    key={s.id}
-                    className={`te-sub${s.done ? ' is-done' : ''}`}
-                    {...activateProps(() => toggleSubtask(s.id), {
-                      label: `${s.done ? 'Mark not done' : 'Mark done'}: ${s.text}`,
-                    })}
-                  >
-                    <span className="te-sub-box" aria-hidden="true">{s.done ? '✓' : ''}</span>
-                    <span className="te-sub-text">{s.text}</span>
-                    <span className="te-sub-ctl" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="btn btn-sm btn-ghost" title="Promote to its own task" onClick={() => promoteSubtask(s)}>↗</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, -1)} disabled={i === 0} aria-label="Move up">↑</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => moveSubtask(i, 1)} disabled={i === subtasks.length - 1} aria-label="Move down">↓</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeSubtask(s.id)} aria-label="Remove">✕</button>
-                    </span>
-                  </div>
-                ))}
-
-                <div className="te-sub-add">
-                  <span className="te-sub-add-mark" aria-hidden="true">+</span>
-                  <input
-                    className="te-sub-add-input"
-                    value={subtaskInput}
-                    onChange={(e) => setSubtaskInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask(); } }}
-                    placeholder="Add a subtask…"
-                  />
-                  <button type="button" className="btn btn-sm" onClick={addSubtask} disabled={!subtaskInput.trim()}>Add</button>
-                </div>
-              </div>
-            </section>
-
-            {/* Dependencies & relations */}
-            <section className="pe-card">
-              <h4 className="pe-sect"><span className="pe-sect-mark">🔗</span>Dependencies &amp; relations</h4>
-
-              <div className="pe-card-row">
-                <div>
-                  <span className="pe-lbl">This task depends on</span>
-                  {dependsOnTasks.length === 0 ? (
-                    <p className="muted small">Nothing. This task can start anytime.</p>
-                  ) : (
-                    <div className="te-deps">
-                      {dependsOnTasks.map((d) => (
-                        <div key={d.id} className="te-dep">
-                          <span className={`te-dep-tag${d.status === 'done' ? ' is-done' : ''}`}>
-                            {d.status === 'done' ? 'DONE' : 'BLOCKED BY'}
-                          </span>
-                          <span className="te-dep-title">{d.title}</span>
-                          <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeDep(d.id)} aria-label="Remove">✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <DepPicker candidates={dependsOnCandidates} onAdd={addDep} />
-                  {blockedBy.length > 0 && (
-                    <p className="te-warn">
-                      ⚠ Blocked by {blockedBy.length} incomplete dependenc{blockedBy.length === 1 ? 'y' : 'ies'}.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <span className="pe-lbl">This task blocks</span>
-                  {blocksTasks.length === 0 ? (
-                    <p className="muted small">Nothing downstream is waiting on this.</p>
-                  ) : (
-                    <div className="te-deps">
-                      {blocksTasks.map((d) => (
-                        <div key={d.id} className="te-dep">
-                          <span className="te-dep-tag is-blocks">BLOCKS</span>
-                          <span className="te-dep-title">{d.title}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pe-block">
-                <LinksEditor
-                  links={links}
-                  onChange={setLinks}
-                  candidates={allTasks.filter((t) => t.id !== task.id)}
-                />
-              </div>
-            </section>
-
-            {/* Recurrence + project custom fields */}
-            <section className="pe-card">
-              <h4 className="pe-sect"><span className="pe-sect-mark">🔁</span>Recurrence &amp; custom fields</h4>
-              <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
+        <div className="te-card" style={{ padding: '15px 18px', marginTop: 14 }}>
+          <span className="te-lbl">Repeats</span>
+          <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
+          {(selectedProject?.customFields || []).length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <span className="te-lbl">{selectedProject.name} fields</span>
               <CustomFieldsForm
                 fields={selectedProject?.customFields || []}
                 values={customValues}
                 onChange={setCustomValues}
               />
-            </section>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
 
-            {/* Attachments — derived from this task's activity attachments */}
-            <section className="pe-card">
-              <h4 className="pe-sect">
-                <span className="pe-sect-mark">📎</span>Attachments
-                <span className="pe-side-count">{attachments.length}</span>
-              </h4>
-              {attachments.length === 0 ? (
-                <p className="muted small">No files yet. Attach URLs when you log an activity and they surface here.</p>
-              ) : (
-                <div className="te-atts">
-                  {attachments.map((f, i) => (
-                    <div key={i} className="te-att-row">
-                      <a className="te-att" href={f.url} target="_blank" rel="noreferrer" title={f.name || f.url}>
-                        <span className="te-att-ico">{fileKind(f)}</span>
-                        <span className="te-att-body">
-                          <span className="te-att-name">{f.name || f.url}</span>
-                          <span className="te-att-meta">
-                            {f.size ? `${Math.round(f.size / 1024)} KB · ` : ''}{fmtDay(f._date)}
-                          </span>
-                        </span>
-                      </a>
-                      <AddToNotebookButton url={f.url} project={selectedProject} workspace={workspace} />
-                    </div>
-                  ))}
+  return (
+    <>
+    <div className="te-backdrop" {...modal.backdropProps}>
+      <div className="te-modal" {...modal.dialogProps}>
+
+        {/* nav strip */}
+        <div className="te-nav">
+          <button type="button" className="te-back" onClick={onClose}>← Back to items</button>
+          <span className="te-nav-sep" aria-hidden="true" />
+          <span className="te-pos">{myIndex >= 0 ? `${myIndex + 1} of ${siblings.length}` : `${siblings.length} items`}</span>
+          <div className="te-nav-actions">
+            <PresenceStack taskId={task.id} workspaceId={task.workspaceId} />
+            <button type="button" className="te-iconbtn" onClick={() => goSibling(-1)} disabled={myIndex <= 0} aria-label="Previous task">↑</button>
+            <button type="button" className="te-iconbtn" onClick={() => goSibling(1)} disabled={myIndex < 0 || myIndex >= siblings.length - 1} aria-label="Next task">↓</button>
+            <button type="button" className="te-iconbtn te-x" onClick={onClose} aria-label="Close">✕</button>
+          </div>
+        </div>
+
+        {/* primary block */}
+        <div className="te-primary">
+          <div className="te-primary-top">
+            <span className="te-kind" aria-hidden="true">✓</span>
+            <span className="te-code">TASK {String(task.id).slice(0, 6).toUpperCase()}</span>
+            <div className="te-primary-actions">
+              <button type="button" className="te-pill te-pill-ghost" onClick={duplicate} disabled={saving || !task.id}>Duplicate</button>
+              <button type="button" className="te-pill te-pill-primary" onClick={save} disabled={saving || !title.trim()}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          <input
+            className="te-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Untitled task"
+            aria-label="Task title"
+          />
+
+          <div className="te-meta">
+            {/* Accountable opens the real picker on Details: this task can have
+                several assignees, which a single select cannot say. */}
+            {/* The Details tab no longer carries an Assignees card (removed on
+                request), so the picker lives HERE — on the field that names the
+                person. Taking the section away without re-homing it would have
+                left the task editor unable to assign anybody. */}
+            <div className="te-ef te-ef-pop">
+              <button
+                type="button"
+                className="te-ef-btn"
+                onClick={() => setAssignOpen((o) => !o)}
+                aria-expanded={assignOpen}
+              >
+                <span className="te-ef-col">
+                  <span className="te-lbl">Accountable</span>
+                  <span className="te-ev">
+                    {assignedTo.length || assignedToExternal.length
+                      ? memberLabel(assignedTo[0], workspace?.memberProfiles || {}) || assignedToExternal[0] || 'Assigned'
+                      : 'Unassigned'}
+                    {(assignedTo.length + assignedToExternal.length) > 1 && ` +${assignedTo.length + assignedToExternal.length - 1}`}
+                    <span className="te-ec" aria-hidden="true">⌄</span>
+                  </span>
+                </span>
+              </button>
+              {assignOpen && (
+                <div className="te-pop">
+                  <TaskAssigneeSection
+                    project={selectedProject}
+                    assignedTo={assignedTo}
+                    assignedToExternal={assignedToExternal}
+                    onChange={({ assignedTo: a, assignedToExternal: e }) => {
+                      setAssignedTo(a);
+                      setAssignedToExternal(e);
+                    }}
+                  />
                 </div>
               )}
-            </section>
+            </div>
 
-            {/* Comments */}
-            <section className="pe-card">
-              <h4 className="pe-sect"><span className="pe-sect-mark">💬</span>Comments</h4>
+            <span className="te-meta-sep" aria-hidden="true" />
+
+            <label className="te-ef">
+              <span className="te-ef-col">
+                <span className="te-lbl">Due from</span>
+                <span className="te-ev">{planStart ? fmtDay(planStart) : '—'}<span className="te-ec" aria-hidden="true">⌄</span></span>
+              </span>
+              <input type="date" value={planStart} onChange={(e) => setPlanStart(e.target.value)} aria-label="Planned start" />
+            </label>
+            <span className="te-arrow" aria-hidden="true">→</span>
+            <label className="te-ef">
+              <span className="te-ef-col">
+                <span className="te-lbl">Due to</span>
+                <span className="te-ev" style={overdueDays !== null ? { color: 'var(--c-danger-ink)' } : undefined}>
+                  {planEnd ? fmtDay(planEnd) : '—'}
+                  {overdueDays !== null && ` · ${overdueDays}d late`}
+                  <span className="te-ec" aria-hidden="true">⌄</span>
+                </span>
+              </span>
+              <input type="date" value={planEnd} onChange={(e) => setPlanEnd(e.target.value)} aria-label="Planned end" />
+            </label>
+
+            <span className="te-meta-sep" aria-hidden="true" />
+
+            <label className="te-ef">
+              <span className="te-ef-col">
+                <span className="te-lbl">Status</span>
+                <span className={`te-ev tone-ink-${shown.tone}`}>{shown.label}<span className="te-ec" aria-hidden="true">⌄</span></span>
+              </span>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+                {TASK_STATUSES.map((s) => <option key={s} value={s}>{STATUS_TEXT[s]}</option>)}
+              </select>
+            </label>
+
+            <span className="te-meta-sep" aria-hidden="true" />
+
+            <label className="te-ef">
+              <span className="te-ef-col">
+                <span className="te-lbl">Project</span>
+                <span className="te-ev">{selectedProject?.name || 'No project'}<span className="te-ec" aria-hidden="true">⌄</span></span>
+              </span>
+              <select
+                value={projectId}
+                onChange={(e) => { setProjectId(e.target.value); setPhaseId(''); }}
+                aria-label="Project"
+              >
+                <option value="">— none —</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* body */}
+        <div className="te-body">
+          <div className="te-left">
+            <div className="te-desc-block te-quiet">
+              <span className="te-lbl">Description</span>
+              <MarkdownEditor
+                value={description}
+                onChange={setDescription}
+                rows={4}
+                placeholder="What is this task about?"
+              />
+            </div>
+
+            <div className="te-comments te-quiet">
+              <div className="te-comments-head">
+                <span className="te-lbl" style={{ margin: 0 }}>Comments</span>
+              </div>
               <CommentsThread
                 task={task}
                 userId={userId}
                 members={workspace?.members || []}
                 memberProfiles={workspace?.memberProfiles || {}}
               />
-            </section>
-
-            {/* AI */}
-            <section className="pe-card">
-              <h4 className="pe-sect"><span className="pe-sect-mark">✨</span>AI assist</h4>
-              <TaskAiPanel
-                task={{ ...task, title, description, priority, tags, requestedBy }}
-                project={selectedProject}
-                subtasks={subtasks}
-                onAddSubtasks={(newSubs) => setSubtasks([...subtasks, ...newSubs])}
-              />
-            </section>
+            </div>
           </div>
 
-          {/* RIGHT — this task's activity log */}
-          <aside className="pe-side">
-            <div className="pe-side-head">
-              <div className="pe-side-title">
-                <span>Activity log</span>
-                <span className="pe-side-count">{shownActivities.length} entries</span>
-              </div>
-
-              <div className="pe-side-stats">
-                <div className="pe-sstat pe-tone-navy">
-                  <div className="pe-kpi-label">Logged</div>
-                  <div className="pe-sstat-value">{loggedHours.toFixed(1)}h</div>
-                </div>
-                <div className="pe-sstat pe-tone-amber">
-                  <div className="pe-kpi-label">Sessions</div>
-                  <div className="pe-sstat-value">{activities.length}</div>
-                </div>
-                <div className="pe-sstat pe-tone-red">
-                  <div className="pe-kpi-label">Blocked</div>
-                  <div className="pe-sstat-value">{blockedCount}</div>
-                </div>
-              </div>
-
-              <div className="pe-side-filters">
-                {ACT_FILTERS.map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    className={`pe-chip${actFilter === f.key ? ' is-on' : ''}`}
-                    onClick={() => setActFilter(f.key)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+          <div className="te-right">
+            <div className="te-tabs" role="tablist" aria-label="Task detail">
+              {mtabs.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={mtab === t.key}
+                  className={`te-tab${mtab === t.key ? ' is-on' : ''}`}
+                  onClick={() => setMtab(t.key)}
+                >
+                  <span className="te-tab-icon" aria-hidden="true">{t.icon}</span>
+                  <span>{t.label}</span>
+                  {t.count && <span className="te-tab-count">{t.count}</span>}
+                </button>
+              ))}
             </div>
-
-            <LogComposer
-              userId={userId}
-              task={{ ...task, title: title.trim() || task.title, projectId: projectId || null, phaseId: phaseId || null, status }}
-            />
-
-            <div className="pe-side-scroll">
-              {shownActivities.length === 0 ? (
-                <div className="pe-side-empty">
-                  <div className="pe-side-empty-icon">☰</div>
-                  <p>{activities.length === 0 ? 'No activities logged yet.' : 'Nothing matches this filter.'}</p>
-                  {activities.length === 0 && <p className="small">Log the first one above — it stamps hours onto this task.</p>}
-                </div>
-              ) : (
-                <ActivityTimeline activities={shownActivities} onSelect={setEditingActivity} />
-              )}
-            </div>
-          </aside>
+            <div className="te-panel">{tabPanel()}</div>
+          </div>
         </div>
 
-        {/* ── Footer ── */}
-        <footer className="pe-foot">
-          <button type="button" className="btn btn-danger btn-sm" onClick={remove} disabled={saving}>Delete task</button>
-          <button type="button" className="btn btn-sm" onClick={saveAsTemplate} disabled={saving || !title.trim()}>Save as template</button>
-          {/* "Do that again", decided after the fact — the case templates do
-              not cover (T-0139). */}
-          <button
-            type="button" className="btn btn-sm"
-            onClick={duplicate}
-            disabled={saving || !task.id}
-            title={`Make another task like “${task.title}”`}
-          >Duplicate</button>
-          {updatedAt && (
-            <span className="pe-foot-note">Last edited {updatedAt.toLocaleString('en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-          )}
-          <div className="pe-foot-spacer" />
-          <button type="button" className="btn" onClick={onClose} disabled={saving}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={save} disabled={saving || !title.trim()}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </footer>
+        {/* footer — the app's own actions; the mockup draws no slot for them */}
+        <div className="te-foot">
+          <button type="button" className="te-pill te-pill-danger" onClick={remove} disabled={saving}>Delete task</button>
+          <button type="button" className="te-pill te-pill-ghost" onClick={saveAsTemplate} disabled={saving || !title.trim()}>Save as template</button>
+          <span className="te-foot-spacer" />
+          <span className="te-foot-note">
+            {updatedAt ? `Edited ${fmtDay(updatedAt.toISOString().slice(0, 10))}` : createdAt ? `Created ${fmtDay(createdAt.toISOString().slice(0, 10))}` : ''}
+          </span>
+        </div>
       </div>
     </div>
 

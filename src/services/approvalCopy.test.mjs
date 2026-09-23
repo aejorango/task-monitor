@@ -30,7 +30,10 @@ test('a rejected user is not told to wait for something that will not happen', (
   assert.equal(copy.state, 'rejected');
   assert.equal(copy.waitNote, null);
   assert.equal(copy.canRetry, false);
-  assert.match(copy.message, /ask one of the people below/);
+  // It must not point at something that is not on the card. The superadmin
+  // list it used to say "below" about was removed from PendingApprovalView.
+  assert.match(copy.message, /ask an administrator to look again/);
+  assert.doesNotMatch(copy.message, /below/);
 });
 
 test('a profile that has not arrived yet is "setting up", not "rejected"', () => {

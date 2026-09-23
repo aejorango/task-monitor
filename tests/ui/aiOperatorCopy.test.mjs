@@ -120,7 +120,10 @@ test('nothing outside operator-only copy writes an npm command', () => {
 
 test('the components exempted above really are operator-gated', () => {
   const settings = read('src', 'components', 'SettingsView.jsx');
-  assert.match(settings, /\{isSuperadmin && <AiBrainSection \/>\}/,
+  // Since T-0144 Settings is six routes, so the block is also gated on its
+  // tab — but `isSuperadmin` is still what decides whether it renders at all,
+  // and that is the gate this exemption rests on.
+  assert.match(settings, /isSuperadmin && <AiBrainSection \/>/,
     'the exemption is only valid while the gate is there');
   const knowledge = read('src', 'components', 'KnowledgeSection.jsx');
   assert.match(knowledge, /if \(!isOperator\) \{/);

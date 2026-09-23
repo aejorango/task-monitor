@@ -1,59 +1,37 @@
-// src/components/AppShell.jsx — sidebar nav + topbar + content area
+// src/components/AppShell.jsx — icon rail + page chrome + content area
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTasks, useAllActivities, useProjects, useSavedViews } from '../hooks/useTasks';
 import { useActiveWorkspaceId, setActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { useOnline } from '../hooks/useOnline';
-import { addSavedView, softDeleteSavedView, auth, onAuthChange } from '../services/firebase';
+import { addSavedView, softDeleteSavedView, auth, onAuthChange, todayLocal } from '../services/firebase';
+import { blockedTaskIds, isStuck } from '../services/boardScope';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import Icon from './Icon';
-import AiHelper from './AiHelper';
 import TaskDoneCelebration from './TaskDoneCelebration';
-import DueAlertBell from './DueAlertBell';
-import InboxBell from './InboxBell';
 import { goToTask as openTask } from '../services/openTask';
 import { versionLine } from '../services/appVersion';
 import TutorialGuide from './TutorialGuide';
 import { friendlyError } from '../services/access';
-import { VIEW_REGISTRY, RENDERABLE_VIEWS, isKnownView } from '../services/views';
+import { RENDERABLE_VIEWS, isKnownView, HUBS, hubForView, hubLanding, resolveView } from '../services/views';
+import PageHeader from './PageHeader';
+import BoardToolbar from './BoardToolbar';
+import FindItem from './FindItem';
 import { activateProps } from '../hooks/useActivate';
 import { buildCommands, buildDuplicateCommands, commandsFirst, CREATE_VIEW, recentCommands, rememberRecent } from '../services/commandPalette';
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
 
-// The sidebar reads the one view registry (services/views.js), which the ⌘K
+// The rail reads the one view registry (services/views.js), which the ⌘K
 // palette reads too — so a page cannot exist in one and not the other.
-const VIEWS = VIEW_REGISTRY;
+//
+// The rail itself holds six hubs, not twenty-three pages. Which hub owns which
+// page, and the tab strip that follows from it, is HUBS in services/views.js —
+// the sidebar's old hand-kept NAV_GROUPS lived here and is gone, because a
+// second list of the app's pages is exactly what BUG-029 was.
 
-// Sidebar-only grouping: some views collapse under a parent that toggles
-// open/closed on click — the parent isn't a view itself. Declarative so new
-// groups can be added without duplicating the group-building logic below.
-// Each group is inserted at the position of its first child in VIEWS, and
-// its other children are skipped from the flat list.
-const NAV_GROUPS = [
-  { id: 'board-group',   label: 'Board',   icon: 'board',     childIds: ['board', 'calendar', 'gantt', 'wbs', 'workload'] },
-  { id: 'reports-group', label: 'Reports', icon: 'analytics', childIds: ['tasks-table', 'table', 'work-performed', 'timesheet', 'review', 'artifacts', 'analytics'] },
-];
-const SIDEBAR_ITEMS = (() => {
-  const childToGroup = new Map();
-  NAV_GROUPS.forEach((g) => g.childIds.forEach((id) => childToGroup.set(id, g)));
-  const insertedGroups = new Set();
-  const items = [];
-  VIEWS.forEach((v) => {
-    const group = childToGroup.get(v.id);
-    if (!group) { items.push(v); return; }
-    if (insertedGroups.has(group.id)) return; // later child of an already-inserted group
-    insertedGroups.add(group.id);
-    items.push({
-      id: group.id,
-      label: group.label,
-      icon: group.icon,
-      children: group.childIds.map((id) => VIEWS.find((x) => x.id === id)),
-    });
-  });
-  return items;
-})();
+const RAIL_NARROW_KEY = 'task-monitor.rail.narrow.v1';
 
 function parseHash() {
   const h = window.location.hash.replace(/^#\/?/, '');
@@ -61,13 +39,23 @@ function parseHash() {
   const parts = path.split('/').filter(Boolean);
   const params = new URLSearchParams(qs);
   return {
-    view: parts[0] || 'dashboard',
+    // `resolveView` forwards a page that MOVED. The Monitoring panels are the
+    // Analytics page now, so an old #/monitoring link lands on them instead of
+    // on Not Found — the content did not go away, only its address did.
+    view: resolveView(parts[0] || 'dashboard'),
     projectFilter: parts[1] || 'all',
     workspaceId:  params.get('ws')     || null,
     tagFilter:    params.get('tag')    || null,
     statusFilter: params.get('status') || null,
     savedViewId:  params.get('saved')  || null,
     onlyMine:     params.get('mine')   === '1',
+    stuckOnly:    params.get('stuck')  === '1',
+    who:          params.get('who')    || null,   // one member's work only
+    q:            params.get('q')      || null,   // the tab strip's "Find item" box
+    // Which task the Item page is showing. Distinct from `task` below, which
+    // is a ONE-SHOT ("open this editor now") and is deliberately dropped by
+    // setHash; `item` is where you are, so it has to survive a navigation.
+    itemId:       params.get('item')   || null,
     openTaskId:   params.get('task')   || null,   // one-shot: open this task's editor
   };
 }
@@ -79,6 +67,10 @@ function setHash(next) {
   if (next.statusFilter) params.set('status', next.statusFilter);
   if (next.savedViewId)  params.set('saved',  next.savedViewId);
   if (next.onlyMine)     params.set('mine',   '1');
+  if (next.stuckOnly)    params.set('stuck',  '1');
+  if (next.who)          params.set('who',    next.who);
+  if (next.q)            params.set('q',      next.q);
+  if (next.itemId)       params.set('item',   next.itemId);
   const qs = params.toString();
   window.location.hash = `#/${next.view}/${next.projectFilter || 'all'}${qs ? `?${qs}` : ''}`;
 }
@@ -96,9 +88,33 @@ export function useRoute() {
 
 export { RENDERABLE_VIEWS, isKnownView };
 
+/**
+ * "2 stuck" in the breadcrumb, the Board Explorer's one red number.
+ *
+ * It is the hub's own definition — `isStuck` — so it can never disagree with
+ * the Stuck pill below it, and it is a separate component so the listeners it
+ * needs are mounted only while a Board page is on screen. Both caches are
+ * shared, so on the Kanban this costs nothing at all.
+ */
+function StuckChip() {
+  const { tasks } = useTasks();
+  const { activities } = useAllActivities();
+  const today = todayLocal();
+  const n = useMemo(() => {
+    const blocked = blockedTaskIds(activities);
+    return tasks.filter((t) => !t.deleted && !t.archived && isStuck(t, blocked, today)).length;
+  }, [tasks, activities, today]);
+  if (n === 0) return null;
+  return (
+    <span className="crumb-chip stuck" title="Blocked, or open and past its plan date">
+      <span className="crumb-dot" />{n} stuck
+    </span>
+  );
+}
+
 export default function AppShell({ userId, ready, projects, route, navigate, children, timerWidget, userProfile }) {
   const online = useOnline();
-  // A neutral fallback, not VIEWS[0]. The list's order is cosmetic, so falling
+  // A neutral fallback, not the registry's first entry. The list's order is cosmetic, so falling
   // back to its first entry painted "Ask AI" over whatever was really on screen
   // — an unrecognised hash, an invite, a saved view pointing at a removed page
   // (BUG-025). The app's own name claims nothing.
@@ -107,6 +123,27 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
   const activeWs = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Collapsing the rail to icons is a per-device choice, so it survives a
+  // reload rather than snapping back open every morning. A phone ignores it —
+  // there the rail is a drawer and always shows its labels.
+  const [railNarrow, setRailNarrow] = useState(() => {
+    try { return localStorage.getItem(RAIL_NARROW_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(RAIL_NARROW_KEY, railNarrow ? '1' : '0'); } catch { /* private window */ }
+  }, [railNarrow]);
+  // Which of the six rail icons is lit, and what the breadcrumb calls the
+  // workspace you are in. Both are derived — neither is a second piece of state
+  // that could disagree with the route.
+  const activeHub = hubForView(route.view);
+  const activeWorkspace = workspaces.find((w) => w.id === activeWs) || null;
+  // Stable, so FindItem's debounce effect is not torn down on every render of
+  // the shell. `navigate` is a fresh arrow each render (useRoute builds it
+  // from the current route), so it goes in a ref the handler reads when it
+  // fires — the same rule as useModalDialog's deps, for the same reason.
+  const navRef = useRef(navigate);
+  navRef.current = navigate;
+  const findItem = useCallback((q) => navRef.current({ q }), []);
 
   // URL ↔ active-workspace binding.
   // 1. If URL has ?ws=<id> and it's different from current state, sync state to URL.
@@ -130,7 +167,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${railNarrow ? ' rail-narrow' : ''}`}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -140,98 +177,120 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         />
       )}
 
-      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
-        <div className="sidebar-brand sidebar-brand-compact">
-          <div className="sidebar-brand-mark">TM</div>
-          <span>Task Monitor</span>
-          {/* Mobile close button inside sidebar */}
+      <aside className={`rail${sidebarOpen ? ' open' : ''}`} aria-label="Sections">
+        {/* The TM tile and the wordmark were removed on request. The row
+            stays: it is what holds the collapse control, and the rail has no
+            other home for it. */}
+        <div className="rail-brand-row">
           <button
-            className="sidebar-close-btn"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close menu"
-          >✕</button>
+            className="rail-collapse"
+            onClick={() => setRailNarrow((n) => !n)}
+            aria-pressed={railNarrow}
+            aria-label={railNarrow ? 'Expand the sidebar' : 'Collapse the sidebar to icons'}
+            title={railNarrow ? 'Expand the sidebar' : 'Collapse the sidebar to icons'}
+          >{railNarrow ? '»' : '«'}</button>
         </div>
 
-        <WorkspaceSwitcher
-          workspaces={workspaces}
-          activeId={activeWs}
-          onSwitch={(id) => navigateAndClose({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null })}
-          onManage={() => navigateAndClose({ view: 'settings', savedViewId: null, tagFilter: null })}
-        />
+        {/* The workspace is WHERE you are, so it sits with the sections
+            rather than in the command bar. Its sidebar styling — light ink on
+            navy — is the one it was drawn for. */}
+        <div className="rail-ws">
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeId={activeWs}
+            onSwitch={(id) => navigateAndClose({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null })}
+            onManage={() => navigateAndClose({ view: 'workspaces', savedViewId: null, tagFilter: null })}
+          />
+        </div>
 
-        <nav className="sidebar-nav">
-          <div className="sidebar-section-label">Views</div>
-          {SIDEBAR_ITEMS.map((v) => (
-            v.children ? (
-              <SidebarNavGroup key={v.id} item={v} route={route} navigate={navigateAndClose} />
-            ) : (
+        <div className="rail-label">Sections</div>
+        <nav className="rail-nav">
+          {HUBS.map((h) => {
+            const isActive = activeHub?.id === h.id && !route.savedViewId;
+            return (
               <button
-                key={v.id}
-                className={`sidebar-link ${v.id === route.view && !route.savedViewId ? 'active' : ''}`}
-                onClick={() => navigateAndClose({ view: v.id, savedViewId: null, tagFilter: null, statusFilter: null })}
-                data-tutorial={v.id === 'projects' ? 'nav-projects' : undefined}
+                key={h.id}
+                className={`rail-btn${isActive ? ' active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+                title={h.label}
+                data-tutorial={h.id === 'projects' ? 'nav-projects' : `nav-${h.id}`}
+                onClick={() => navigateAndClose({
+                  view: hubLanding(h.id), savedViewId: null, tagFilter: null, statusFilter: null,
+                })}
               >
-                <span className="sidebar-link-icon"><Icon name={v.icon} size={17} /></span>
-                {v.label}
+                <Icon name={h.icon} size={18} />
+                <span className="rail-btn-label">{h.label}</span>
               </button>
-            )
-          ))}
-
-          <SidebarSavedViews route={route} navigate={navigateAndClose} />
+            );
+          })}
         </nav>
 
-        <div className="sidebar-footer">
+        <div className="rail-foot">
           <SidebarUserBlock userId={userId} ready={ready} navigate={navigateAndClose} userProfile={userProfile} />
         </div>
       </aside>
 
-      <header className="topbar">
-        {/* Hamburger — only visible on mobile via CSS */}
-        <button
-          className="nav-toggle"
-          onClick={() => setSidebarOpen((o) => !o)}
-          aria-label="Toggle menu"
-        >
-          <span className="nav-toggle-icon">
-            <span />
-            <span />
-            <span />
-          </span>
-        </button>
 
-        <div className="topbar-title">{current.label}</div>
-        <div data-tutorial="project-picker">
-          <ProjectPicker
-            projects={projects}
-            value={route.projectFilter}
-            onChange={(projectFilter) => navigate({ projectFilter })}
-          />
-        </div>
-        {userId && (
-          <button
-            className={`chip topbar-chip-mytasks ${route.onlyMine ? 'active' : ''}`}
-            onClick={() => navigate({ onlyMine: !route.onlyMine })}
-            title="Show only tasks assigned to me"
-          >
-            👤 <span className="chip-label-text">My tasks</span>
-          </button>
+      {/* The chrome starts here now: the bar above it held nothing but the
+          things that moved to the rail, the crumb strip and Settings, so the
+          row went with them rather than sitting empty. What it still had to
+          carry — the mobile menu button, the saved views, Save as view and a
+          running timer — the header takes as slots. */}
+      <PageHeader
+        route={route}
+        navigate={navigate}
+        onToggleMenu={() => setSidebarOpen((o) => !o)}
+        tools={<>
+          {timerWidget}
+          <SavedViewsMenu route={route} navigate={navigate} />
+          <SaveViewButton route={route} userId={userId} />
+        </>}
+        search={activeHub?.id === 'board'
+          ? <FindItem value={route.q || ''} onChange={findItem} />
+          : null}
+        /* The project filter decides what every page below is ABOUT, which is
+           what a breadcrumb is for — so it sits in the middle of the crumb
+           strip rather than among the commands. */
+        projectPicker={(
+          <div data-tutorial="project-picker">
+            <ProjectPicker
+              projects={projects}
+              value={route.projectFilter}
+              onChange={(projectFilter) => navigate({ projectFilter })}
+            />
+          </div>
         )}
-        <SaveViewButton route={route} userId={userId} />
-        <div className="topbar-spacer" />
-        {!online && (
-          <span className="badge badge-soft-warn" title="You're offline. Changes will sync when you reconnect.">
-            ⚡ Offline
-          </span>
-        )}
-        <TutorialGuide route={route} navigate={navigate} />
-        <AiHelper />
-        <InboxBell navigate={navigate} />
-        <DueAlertBell />
-        {timerWidget}
-        <GlobalSearch projects={projects} navigate={navigate} />
-      </header>
+        pageLabel={current.label}
+        pageIcon={current.icon}
+        workspaceName={activeWorkspace?.name}
+        status={<>
+          {/* The Board Explorer's crumb strip carries the one number worth
+              interrupting for, then the connection as a single mono word.
+              "Sync healthy" was three syllables saying what "live" says. */}
+          {activeHub?.id === 'board' && <StuckChip />}
+          <span className={`crumb-live${online ? '' : ' is-off'}`} title={online
+            ? 'Connected — changes save as you make them'
+            : "You're offline. Changes will sync when you reconnect."}
+          >{online ? 'live' : 'offline'}</span>
+        </>}
+      />
+
+      {/* The Board Explorer's toolbar sits above the tab content on every
+          Board page, so it is drawn here once rather than inside each of the
+          eight pages. `hubForView` decides — not a list of view ids. */}
+      {activeHub?.id === 'board' && (
+        <BoardToolbar route={route} navigate={navigate} />
+      )}
+
+      {/* No box, but ⌘K still opens it: the palette is an overlay. */}
+      <GlobalSearch projects={projects} navigate={navigate} />
 
       <main className="content">{children}</main>
+
+      {/* The tour navigates between pages and highlights elements on them,
+          so it stays mounted app-wide — but its launcher is Settings →
+          Tutorial now, and it starts on an event. */}
+      <TutorialGuide route={route} navigate={navigate} showLauncher={false} />
 
       {/* Mobile bottom tab bar — rendered via CSS display:none on desktop */}
       <BottomNav route={route} navigate={navigate} />
@@ -242,50 +301,11 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
   );
 }
 
-// ─── Sidebar: collapsible nav groups (Board, Reports, …) ──────────────────
-// A pure UI toggle — clicking the group label only expands/collapses its
-// children, it doesn't navigate anywhere itself. Auto-expands if the active
-// route is one of its children (e.g. landing on Calendar via a direct link).
-
-function SidebarNavGroup({ item, route, navigate }) {
-  const childIsActive = item.children.some((c) => c.id === route.view) && !route.savedViewId;
-  const [expanded, setExpanded] = useState(childIsActive);
-
-  useEffect(() => {
-    if (childIsActive) setExpanded(true);
-  }, [childIsActive]);
-
-  return (
-    <div className="sidebar-group">
-      <button
-        className={`sidebar-link sidebar-group-toggle ${childIsActive ? 'active' : ''}`}
-        onClick={() => setExpanded((e) => !e)}
-        aria-expanded={expanded}
-        data-tutorial={`nav-${item.id}`}
-      >
-        <span className="sidebar-link-icon"><Icon name={item.icon} size={17} /></span>
-        <span className="sidebar-group-label">{item.label}</span>
-        <span className={`sidebar-group-chevron ${expanded ? 'open' : ''}`}>
-          <Icon name="chevron-right" size={13} />
-        </span>
-      </button>
-      {expanded && (
-        <div className="sidebar-group-children">
-          {item.children.map((c) => (
-            <button
-              key={c.id}
-              className={`sidebar-link sidebar-link-sub ${c.id === route.view && !route.savedViewId ? 'active' : ''}`}
-              onClick={() => navigate({ view: c.id, savedViewId: null, tagFilter: null, statusFilter: null })}
-            >
-              <span className="sidebar-link-icon"><Icon name={c.icon} size={16} /></span>
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// ─── Rail: the six hubs ───────────────────────────────────────────────────
+// There is nothing to build here any more. The rail maps over HUBS directly
+// (services/views.js) and a tab strip inside the page shows the rest, so the
+// old SidebarNavGroup — a second, hand-kept list of which pages belong together
+// — has no job left.
 
 // ─── Save current view ────────────────────────────────────
 
@@ -315,54 +335,99 @@ function SaveViewButton({ route, userId }) {
     }
   };
   return (
-    <button className="btn btn-sm btn-ghost" onClick={save} title="Save the current filter combo as a sidebar shortcut">
+    <button className="btn btn-sm btn-ghost" onClick={save} title="Save the current filter combo so you can come back to it">
       ★ Save view
     </button>
   );
 }
 
-// ─── Sidebar: saved views ─────────────────────────────────
+// ─── Saved views ──────────────────────────────────────────
+// These used to be a labelled list at the bottom of the sidebar. A 64px rail
+// has no room for names, and a saved filter nobody can see is a saved filter
+// nobody uses — so they are a menu in the title block, one click from anywhere.
+// The button hides itself entirely when there is nothing saved, rather than
+// offering an empty menu.
 
-function SidebarSavedViews({ route, navigate }) {
+function SavedViewsMenu({ route, navigate }) {
   const ask = useDialog();
-  const { views } = useSavedViews();
+  const { views: allViews } = useSavedViews();
+  // A saved view can outlive the page it points at — Table, Flow and Item
+  // were deleted in T-0152 and their saved views are still in Firestore.
+  // Opening one would land on Not Found, which reads as a bug rather than as
+  // "that page is gone", so they are simply not offered. The documents are
+  // left alone: deleting somebody's saved view because we removed a page is
+  // not ours to do.
+  const views = allViews.filter((v) => isKnownView(v.view));
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   if (views.length === 0) return null;
+  const activeView = views.find((v) => v.id === route.savedViewId);
+
   return (
-    <>
-      <div className="sidebar-section-label">Saved views</div>
-      {views.map((v) => {
-        const isActive = route.savedViewId === v.id;
-        return (
-          <button
-            key={v.id}
-            className={`sidebar-link saved-view-link ${isActive ? 'active' : ''}`}
-            onClick={() => navigate({
-              view: v.view,
-              projectFilter: v.projectFilter || 'all',
-              tagFilter:    v.tagFilter || null,
-              statusFilter: v.statusFilter || null,
-              savedViewId:  v.id,
-            })}
-            title={`${v.view}${v.tagFilter ? ` · #${v.tagFilter}` : ''}${v.statusFilter ? ` · ${v.statusFilter}` : ''}`}
-          >
-            <span className="sidebar-link-icon">{v.icon || <Icon name="star" size={16} />}</span>
-            <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {v.name}
-            </span>
-            {/* The confirm was written out twice, once per input — the click
-                path and the key path could drift apart. One helper, one path. */}
-            <span
-              className="saved-view-delete"
-              {...activateProps(async (e) => {
-                e.stopPropagation();
-                if (await ask.confirm({ title: `Remove saved view "${v.name}"?`, confirmLabel: 'Remove', danger: true })) softDeleteSavedView(v.id);
-              }, { label: `Remove saved view ${v.name}` })}
-              title="Remove saved view"
-            >✕</span>
-          </button>
-        );
-      })}
-    </>
+    <div className="saved-views" ref={boxRef}>
+      <button
+        className={`chip saved-views-btn${activeView ? ' active' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        title="Your saved filters"
+      >
+        <Icon name="star" size={14} />
+        <span className="chip-label-text">{activeView ? activeView.name : 'Saved views'}</span>
+      </button>
+      {open && (
+        <div className="saved-views-menu" role="menu">
+          {views.map((v) => {
+            const isActive = route.savedViewId === v.id;
+            return (
+              <div key={v.id} className={`saved-views-row${isActive ? ' active' : ''}`}>
+                <button
+                  className="saved-views-go"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate({
+                      view: v.view,
+                      projectFilter: v.projectFilter || 'all',
+                      tagFilter:    v.tagFilter || null,
+                      statusFilter: v.statusFilter || null,
+                      savedViewId:  v.id,
+                    });
+                  }}
+                  title={`${v.view}${v.tagFilter ? ` · #${v.tagFilter}` : ''}${v.statusFilter ? ` · ${v.statusFilter}` : ''}`}
+                >
+                  <span className="saved-views-icon">{v.icon || <Icon name="star" size={14} />}</span>
+                  <span className="saved-views-name">{v.name}</span>
+                </button>
+                {/* The confirm was written out twice, once per input — the click
+                    path and the key path could drift apart. One helper, one path. */}
+                <span
+                  className="saved-view-delete"
+                  {...activateProps(async (e) => {
+                    e.stopPropagation();
+                    if (await ask.confirm({ title: `Remove saved view "${v.name}"?`, confirmLabel: 'Remove', danger: true })) softDeleteSavedView(v.id);
+                  }, { label: `Remove saved view ${v.name}` })}
+                  title="Remove saved view"
+                >✕</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -449,14 +514,19 @@ function GlobalSearch({ projects, navigate }) {
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef(null);
 
-  // ⌘K / Ctrl+K to focus search
+  // ⌘K / Ctrl+K opens the palette. There is no always-open box in the header
+  // any more, so the input does not exist until `open` is true — hence the
+  // frame's wait before focusing it. Focusing first and opening second
+  // focuses nothing.
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
         setOpen(true);
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+          inputRef.current?.select();
+        });
       }
       if (e.key === 'Escape') {
         setOpen(false);
@@ -626,19 +696,26 @@ function GlobalSearch({ projects, navigate }) {
   const taskOffset = results.lead ? results.commands.length : 0;
 
   const placeholder = workspaceId
-    ? `Search or type “new task…”   ⌘K`
-    : 'Search or create…  ⌘K';
+    ? 'Search, or type “new task…”'
+    : 'Search or create…';
+
+  // Closed, it renders nothing at all: the box came off the header, and a
+  // hidden input left in the DOM is a thing screen readers and Tab still
+  // find. ⌘K mounts it.
+  if (!open) return null;
 
   return (
-    <div className="search-wrap">
+    <div className="palette" role="dialog" aria-modal="true" aria-label="Search and commands">
+      <div className="palette-backdrop" onMouseDown={() => setOpen(false)} />
+      <div className="search-wrap">
       <input
         ref={inputRef}
         type="search"
         className="search-input"
+        autoFocus
         placeholder={placeholder}
         value={q}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 200)}
         onKeyDown={onInputKeyDown}
       />
@@ -715,39 +792,42 @@ function GlobalSearch({ projects, navigate }) {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
 
 // ─── Bottom nav bar (mobile only) ─────────────────────────
 
-const BOTTOM_TABS = [
-  { id: 'dashboard', label: 'Home',     icon: 'dashboard' },
-  { id: 'board',     label: 'Kanban',   icon: 'board' },
-  { id: 'projects',  label: 'Projects', icon: 'projects' },
-  { id: 'table',     label: 'Log',      icon: 'list' },
-  { id: 'settings',  label: 'Settings', icon: 'settings' },
-];
-
+// The phone's bottom bar is the rail, lying down. It was a hand-kept list of
+// five destinations that had already gone its own way — "Log" pointed at the
+// Activity Log while the sidebar's Reports group held seven pages, and Messages
+// was not on it at all. It is the six hubs now, so the two navigations cannot
+// disagree about where the app goes, and the one lit is the hub you are IN:
+// on Calendar, the Board icon lights, because that is where Calendar lives.
 function BottomNav({ route, navigate }) {
+  const activeHub = hubForView(route.view);
   return (
     <nav className="bottom-nav" aria-label="Main navigation">
-      {BOTTOM_TABS.map((tab) => (
+      {HUBS.map((hub) => (
         <button
-          key={tab.id}
-          className={`bottom-nav-item ${route.view === tab.id ? 'active' : ''}`}
-          onClick={() => navigate({ view: tab.id, savedViewId: null, tagFilter: null, statusFilter: null })}
-          aria-label={tab.label}
+          key={hub.id}
+          className={`bottom-nav-item ${activeHub?.id === hub.id ? 'active' : ''}`}
+          aria-current={activeHub?.id === hub.id ? 'page' : undefined}
+          onClick={() => navigate({
+            view: hubLanding(hub.id), savedViewId: null, tagFilter: null, statusFilter: null,
+          })}
+          aria-label={hub.label}
         >
-          <span className="bottom-nav-icon"><Icon name={tab.icon} size={22} /></span>
-          <span>{tab.label}</span>
+          <span className="bottom-nav-icon"><Icon name={hub.icon} size={22} /></span>
+          <span>{hub.label}</span>
         </button>
       ))}
     </nav>
   );
 }
 
-function ProjectPicker({ projects, value, onChange }) {
+export function ProjectPicker({ projects, value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 

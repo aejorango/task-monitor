@@ -1,7 +1,7 @@
 // T-0137 / NEW-015 — estimates versus actual hours, where they are shown.
 //
 //   1. Given a task estimated at 8 hours with 12 logged
-//   2. When the user views the Task table or the status report
+//   2. When the user views the status report or the workload
 //   3. Then it shows 12h against 8h and a +50% variance, and the workload grid
 //      uses the estimate rather than the flat default
 //
@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { columnCatalogue, rowCells, normalizeTableConfig } from '../../src/services/tableViews.js';
+import { estimateOf, loggedOf, variance, formatVariance, formatHours } from '../../src/services/effort.js';
 import { effortBlocks } from '../../src/services/statusReport.js';
 import { buildWorkload, planningWeeks, taskHours, HOURS_PER_TASK } from '../../src/services/workload.js';
 
@@ -28,44 +28,30 @@ const OVERRUN = {
   estimateHours: 8, totalHoursLogged: 12,
 };
 
-/* ── the task table ────────────────────────────────────────────────────── */
-
-const cellText = (task, columnId) => {
-  const config = normalizeTableConfig({ columns: ['title', columnId] }, ctx);
-  const cell = rowCells(task, config, ctx).find((c) => c.id === columnId);
-  assert.ok(cell, `no ${columnId} cell — is the column in the catalogue?`);
-  return cell.text;
-};
-
-test('Estimate and Variance are columns you can pick', () => {
-  const ids = columnCatalogue(ctx).list.map((c) => c.id);
-  assert.ok(ids.includes('estimate'), 'the estimate has to be visible next to the hours');
-  assert.ok(ids.includes('variance'));
-  assert.ok(ids.includes('hours'), 'and the logged hours it is compared against');
-});
+/* ── the arithmetic behind every surface ───────────────────────────────
+   These used to run through the Task table's column catalogue. The table
+   was deleted in T-0152, so they ask `services/effort.js` directly — the
+   module the remaining surfaces (the status report, the workload, the
+   variance page) all read. The claims are unchanged. */
 
 test('8 hours estimated with 12 logged reads as 12h against 8h, +50%', () => {
-  assert.equal(cellText(OVERRUN, 'hours'), '12');
-  assert.equal(cellText(OVERRUN, 'estimate'), '8h');
-  assert.equal(cellText(OVERRUN, 'variance'), '+4h (+50%)');
+  assert.equal(formatHours(loggedOf(OVERRUN)), '12h');
+  assert.equal(formatHours(estimateOf(OVERRUN)), '8h');
+  assert.equal(formatVariance(variance(OVERRUN)), '+4h (+50%)');
 });
 
 test('a task nobody estimated shows a dash, not a zero', () => {
   const plain = { ...OVERRUN, estimateHours: undefined };
-  assert.equal(cellText(plain, 'estimate'), '—');
-  assert.equal(cellText(plain, 'variance'), '—', '"−12h (−100%)" against no estimate is a lie');
-  assert.equal(cellText(plain, 'hours'), '12', 'the hours are still a fact');
+  assert.equal(estimateOf(plain), null, 'not estimated is NOT an estimate of zero');
+  assert.equal(variance(plain).state, 'none');
+  assert.equal(formatVariance(variance(plain)), '—', '"−12h (−100%)" against no estimate is a lie');
+  assert.equal(loggedOf(plain), 12, 'the hours are still a fact');
 });
 
-test('sorting puts the unestimated last rather than treating them as zero', () => {
-  const col = columnCatalogue(ctx).byId;
-  const estimated = col.estimate.value({ estimateHours: 4 });
-  const not = col.estimate.value({});
-  assert.ok(not > estimated, 'an unestimated task is not the cheapest task');
-
-  const varNone = col.variance.value({});
-  const varUnder = col.variance.value({ estimateHours: 8, totalHoursLogged: 1 });
-  assert.ok(varNone < varUnder, 'and it is not the biggest underrun either');
+test('a percentage against a zero estimate is refused, not printed', () => {
+  const zero = { ...OVERRUN, estimateHours: 0 };
+  assert.ok(!/%/.test(formatVariance(variance(zero))),
+    '"+Infinity%" and "+0%" are both lies — show the hours, not the rate');
 });
 
 /* ── the status report ─────────────────────────────────────────────────── */
@@ -143,7 +129,9 @@ test('and falls back to the documented default when there is not', () => {
 
 test('the editor offers a plain number field, and says what blank means', () => {
   const editor = read('src', 'components', 'TaskEditor.jsx');
-  assert.match(editor, /<label className="pe-lbl" htmlFor="te-estimate">Estimated hours<\/label>/);
+  // `te-lbl` since T-0160 ported the editor to the Board Explorer design;
+  // what matters is unchanged — a real <label>, bound to the field by id.
+  assert.match(editor, /<label className="te-lbl" htmlFor="te-estimate">Estimated hours<\/label>/);
   assert.match(editor, /type="number" min="0" step="0\.25"/, 'quarter-hours, like every hours field');
   assert.match(editor, /Leave blank if you have not estimated it/,
     'blank vs zero is the whole distinction — it has to be said');
@@ -182,7 +170,7 @@ test('the whole feature goes through one module', () => {
     const src = read('src', dir, file);
     assert.match(src, /from '\.\.\/services\/effort'/, `${file} must not do the arithmetic itself`);
   }
-  for (const file of ['tableViews.js', 'statusReport.js']) {
+  for (const file of ['statusReport.js']) {
     assert.match(read('src', 'services', file), /from '\.\/effort'/);
   }
 });

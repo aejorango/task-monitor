@@ -115,7 +115,7 @@ export const WBS_COLUMNS = [
   'Phase', 'Task', 'Status', 'Assigned to', 'Start', 'Finish', 'Progress', 'Hours logged',
 ];
 
-const STATUS_LABEL = { todo: 'To do', doing: 'In progress', done: 'Done' };
+const STATUS_LABEL = { todo: 'To do', doing: 'In progress', review: 'In review', done: 'Done' };
 
 const startOf = (t) => t.plan?.startDate || t.actual?.startDate || '';
 const endOf = (t) => t.plan?.endDate || t.actual?.endDate || '';

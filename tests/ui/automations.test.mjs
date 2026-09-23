@@ -191,12 +191,26 @@ test('the editor reads its vocabulary from the module the runner uses', () => {
   assert.match(src, /describeRule/);
 });
 
-test('the section is mounted in Settings, for members of the workspace', () => {
+test('the section has a page of its own, reachable by members of the workspace', () => {
+  // It was the last block of a very long Settings scroll until T-0144. It is
+  // Dashboard → Automations now, because it is the one thing in the app that
+  // changes your data while nobody is looking.
+  const page = fs.readFileSync(
+    path.join(root, 'src', 'components', 'AutomationsView.jsx'), 'utf8');
+  assert.match(page, /<AutomationsSection userId=\{userId\} isAdmin=\{isAdmin\} \/>/);
+  // Authoring stays an admin's job; everyone else reads.
+  assert.match(page, /role === 'owner' \|\| role === 'admin'/);
+
   const settings = fs.readFileSync(
     path.join(root, 'src', 'components', 'SettingsView.jsx'), 'utf8');
-  assert.match(settings, /<AutomationsSection userId=\{userId\} isAdmin=\{isWorkspaceOwnerOrAdmin\} \/>/);
-  assert.match(settings, /\{ id: 'automations', label: 'Automations' \}/);
-  assert.match(settings, /myWorkspaceRole === 'owner' \|\| myWorkspaceRole === 'admin'/);
+  assert.doesNotMatch(settings, /<AutomationsSection/,
+    'one home, or a rule edited in two places is a rule edited twice');
+});
+
+test('the automations page is on the rail, not only in the URL', async () => {
+  const { hubForView, tabsForView } = await import('../../src/services/views.js');
+  assert.equal(hubForView('automations')?.id, 'dashboard');
+  assert.ok(tabsForView('automations').some((t) => t.active && /automations/i.test(t.label)));
 });
 
 test('writing a rule goes through the API from T-0070, not straight at Firestore', () => {

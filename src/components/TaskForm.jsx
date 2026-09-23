@@ -11,7 +11,15 @@ import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
 import { useSeededField } from '../hooks/useQuickCreate';
 
-export default function TaskForm({ projects = [], projectFilter = 'all', seed = null }) {
+/**
+ * `status` is the column a card should land in. It is a prop rather than a
+ * hardcoded 'todo' because the board's per-column "+ Add item" has to be able
+ * to mean what it says: pressing it under In Progress and getting a To Do card
+ * is the button lying. `addTask` takes an optional status and `statusStamps()`
+ * fills in the progress and actual dates that go with it, so nothing here has
+ * to know what "done" implies.
+ */
+export default function TaskForm({ projects = [], projectFilter = 'all', seed = null, status = 'todo' }) {
   const toast = useToast();
   const { userId, ready } = useAuth();
   const workspaceId = useActiveWorkspaceId();
@@ -104,6 +112,7 @@ export default function TaskForm({ projects = [], projectFilter = 'all', seed = 
         tags: mergedTags,
         subtasks,
         recurrence,
+        status,
         plan: {
           startDate: planStart || null,
           endDate:   mergedPlanEnd,

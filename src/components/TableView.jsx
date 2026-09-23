@@ -10,10 +10,10 @@ import {
 import ActivityEditor from './ActivityEditor';
 import ImportWizard from './ImportWizard';
 import { useDialog } from './Dialog';
-import TagFilterBar from './TagFilterBar';
 import ExportButton from './ExportButton';
 import { buildActivityLogDocument } from '../services/activityExport';
 import { tagFilterState } from '../services/tagFilter';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 const COLUMNS = [
   { key: 'project',     label: 'Project' },
@@ -137,18 +137,24 @@ export default function TableView({ projectFilter, initialTagFilter }) {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Activity table</h1>
-          <p className="page-subtitle">All logged activities across your tasks and projects. Click a column to sort. Select rows for bulk actions.</p>
-        </div>
-        <div className="page-actions">
+      <PageSubtitle>
+        {tagState?.active && (
+          <>
+            Filtered to <strong>#{tagState.active}</strong> ·{' '}
+            <button className="table-link" onClick={() => setTagFilter(null)}
+              style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+            >show all</button> ·{' '}
+          </>
+        )}
+        {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'} · click a column to sort
+      </PageSubtitle>
+      <PageActions>
           {/* One door. There used to be two — "Import CSV" (the fixed-column
               importer) beside "Import from spreadsheet" (the wizard) — with
               nothing to say which to pick, and the wizard covers every case the
               other did: a file exported from this page auto-maps all ten of its
               columns with no manual work (BUG-030). */}
-          <button className="btn" onClick={() => setWizardOpen(true)} title="Import tasks, projects or activities from a spreadsheet">
+          <button className="cmd" onClick={() => setWizardOpen(true)} title="Import tasks, projects or activities from a spreadsheet">
             Import
           </button>
           <ExportButton
@@ -156,11 +162,10 @@ export default function TableView({ projectFilter, initialTagFilter }) {
               projectById, taskById, projectName: projectById[projectFilter]?.name || null,
             })}
             label="Export all"
+            className="cmd"
           />
-        </div>
-      </div>
+      </PageActions>
 
-      <TagFilterBar state={tagState} onChange={setTagFilter} />
 
       {wizardOpen && <ImportWizard initialKind="activities" onClose={() => setWizardOpen(false)} />}
 

@@ -8,156 +8,15 @@
 // about it.
 //
 // Steps target elements via `[data-tutorial="…"]` attributes sprinkled
-// through the app, or plain stable selectors (e.g. `.page-header`) for
+// through the app, or plain stable selectors (e.g. `.chrome-bar`, the page
+// chrome's title block) for
 // "look at this view" steps where only one view is ever mounted at a time.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
-
-const TUTORIALS = [
-  {
-    id: 'create-project',
-    icon: 'projects',
-    title: 'Create a project',
-    blurb: 'Set up a project with phases to organize work.',
-    steps: [
-      {
-        view: 'projects',
-        selector: '.page-header',
-        title: 'Projects',
-        body: 'Everything in Task Monitor — tasks, activity, Gantt bars — belongs to a project. Let’s create one.',
-      },
-      {
-        view: 'projects',
-        selector: '[data-tutorial="new-project-btn"]',
-        title: 'New project',
-        body: 'Click **+ New project**. Give it a name and color, then optionally add phases (e.g. "Planning", "Build", "Launch") to break the work into stages.',
-      },
-      {
-        view: 'projects',
-        selector: '.page-header',
-        title: 'You’re set',
-        body: 'Once saved, the project shows up here and becomes selectable from the project picker in the topbar, on the Board, and in the Gantt chart.',
-      },
-    ],
-  },
-  {
-    id: 'create-task',
-    icon: 'check',
-    title: 'Create a task',
-    blurb: 'Add a task from the Board’s quick-add bar.',
-    steps: [
-      {
-        view: 'board',
-        selector: '[data-tutorial="quick-add-input"]',
-        title: 'Quick-add',
-        body: 'Type what needs doing here. You can use shortcuts right in the title — try `next Friday`, `!urgent`, `#tag`, or `@name` — Task Monitor parses them automatically.',
-      },
-      {
-        view: 'board',
-        selector: '[data-tutorial="quick-add-more"]',
-        title: 'More details',
-        body: 'Click **+ More details** to set a phase, priority, requested-by, or plan dates before saving.',
-      },
-      {
-        view: 'board',
-        selector: '[data-tutorial="quick-add-submit"]',
-        title: 'Add it',
-        body: 'Hit **Add task**. It lands in the To Do column, ready to drag into In Progress or Done.',
-      },
-    ],
-  },
-  {
-    id: 'use-board',
-    icon: 'board',
-    title: 'Use the Kanban board',
-    blurb: 'Drag tasks across columns, filter by project or tag.',
-    steps: [
-      {
-        view: 'board',
-        selector: '[data-tutorial="board-columns"]',
-        title: 'Three columns',
-        body: 'Tasks flow To Do → In Progress → Done. Drag a card between columns to update its status — dropping onto a phase row (when grouped) sets the phase too.',
-      },
-      {
-        view: 'board',
-        selector: '[data-tutorial="project-picker"]',
-        title: 'Filter by project',
-        body: 'Use the project picker in the topbar to narrow the whole app — Board, Gantt, Calendar, Table — to a single project.',
-      },
-      {
-        view: 'board',
-        selector: '.task-card',
-        title: 'Card actions',
-        body: 'Each card has quick actions: **▶** starts a live timer, **+ Log** records an activity entry, and **Edit** opens the full editor with subtasks, dependencies, and recurrence.',
-      },
-    ],
-  },
-  {
-    id: 'track-time',
-    icon: 'clock',
-    title: 'Log time & activity',
-    blurb: 'Track hours and leave a progress note on a task.',
-    steps: [
-      {
-        view: 'board',
-        selector: '.task-card',
-        title: 'Start a timer',
-        body: 'Click the **▶** button on any card to start tracking. Only one timer runs at a time, app-wide.',
-      },
-      {
-        view: 'board',
-        selector: '[data-tutorial="timer-widget"]',
-        title: 'Live in the topbar',
-        body: 'While a timer runs, it shows here with the elapsed time. Click **⏹ Stop** to finish — you’ll be prompted to log it as an activity in one click.',
-      },
-      {
-        view: 'board',
-        selector: '.task-card',
-        title: 'Or log without a timer',
-        body: 'Prefer to log after the fact? Click **+ Log** on any card to record hours, a comment, and completion status directly.',
-      },
-    ],
-  },
-  {
-    id: 'gantt-chart',
-    icon: 'gantt',
-    title: 'Explore the Gantt chart',
-    blurb: 'See planned timelines and drag to reschedule.',
-    steps: [
-      {
-        view: 'gantt',
-        selector: '.page-header',
-        title: 'Gantt timeline',
-        body: 'Every task with plan dates shows up here as a bar, grouped by project and sorted by earliest start.',
-      },
-      {
-        view: 'gantt',
-        selector: '.gantt-bar.plan',
-        title: 'Drag to reschedule',
-        body: 'Drag the middle of a bar to move it, or drag either edge to resize — both update the task’s plan dates immediately. Lines between bars show dependencies.',
-      },
-    ],
-  },
-  {
-    id: 'workspaces',
-    icon: 'workspace',
-    title: 'Switch workspaces',
-    blurb: 'Understand workspaces and how to switch between them.',
-    steps: [
-      {
-        selector: '[data-tutorial="ws-switcher"]',
-        title: 'Your workspace',
-        body: 'A workspace is the top-level container for projects, tasks, and activity — click here to switch workspaces, create a new one, or manage members.',
-      },
-      {
-        selector: '[data-tutorial="nav-projects"]',
-        title: 'Projects live inside it',
-        body: 'Everything you see in the sidebar — Projects, Board, Gantt, Calendar — is scoped to whichever workspace is active.',
-      },
-    ],
-  },
-];
+import { markDone, TUTORIAL_DONE_EVENT } from '../services/tutorialProgress';
+import { TUTORIALS, START_TUTORIAL_EVENT } from '../services/tutorials';
+import { auth } from '../services/firebase';
 
 // ─── Track a DOM element's bounding rect every frame while a tour is
 // active, so the spotlight follows layout shifts, smooth-scrolling, and
@@ -193,7 +52,16 @@ function renderBody(text) {
   );
 }
 
-export default function TutorialGuide({ route, navigate }) {
+/**
+ * The tour.
+ *
+ * It is mounted once, app-wide, because it navigates between pages and
+ * highlights elements on them — it cannot live inside the page that offers
+ * it. `showLauncher` is false in the shell: the list of tutorials is
+ * Settings → Tutorial now, and it asks for one by firing the event above.
+ * One overlay, one place the sequencing lives.
+ */
+export default function TutorialGuide({ route, navigate, showLauncher = true }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [active, setActive] = useState(null); // { tutorial, stepIndex }
   const [targetEl, setTargetEl] = useState(null);
@@ -253,14 +121,26 @@ export default function TutorialGuide({ route, navigate }) {
     return () => { cancelled = true; };
   }, [active?.tutorial?.id, active?.stepIndex, step, route.view, navigate]);
 
-  const startTutorial = (tutorial) => {
+  const startTutorialRun = (tutorial) => {
     setMenuOpen(false);
     setActive({ tutorial, stepIndex: 0 });
   };
   const endTutorial = () => setActive(null);
   const goNext = () => {
     if (!active) return;
-    if (active.stepIndex >= active.tutorial.steps.length - 1) { endTutorial(); return; }
+    if (active.stepIndex >= active.tutorial.steps.length - 1) {
+      // THIS is the only thing that counts as finishing a lesson: "Done" on
+      // the last step. Opening one does not, and "Skip tour" — which calls
+      // endTutorial directly — emphatically does not, or the Tutorial page's
+      // "4 of 6" would be counting people who bailed out. Recorded per device
+      // (see services/tutorialProgress.js); the page listens for the event.
+      try {
+        markDone(auth.currentUser?.uid || null, active.tutorial.id);
+        window.dispatchEvent(new CustomEvent(TUTORIAL_DONE_EVENT, { detail: { id: active.tutorial.id } }));
+      } catch { /* a private window forgets; the tour still ends cleanly */ }
+      endTutorial();
+      return;
+    }
     setActive({ ...active, stepIndex: active.stepIndex + 1 });
   };
   const goBack = () => {
@@ -268,8 +148,19 @@ export default function TutorialGuide({ route, navigate }) {
     setActive({ ...active, stepIndex: active.stepIndex - 1 });
   };
 
+  // Settings → Tutorial asks for one by name.
+  useEffect(() => {
+    const onStart = (e) => {
+      const t = TUTORIALS.find((x) => x.id === e.detail?.id);
+      if (t) startTutorialRun(t);
+    };
+    window.addEventListener(START_TUTORIAL_EVENT, onStart);
+    return () => window.removeEventListener(START_TUTORIAL_EVENT, onStart);
+  });
+
   return (
     <>
+      {showLauncher && (
       <div className="dropdown" ref={menuRef}>
         <button
           className="btn btn-sm btn-ghost"
@@ -282,7 +173,7 @@ export default function TutorialGuide({ route, navigate }) {
           <div className="dropdown-menu tutorial-menu">
             <div className="search-group-label">Walk me through…</div>
             {TUTORIALS.map((t) => (
-              <button key={t.id} className="dropdown-item tutorial-menu-item" onClick={() => startTutorial(t)}>
+              <button key={t.id} className="dropdown-item tutorial-menu-item" onClick={() => startTutorialRun(t)}>
                 <span className="tutorial-menu-icon"><Icon name={t.icon} size={17} /></span>
                 <span className="tutorial-menu-text">
                   <span className="tutorial-menu-title">{t.title}</span>
@@ -293,6 +184,7 @@ export default function TutorialGuide({ route, navigate }) {
           </div>
         )}
       </div>
+      )}
 
       {active && (
         <TutorialOverlay

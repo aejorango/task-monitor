@@ -11,6 +11,7 @@ import ActivityEditor from './ActivityEditor';
 import LogActivityPicker from './LogActivityPicker';
 import { useQuickCreate } from '../hooks/useQuickCreate';
 import { activateProps } from '../hooks/useActivate';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function friendlyDate(s) {
@@ -178,20 +179,15 @@ export default function WorkPerformedView({ projectFilter }) {
   return (
     <div>
       {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Work Performed</h1>
-          <p className="page-subtitle">
-            {filtered.length} activit{filtered.length === 1 ? 'y' : 'ies'}
-            {totalHours > 0 && ` · ${totalHours.toFixed(1)}h total`}
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => setPickerOpen(true)}>
-            + Log activity
-          </button>
-        </div>
-      </div>
+      <PageSubtitle>
+        {filtered.length} activit{filtered.length === 1 ? 'y' : 'ies'}
+        {totalHours > 0 && ` · ${totalHours.toFixed(1)}h total`}
+      </PageSubtitle>
+      <PageActions>
+        <button className="cmd cmd-primary" onClick={() => setPickerOpen(true)}>
+          <span className="cmd-icon">+</span>Log activity
+        </button>
+      </PageActions>
 
       {/* Filters */}
       <div className="wp-filters">

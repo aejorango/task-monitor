@@ -561,7 +561,7 @@ run together.
 | `tests/ui/aiErrorCopy.test.mjs` | An AI failure is one plain sentence; the operator's version is in the console |
 | `tests/ui/quickCreateSeed.test.mjs` | What you typed in ⌘K survives the trip to the form |
 | `src/services/tagFilter.test.mjs` | A saved view's tag filter, and where an activity's tags come from |
-| `tests/ui/tagFilterViews.test.mjs` | Every page the router filters by a tag actually honours it |
+| `tests/ui/tagFilterViews.test.mjs` | The tag filter survives without its chip strip: every page still applies it and names it |
 | `tests/ui/notificationPermission.test.mjs` | The permission badge updates without polling, and unsubscribes |
 | `tests/ui/aiOperatorCopy.test.mjs` | A shell command reaches the operator and nobody else |
 | `src/services/activityExport.test.mjs` | The activity log and the WBS as documents, not just CSV |
@@ -662,18 +662,15 @@ sign-in — the fastest way to iterate on a component:
 | `/dev/knowledge.html` | Settings → Knowledge base against the live bridge |
 | `/dev/automations.html` | The automation rule editor, with sample projects, people and connections |
 | `/dev/inbox.html` | The inbox panel with sample notices, and the @mention picker |
-| `/dev/workload.html` | The workload grid and its drag-and-drop, against sample people |
 | `/dev/shared.html` | The page a client opens (`?kind=board`, `?kind=dead`) |
 | `/dev/recurrence.html` | Move the clock forward and watch a recurring task come round |
 | `/dev/log-time.html` | Every state of the Dashboard's "Log time" button, and the form behind it |
 | `/dev/due-chip.html` | A board card at every due state — overdue, today, this week, later, done |
 | `/dev/ai-off.html` | What each reader is told when AI is unavailable, operator and not |
-| `/dev/bulk-tasks.html` | The task table's row selection and bulk bar, against sample tasks |
 | `/dev/my-week.html` | My Week: the day grid, both rails, and what each drop writes |
 | `/dev/error-boundary.html` | The crash-recovery card (`?kind=chunk\|network`, `?scope=app`) |
 | `/dev/escape-key.html` | Who hears Escape: the real timer widget beside the five handlers it used to silence |
 | `/dev/gantt.html` | Gantt rows with every shape of plan (`?zoom=day\|week\|month`), and what a drag writes |
-| `/dev/tag-filter.html` | The tag chip strip and what it filters (`?tag=client`, `?tag=renamed-since`) |
 
 ## Working with Claude Code
 

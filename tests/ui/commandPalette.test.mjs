@@ -48,7 +48,7 @@ test('navigation commands just navigate', () => {
 });
 
 test('the placeholder tells people the box does more than search', () => {
-  assert.match(search, /Search or type “new task…”/);
+  assert.match(search, /Search, or type “new task…”/);
 });
 
 // ─── the receiving end ──────────────────────────────────────────────────────
@@ -221,7 +221,12 @@ test('the destinations are derived, not listed a second time', async () => {
   assert.match(palette, /import \{ NAV_TARGETS \} from '\.\/views'/);
 
   const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
-  assert.match(shell, /const VIEWS = VIEW_REGISTRY;/, 'the sidebar reads the same registry');
+  // Since T-0143 the rail is six hubs, and which pages a hub holds is HUBS in
+  // services/views.js — the same module. What matters is unchanged: the nav
+  // reads the registry rather than keeping a copy of it.
+  assert.match(shell, /from '\.\.\/services\/views'/, 'the rail reads the same registry');
+  assert.doesNotMatch(shell, /const NAV_GROUPS = \[/,
+    'the group list moved to views.js; a copy here is how it drifted before');
 });
 
 test('a label with more than one word is findable by any of them', async () => {
@@ -236,13 +241,11 @@ test('a label with more than one word is findable by any of them', async () => {
   }
 });
 
-test('the sidebar groups still name only real views', async () => {
-  const { VIEW_REGISTRY } = await import('../../src/services/views.js');
-  const shell = fs.readFileSync(path.join(root, 'src', 'components', 'AppShell.jsx'), 'utf8');
+test('the hubs still name only real views', async () => {
+  const { VIEW_REGISTRY, HUBS } = await import('../../src/services/views.js');
   const ids = new Set(VIEW_REGISTRY.map((v) => v.id));
-  const grouped = [...shell.matchAll(/childIds: \[([^\]]+)\]/g)]
-    .flatMap((m) => m[1].split(',').map((s) => s.trim().replace(/'/g, '')));
+  const grouped = HUBS.flatMap((h) => h.tabs.map((t) => t.view));
   assert.ok(grouped.length > 0);
   const orphans = grouped.filter((id) => !ids.has(id));
-  assert.deepEqual(orphans, [], 'a group child with no view is a dead sidebar row');
+  assert.deepEqual(orphans, [], 'a tab with no view behind it is a dead row');
 });

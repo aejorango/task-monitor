@@ -15,6 +15,7 @@ import {
 } from '../services/timesheet';
 import ExportButton from './ExportButton';
 import { formatHours, formatVariance, totalVariance } from '../services/effort';
+import { PageActions, PageSubtitle } from './PageHeader';
 
 export default function TimesheetView({ projectFilter = 'all' }) {
   const { activities, loading } = useAllActivities();
@@ -64,23 +65,16 @@ export default function TimesheetView({ projectFilter = 'all' }) {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Timesheet</h1>
-          <p className="page-subtitle">
-            Hours logged per person, per day. Pick a week, filter to a project, and
-            send it as a spreadsheet.
-          </p>
-        </div>
-        <div className="page-actions">
-          <ExportButton
-            build={() => buildTimesheetDocument(sheet, { projectName })}
-            baseName={timesheetFileBase(days)}
-            kind="table"
-            title="Save this timesheet as a spreadsheet, CSV or PDF"
-          />
-        </div>
-      </div>
+      <PageSubtitle>Hours logged per person, per day{projectName ? ` · ${projectName}` : ''}</PageSubtitle>
+      <PageActions>
+        <ExportButton
+          build={() => buildTimesheetDocument(sheet, { projectName })}
+          baseName={timesheetFileBase(days)}
+          kind="table"
+          className="cmd"
+          title="Save this timesheet as a spreadsheet, CSV or PDF"
+        />
+      </PageActions>
 
       <div className="ts-toolbar">
         <button className="btn btn-sm" onClick={() => setAnchor((d) => shiftWeek(d, -1, weekStart))}>
