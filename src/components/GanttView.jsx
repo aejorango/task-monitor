@@ -8,8 +8,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTasks, useProjects } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
-import TaskEditor from './TaskEditor';
-import TaskQuickAdd from './TaskQuickAdd';
+import TaskEditor, { newTaskDraft } from './TaskEditor';
 import { friendlyError } from '../services/access';
 import ExportButton from './ExportButton';
 import { buildTaskListDocument } from '../services/taskExport';
@@ -68,6 +67,39 @@ function rulerColumns(min, totalDays, mode) {
   }
   return cols;
 }
+
+/** The letter each day of the week is printed as, Sunday first. */
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/**
+ * One cell per day for the second ruler row — S M T W T F S under the weeks.
+ *
+ * Only worth drawing on a SHORT window: at a quarter the letters are two
+ * pixels apart and the row is a grey smear, so the caller asks for it by
+ * width rather than this deciding for itself. The cells are `repeat(n, 1fr)`
+ * across the same track the week columns share, so a letter sits exactly under
+ * the day its bar starts on — which is the whole point of the row.
+ */
+function dayColumns(min, totalDays, todayIso) {
+  const out = [];
+  for (let i = 0; i < totalDays; i += 1) {
+    const d = addDays(min, i);
+    const dow = d.getDay();
+    out.push({
+      iso: fmtDate(d),
+      letter: DAY_LETTERS[dow],
+      weekend: dow === 0 || dow === 6,
+      today: fmtDate(d) === todayIso,
+      // The date itself as the title, so a letter you cannot place is one
+      // hover from an answer.
+      title: d.toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' }),
+    });
+  }
+  return out;
+}
+
+/** Above this many days the per-day letters stop being legible. */
+const DAY_ROW_MAX = 45;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -369,7 +401,11 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
           )}
         </div>
         {quickAddOpen && (
-          <TaskQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
+          <TaskEditor
+            task={newTaskDraft({ workspaceId: activeWorkspaceId, projectId: projectFilter })}
+            projects={projects}
+            onClose={() => setQuickAddOpen(false)}
+          />
         )}
       </>
     );
@@ -449,6 +485,13 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
   // beyond that. Ten weeks of columns is about where the labels stop fitting.
   const ruler = rulerColumns(range.min, range.total, range.total <= 77 ? 'week' : 'month');
   const rulerCols = ruler.map((c) => `${c.days}fr`).join(' ');
+  // The day letters under the week numbers, on a window short enough for them
+  // to be read — This week, This month and Next 30 days all qualify; a quarter
+  // does not. Asked for so a reader can tell WHICH day a bar ends on without
+  // counting across from the week label.
+  const days = range.total <= DAY_ROW_MAX
+    ? dayColumns(range.min, range.total, todayLocal())
+    : null;
   // Where today sits across the track, as a share — the mockup's 2px red line.
   const todayPct = ((diffDays(range.min, today) + 0.5) / range.total) * 100;
   const todayVisible = todayPct >= 0 && todayPct <= 100;
@@ -474,11 +517,30 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
           />
         </div>
 
-        <div className="gc-ruler">
-          <span className="gc-ruler-pad" />
-          <span className="gc-ruler-cols" ref={trackRef} style={{ gridTemplateColumns: rulerCols }}>
-            {ruler.map((c) => <span key={c.key} className="gc-col">{c.label}</span>)}
-          </span>
+        {/* Both ruler rows in one sticky block: a chart you have to scroll is
+            a chart whose dates you cannot see, so the header stays at the top
+            of the page while the rows go past it. */}
+        <div className="gc-rulers">
+          <div className="gc-ruler">
+            <span className="gc-ruler-pad" />
+            <span className="gc-ruler-cols" ref={trackRef} style={{ gridTemplateColumns: rulerCols }}>
+              {ruler.map((c) => <span key={c.key} className="gc-col">{c.label}</span>)}
+            </span>
+          </div>
+          {days && (
+            <div className="gc-ruler gc-ruler-days">
+              <span className="gc-ruler-pad" />
+              <span className="gc-ruler-cols" style={{ gridTemplateColumns: `repeat(${range.total}, 1fr)` }}>
+                {days.map((d) => (
+                  <span
+                    key={d.iso}
+                    className={`gc-day${d.weekend ? ' is-weekend' : ''}${d.today ? ' is-today' : ''}`}
+                    title={d.title}
+                  >{d.letter}</span>
+                ))}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="gc-body">
@@ -558,8 +620,16 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
       </div>
       </div>
 
+      {/* "New task" opens the EDITOR, not a four-field dialog in front of it.
+          Creating a task and editing one are the same screen now, so a new
+          task can carry an estimate, an owner, a dependency and a tag on the
+          way in rather than needing a second pass. */}
       {quickAddOpen && (
-        <TaskQuickAdd projects={projects} projectFilter={projectFilter} onClose={() => setQuickAddOpen(false)} />
+        <TaskEditor
+          task={newTaskDraft({ workspaceId: activeWorkspaceId, projectId: projectFilter })}
+          projects={projects}
+          onClose={() => setQuickAddOpen(false)}
+        />
       )}
 
       {/* Clicking a task opens the EDITOR, not the read-only activity list.

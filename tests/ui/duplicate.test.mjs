@@ -108,15 +108,23 @@ test('the task editor offers it, next to Save as template', () => {
   assert.match(editor, /const newId = await duplicateTask\(userId, task\);/);
   assert.match(editor, /undo: async \(\) => \{ await softDeleteTask\(newId\);/,
     'a copy nobody wanted is one click to take back');
-  assert.match(editor, /disabled=\{saving \|\| !task\.id\}/, 'an unsaved task has nothing to copy');
+  // The editor opens on an unsaved task too ("New task"), and there is nothing
+  // to copy until it exists — the button is not there rather than there and
+  // dead. `isNew` is the one flag that tells the two modes apart.
+  assert.match(editor, /const isNew = !task\.id;/);
+  assert.match(editor, /\{!isNew && \(\s*\n\s*<button type="button" className="te-pill te-pill-ghost" onClick=\{duplicate\}/);
 });
 
 test('the project editor says what is about to happen before it happens', () => {
   const view = read('src', 'components', 'ProjectsView.jsx');
-  assert.match(view, /const preview = duplicateProjectPlan\(project, tasks, \{ startOn: todayLocal\(\) \}\);/,
+  assert.match(view, /const opts = \{ startOn: todayLocal\(\), includeDone: true \};/,
+    'the project comes with ALL its tasks, finished ones included');
+  assert.match(view, /const preview = duplicateProjectPlan\(project, tasks, opts\);/,
     'the question is built from the real plan, not from a guess');
+  assert.match(view, /duplicateProject\(userId, project, tasks, opts\)/,
+    'the write and the question use the same options');
   assert.match(view, /This creates \$\{describeDuplicate\(preview\)\}/);
-  assert.match(view, /Nothing is copied from its history/,
+  assert.match(view, /The activity log is not copied/,
     'what is NOT copied is the thing people worry about');
   assert.match(view, /confirmLabel: 'Duplicate'/);
   assert.doesNotMatch(view, /confirmLabel: 'OK'/);
@@ -169,4 +177,10 @@ test('the page the palette sends you to is listening', () => {
   assert.match(view, /useQuickCreate\('duplicate-project', useCallback\(\(projectId\) => \{/,
     'a command with no listener navigates somewhere and then does nothing');
   assert.match(view, /if \(projectId\) setEditing\(projectId\);/);
+});
+
+test('a batched project copy never hands Firestore an undefined category', () => {
+  // duplicateTaskPayload leaves category undefined for a task that has none;
+  // addTask defaults it, a batch.set does not — and refuses the whole write.
+  assert.match(bodyOf('duplicateProject'), /category: payload\.category \|\| 'Personal',/);
 });

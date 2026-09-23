@@ -221,9 +221,14 @@ test('\u2026and what it carried that exists nowhere else survived', () => {
   assert.match(wbs, /activeTodayIds/,      'the "logged activity today" tick');
   assert.match(wbs, /className="wbs-today"/);
   assert.match(wbs, /className="wbs-sub"/, 'subtasks, as a fourth indent');
-  assert.match(wbs, /setLogScope\(\{ type: 'task'/, 'clicking a row still opens its log');
-  assert.match(wbs, /ScopedActivityLogModal/);
-  assert.match(wbs, /TaskQuickAdd/,        '+ New task');
+  // Clicking a row opened a read-only activity table until T-0162; it opens
+  // the TASK EDITOR now, whose Activity tab is that same log — and which took
+  // the table's Export ▾ with it, so the modal could go rather than leaving
+  // two doors onto one thing.
+  assert.match(wbs, /onOpen=\{\(\) => setEditingTask\(t\)\}/, 'clicking a row opens the task');
+  assert.ok(!wbs.includes('ScopedActivityLogModal'), 'and the modal it replaced is gone');
+  assert.match(wbs, /<TaskEditor/);
+  assert.match(wbs, /newTaskDraft\(/,      '+ New task opens the same editor, on an unsaved task');
   assert.match(wbs, /STATUS_FILTERS/,      'the status filter moved to the title block, not away');
 });
 

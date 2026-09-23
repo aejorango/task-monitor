@@ -33,6 +33,17 @@ import { useDialog } from './Dialog';
 
 const RAIL_NARROW_KEY = 'task-monitor.rail.narrow.v1';
 
+/**
+ * The hubs that get a project filter of their own, below the tab strip.
+ *
+ * `board` is not in the list because it has `BoardToolbar`, which draws the
+ * same picker beside the All · Mine · Stuck pills — one strip, not two.
+ * `settings` is not in it either: nothing on Preferences, Workspaces, Trash or
+ * User management is scoped to a project, and a control that filters nothing is
+ * worse than no control.
+ */
+const PICKER_HUBS = new Set(['dashboard', 'projects', 'reports', 'messages']);
+
 function parseHash() {
   const h = window.location.hash.replace(/^#\/?/, '');
   const [path = '', qs = ''] = h.split('?');
@@ -248,18 +259,6 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         search={activeHub?.id === 'board'
           ? <FindItem value={route.q || ''} onChange={findItem} />
           : null}
-        /* The project filter decides what every page below is ABOUT, which is
-           what a breadcrumb is for — so it sits in the middle of the crumb
-           strip rather than among the commands. */
-        projectPicker={(
-          <div data-tutorial="project-picker">
-            <ProjectPicker
-              projects={projects}
-              value={route.projectFilter}
-              onChange={(projectFilter) => navigate({ projectFilter })}
-            />
-          </div>
-        )}
         pageLabel={current.label}
         pageIcon={current.icon}
         workspaceName={activeWorkspace?.name}
@@ -277,10 +276,20 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
 
       {/* The Board Explorer's toolbar sits above the tab content on every
           Board page, so it is drawn here once rather than inside each of the
-          eight pages. `hubForView` decides — not a list of view ids. */}
-      {activeHub?.id === 'board' && (
+          eight pages. `hubForView` decides — not a list of view ids.
+
+          The project filter used to sit in the middle of the crumb strip, and
+          it was the one control on the chrome whose position changed as you
+          moved around: centred on navy above every page EXCEPT the Board,
+          where the toolbar drew a second one at the left of the work area. One
+          control, two places, is how the two come to disagree — so it is the
+          toolbar's now, on every hub that has anything to filter, at the same
+          spot the Board has always put it. */}
+      {activeHub?.id === 'board' ? (
         <BoardToolbar route={route} navigate={navigate} />
-      )}
+      ) : PICKER_HUBS.has(activeHub?.id) ? (
+        <ProjectBar route={route} navigate={navigate} projects={projects} />
+      ) : null}
 
       {/* No box, but ⌘K still opens it: the palette is an overlay. */}
       <GlobalSearch projects={projects} navigate={navigate} />
@@ -827,6 +836,28 @@ function BottomNav({ route, navigate }) {
   );
 }
 
+/**
+ * The project filter on its own, for a hub that has no toolbar of its own.
+ *
+ * It is deliberately the SAME strip as the Board's — `.bt` and `.bt-proj`, in
+ * the `toolbar` grid row — so the control does not move by a pixel as you go
+ * from the Dashboard to the Board. What it is missing (the scope pills, the
+ * roster) is the Board hub's own filtering, which the other hubs do not read.
+ */
+function ProjectBar({ route, navigate, projects }) {
+  return (
+    <div className="bt bt-plain" role="group" aria-label="Project filter">
+      <div className="bt-proj" data-tutorial="project-picker">
+        <ProjectPicker
+          projects={projects}
+          value={route.projectFilter}
+          onChange={(projectFilter) => navigate({ projectFilter })}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function ProjectPicker({ projects, value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -848,13 +879,20 @@ export function ProjectPicker({ projects, value, onChange }) {
     [projects],
   );
 
+  // `proj-picker` is what makes the menu drop DOWN-RIGHT rather than
+  // down-left: `.dropdown-menu` is right-anchored, which is correct for a
+  // button at the right of a row and wrong for this one, which sits at the
+  // left edge of the work area — the menu grew leftwards, under the rail, and
+  // the rail (z-index 20) painted over what was left. The class also caps the
+  // width and keeps each project on ONE line; a 40-character project name used
+  // to wrap to three.
   return (
-    <div className="dropdown" ref={ref}>
-      <button className="btn btn-sm" onClick={() => setOpen(!open)}>
+    <div className="dropdown proj-picker" ref={ref}>
+      <button className="btn btn-sm" onClick={() => setOpen(!open)} aria-expanded={open}>
         {selected ? (
           <>
             <span className="proj-dot" style={{ background: selected.color }} />
-            {selected.name}
+            <span className="proj-picker-name">{selected.name}</span>
           </>
         ) : 'Select project'}
         <span style={{ opacity: 0.5 }}>▾</span>
@@ -866,16 +904,17 @@ export function ProjectPicker({ projects, value, onChange }) {
             onClick={() => { onChange('all'); setOpen(false); }}
           >
             <span className="proj-dot" style={{ background: '#a1a1aa' }} />
-            All projects
+            <span className="proj-picker-name">All projects</span>
           </button>
           {sortedProjects.map((p) => (
             <button
               key={p.id}
               className={`dropdown-item ${value === p.id ? 'selected' : ''}`}
               onClick={() => { onChange(p.id); setOpen(false); }}
+              title={p.name}
             >
               <span className="proj-dot" style={{ background: p.color }} />
-              {p.name}
+              <span className="proj-picker-name">{p.name}</span>
               {p._shared && (
                 <span
                   className="badge badge-soft-info"

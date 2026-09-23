@@ -209,7 +209,10 @@ export default function Markdown({ src, className = 'markdown' }) {
  *
  * @param {{ members: string[], memberProfiles: object, exclude?: string[] }} mentions
  */
-export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '', mentions = null }) {
+// `bare`: just the text box — no Write/Preview tabs, no syntax crib, no frame.
+// The task editor wants a field you click into and type, nothing else; the
+// text is still stored as markdown and still rendered as it wherever it is READ.
+export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '', mentions = null, bare = false }) {
   const [mode, setMode] = useState('edit'); // 'edit' | 'preview'
   const [query, setQuery] = useState(null);   // the @token being typed, or null
   const [active, setActive] = useState(0);
@@ -249,7 +252,8 @@ export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '', me
   };
 
   return (
-    <div className="markdown-editor">
+    <div className={`markdown-editor${bare ? ' markdown-editor-bare' : ''}`}>
+      {!bare && (
       <div className="markdown-toolbar">
         <button
           type="button"
@@ -265,7 +269,8 @@ export function MarkdownEditor({ value, onChange, rows = 4, placeholder = '', me
           Markdown supported: **bold**, *italic*, [link](url), lists, tables, `code`, &gt; quote, ---
         </span>
       </div>
-      {mode === 'edit' ? (
+      )}
+      {bare || mode === 'edit' ? (
         <div className="markdown-input-wrap">
           <textarea
             ref={areaRef}

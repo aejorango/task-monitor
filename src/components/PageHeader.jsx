@@ -65,7 +65,7 @@ export function PageActions({ children }) {
 
 export default function PageHeader({
   route, navigate, pageLabel, pageIcon, workspaceName, status,
-  search = null, projectPicker = null, tools = null, onToggleMenu = null,
+  search = null, tools = null, onToggleMenu = null,
 }) {
   const tabs = tabsForView(route.view);
   const hub = hubForView(route.view);
@@ -112,11 +112,10 @@ export default function PageHeader({
         )}
         <span className="crumb-sep" aria-hidden="true">›</span>
         <span className="crumb crumb-here">{here}</span>
-        {/* The project filter, in the middle of the path: it is the scope
-            everything below is drawn for, which is the same job the crumbs
-            do. `.crumbs-mid` is what centres it, so it stays centred
-            whatever the path either side of it is doing. */}
-        {projectPicker && <div className="crumbs-mid">{projectPicker}</div>}
+        {/* The project filter was centred here until it moved to the toolbar
+            below the tabs, where the Board hub had always drawn it — see the
+            note beside `PICKER_HUBS` in AppShell. The crumb strip carries the
+            path and the status, and nothing you operate. */}
         {status && <div className="crumbs-status">{status}</div>}
       </div>
 

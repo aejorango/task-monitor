@@ -139,10 +139,11 @@ test('the editor offers a plain number field, and says what blank means', () => 
 
 test('the editor writes it through the one normaliser, on both save paths', () => {
   const editor = read('src', 'components', 'TaskEditor.jsx');
-  // Two WRITE paths (the dotted patch and the whole-object save) plus the live
-  // preview that updates as you type — three call sites, one normaliser.
+  // Three WRITE paths — the create (the editor opens on an unsaved task now),
+  // the dotted update patch and the recurrence's whole-object save — plus the
+  // live preview that updates as you type. Four call sites, one normaliser.
   const uses = [...editor.matchAll(/normalizeEstimate\(estimate\)/g)];
-  assert.equal(uses.length, 3, 'the two save paths and the preview must all agree');
+  assert.equal(uses.length, 4, 'every save path and the preview must agree');
   assert.match(editor, /estimateHours:\s+normalizeEstimate\(estimate\),\n\s*'plan\.startDate'/);
   assert.match(editor, /estimateHours: normalizeEstimate\(estimate\),\n\s*plan:/);
   assert.doesNotMatch(editor, /estimateHours:\s*Number\(/, 'no second parser');

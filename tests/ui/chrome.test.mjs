@@ -35,15 +35,40 @@ test('the workspace switcher is in the rail, and its topbar skin went with it', 
     'the white-bar overrides are dead CSS now the control is back on navy');
 });
 
-test('the project picker is in the crumb strip, and really centred', () => {
-  assert.match(shell, /projectPicker=\{\(/);
-  assert.match(header, /\{projectPicker && <div className="crumbs-mid">/);
-  // Absolute, not "between its neighbours": a long workspace name on the left
-  // would otherwise shunt it off-centre.
-  const block = css.slice(css.indexOf('.crumbs-mid {'), css.indexOf('.crumbs-mid {') + 240);
-  assert.match(block, /position: absolute/);
-  assert.match(block, /left: 50%/);
-  assert.match(block, /translateX\(-50%\)/);
+// It was centred in the crumb strip until it moved to the toolbar, at the
+// left of the work area — where the Board hub had drawn its own copy all
+// along. One control in one place: the point of the move is that the picker
+// does not shift as you walk from the Dashboard to the Board.
+test('the project picker is in the toolbar, on every hub that can use one', () => {
+  assert.ok(!shell.includes('projectPicker={'), 'the crumb-strip slot is gone');
+  assert.ok(!header.includes('crumbs-mid'), 'and so is the hole it went in');
+  assert.ok(!css.includes('.crumbs-mid {'), 'and the CSS that centred it');
+
+  // The Board keeps its own toolbar; every other hub with something to filter
+  // gets the same strip with just the picker in it.
+  assert.match(shell, /const PICKER_HUBS = new Set\(\[([^\]]+)\]\)/);
+  const listed = shell.match(/const PICKER_HUBS = new Set\(\[([^\]]+)\]\)/)[1];
+  for (const hub of ['dashboard', 'projects', 'reports', 'messages']) {
+    assert.ok(listed.includes(`'${hub}'`), `${hub} should carry the picker`);
+  }
+  assert.ok(!listed.includes("'board'"), 'the Board has BoardToolbar — two strips is two pickers');
+  assert.match(shell, /<ProjectBar route=\{route\}/);
+  assert.match(read('src', 'components', 'BoardToolbar.jsx'), /<ProjectPicker/);
+});
+
+// The bug the move exposed: `.dropdown-menu` is right-anchored, which is right
+// for a button at the end of a row and wrong for one at the left edge of the
+// page — the menu grew leftwards under the rail, and the rail (z-index 20)
+// painted over it.
+test('the picker’s menu opens rightwards, above the rail, one line per project', () => {
+  const block = css.slice(css.indexOf('.proj-picker .dropdown-menu {'),
+    css.indexOf('.proj-picker .dropdown-menu {') + 300);
+  assert.match(block, /left: 0/);
+  assert.match(block, /right: auto/);
+  const z = Number(block.match(/z-index: (\d+)/)[1]);
+  const railZ = Number(css.slice(css.indexOf('.rail {')).match(/z-index: (\d+)/)[1]);
+  assert.ok(z > railZ, `the menu (${z}) must sit above the rail (${railZ})`);
+  assert.match(css, /\.proj-picker-name \{[\s\S]*?text-overflow: ellipsis/);
 });
 
 test('⌘K still opens the palette, and nothing is left in the DOM when it is shut', () => {

@@ -140,9 +140,6 @@ function Harness() {
             {online ? 'Go offline' : 'Go online'}
           </button>
         </>}
-        projectPicker={(
-          <span className="chip">All projects ▾</span>
-        )}
         search={activeHub?.id === 'board'
           ? <FindItem value={find} onChange={(v) => setFind(v || '')} />
           : null}
@@ -154,7 +151,11 @@ function Harness() {
         </>}
       />
 
-      {activeHub?.id === 'board' && <ToolbarSample />}
+      {activeHub?.id === 'board' ? <ToolbarSample /> : (
+        <div className="bt bt-plain" role="group" aria-label="Project filter">
+          <div className="bt-proj"><ProjectPickerSample /></div>
+        </div>
+      )}
 
       <main className="content">
         <Sample key={view} view={view} />
@@ -164,14 +165,56 @@ function Harness() {
 }
 
 
+// ─── The project picker (static twin of ProjectPicker) ────────────────────
+// Deliberately seeded with a name long enough to have broken the old menu: it
+// was right-anchored, so it grew leftwards under the rail, and the name wrapped
+// to three lines. Open it at 1280 and at 375 to check both.
+const SAMPLE_PROJECTS = [
+  { id: 'all', name: 'All projects', color: '#a1a1aa' },
+  { id: 'p1', name: 'SRC – DES Balance Sheet Approach (BSA)', color: '#e2892e' },
+  { id: 'p2', name: 'BSP Meetings & Tasks', color: '#137a36' },
+  { id: 'p3', name: 'Training', color: '#3b82f6' },
+];
+function ProjectPickerSample() {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('all');
+  const selected = SAMPLE_PROJECTS.find((p) => p.id === value) || SAMPLE_PROJECTS[0];
+  return (
+    <div className="dropdown proj-picker">
+      <button className="btn btn-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="proj-dot" style={{ background: selected.color }} />
+        <span className="proj-picker-name">{selected.name}</span>
+        <span style={{ opacity: 0.5 }}>▾</span>
+      </button>
+      {open && (
+        <div className="dropdown-menu">
+          {SAMPLE_PROJECTS.map((p) => (
+            <button
+              key={p.id}
+              className={`dropdown-item ${value === p.id ? 'selected' : ''}`}
+              onClick={() => { setValue(p.id); setOpen(false); }}
+            >
+              <span className="proj-dot" style={{ background: p.color }} />
+              <span className="proj-picker-name">{p.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── The Board hub's shared toolbar (static twin of BoardToolbar) ─────────
-const FACES = [['Ace'], ['Rob'], ['Mary'], ['Tim'], ['Pam']].map(([n]) => [n, null]);
+const FACES =[['Ace'], ['Rob'], ['Mary'], ['Tim'], ['Pam']].map(([n]) => [n, null]);
 function ToolbarSample() {
   const [scope, setScope] = useState('all');
   const [who, setWho] = useState(null);
   return (
     <div className="bt" role="group" aria-label="Board filters">
-      <button className="bt-new">+ New item</button>
+      {/* The project picker, not "+ New item" — the twin has to move when the
+          component does, or the harness is checking a design that stopped
+          shipping. */}
+      <div className="bt-proj"><ProjectPickerSample /></div>
       {['All', 'Mine', 'Stuck'].map((label) => {
         const id = label.toLowerCase();
         return (
@@ -1247,11 +1290,31 @@ function GanttSample() {
         </span>
       </div>
 
-      <div className="gc-ruler">
-        <span className="gc-ruler-pad" />
-        <span className="gc-ruler-cols" style={{ gridTemplateColumns: cols }}>
-          {WEEKS.map((w) => <span key={w} className="gc-col">{w}</span>)}
-        </span>
+      {/* Both ruler rows in the sticky block, as the component draws them —
+          scroll the page and they should stay at the top. The day letters
+          only appear on a short window in the real chart; the twin shows
+          them so the row can be looked at at all. */}
+      <div className="gc-rulers">
+        <div className="gc-ruler">
+          <span className="gc-ruler-pad" />
+          <span className="gc-ruler-cols" style={{ gridTemplateColumns: cols }}>
+            {WEEKS.map((w) => <span key={w} className="gc-col">{w}</span>)}
+          </span>
+        </div>
+        <div className="gc-ruler gc-ruler-days">
+          <span className="gc-ruler-pad" />
+          <span className="gc-ruler-cols" style={{ gridTemplateColumns: `repeat(${WEEKS.length * 7}, 1fr)` }}>
+            {Array.from({ length: WEEKS.length * 7 }, (_, i) => {
+              const dow = (i + 1) % 7;   // the sample weeks start on a Monday
+              return (
+                <span
+                  key={i}
+                  className={`gc-day${dow === 0 || dow === 6 ? ' is-weekend' : ''}${i === 17 ? ' is-today' : ''}`}
+                >{['S', 'M', 'T', 'W', 'T', 'F', 'S'][dow]}</span>
+              );
+            })}
+          </span>
+        </div>
       </div>
 
       <div className="gc-body">
@@ -1334,7 +1397,6 @@ function WbsSample() {
     <div className="wbs">
       <div className="wbs-head">
         <span className="bx-h">Work breakdown</span>
-        <span className="bx-note">project › phase › item</span>
       </div>
       {WBS_TREE.map(([proj, color, phases]) => (
         <div key={proj}>

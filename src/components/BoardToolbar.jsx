@@ -50,7 +50,7 @@ export default function BoardToolbar({ route, navigate }) {
           The same ProjectPicker component, so the two cannot disagree. A task
           is still created from ⌘K → New task and from the Kanban's own
           quick-add. */}
-      <div className="bt-proj">
+      <div className="bt-proj" data-tutorial="project-picker">
         <ProjectPicker
           projects={projects}
           value={route.projectFilter}

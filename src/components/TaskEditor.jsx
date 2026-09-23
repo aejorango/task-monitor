@@ -5,7 +5,7 @@
 // this task's activity log pinned on the right, and a sticky action footer.
 // Everything is theme tokens, so it follows light/dark automatically.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   addTask,
   updateTask,
@@ -35,6 +35,8 @@ import {
 import { memberLabel } from '../services/invites';
 import TaskAiPanel from './TaskAiPanel';
 import ActivityEditor from './ActivityEditor';
+import ExportButton from './ExportButton';
+import { buildActivityLogDocument } from '../services/activityExport';
 import { usePresence } from '../hooks/usePresence';
 import ActivityTimeline, { fmtDay } from './ActivityTimeline';
 import { formatHours, formatVariance, normalizeEstimate, variance } from '../services/effort';
@@ -86,9 +88,33 @@ const ACT_FILTERS = [
   { key: 'blocked', label: 'Blocked' },
 ];
 
+/**
+ * A task that does not exist yet.
+ *
+ * The editor opens on one of these when somebody presses "New task", so
+ * creating a task and editing one are the same screen — there is no longer a
+ * four-field dialog that can offer less than the editor does, and no second
+ * step to reach dependencies, an estimate or an assignee. It carries no `id`,
+ * which is the only thing that tells the editor apart.
+ */
+export function newTaskDraft({ workspaceId, projectId = '', phaseId = '', plan = {} } = {}) {
+  return {
+    workspaceId,
+    projectId: projectId && projectId !== 'all' ? projectId : '',
+    phaseId,
+    status: 'todo',
+    priority: 'medium',
+    plan: { startDate: plan.startDate || null, endDate: plan.endDate || null },
+  };
+}
+
 export default function TaskEditor({ task, projects, onClose }) {
+  // No id means it has never been written: the same form, in create mode. The
+  // things that need a document to exist — comments, the activity log, delete,
+  // duplicate, presence — say so rather than being silently broken.
+  const isNew = !task.id;
   // Same shape as the project editor: a hero breadcrumb, no heading element.
-  const modal = useModalDialog({ onClose, title: 'Task editor' });
+  const modal = useModalDialog({ onClose, title: isNew ? 'New task' : 'Task editor' });
   const ask = useDialog();
   const toast = useToast();
   const { tasks: allTasks } = useTasks();
@@ -131,6 +157,16 @@ export default function TaskEditor({ task, projects, onClose }) {
   // Which right-hand tab is open. The mockup's own MTABS order.
   const [mtab, setMtab] = useState('details');
   const [assignOpen, setAssignOpen] = useState(false);
+  // A dropdown closes when you click anywhere else, like every other one.
+  const assignRef = useRef(null);
+  useEffect(() => {
+    if (!assignOpen) return undefined;
+    const onDown = (e) => {
+      if (assignRef.current && !assignRef.current.contains(e.target)) setAssignOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [assignOpen]);
   const [editingActivity, setEditingActivity] = useState(null);
 
   const selectedProject = projects.find((p) => p.id === projectId);
@@ -304,6 +340,50 @@ export default function TaskEditor({ task, projects, onClose }) {
   const save = async () => {
     setSaving(true);
     try {
+      // ── Create ────────────────────────────────────────────────────────
+      // Everything the form holds, in one write. `addTask` fills the actual
+      // dates and the progress from the status (`statusStamps`), so a task
+      // created straight into "In progress" is stamped exactly as one dragged
+      // there would be — the create path does not get its own arithmetic.
+      if (isNew) {
+        const workspaceId = selectedProject?.workspaceId || task.workspaceId || activeWorkspaceId;
+        const ref = await addTask(userId, {
+          workspaceId,
+          title: title.trim(),
+          description: description.trim(),
+          category: selectedProject?.name || task.category || 'Personal',
+          projectId: projectId || null,
+          phaseId: phaseId || null,
+          priority,
+          status,
+          requestedBy: requestedBy.trim(),
+          tags,
+          subtasks,
+          dependsOn,
+          links,
+          recurrence,
+          customValues,
+          assignedTo,
+          assignedToExternal,
+          estimateHours: normalizeEstimate(estimate),
+          plan:   { startDate: planStart   || null, endDate: planEnd   || null },
+          actual: { startDate: actualStart || null, endDate: actualEnd || null },
+        });
+        // Whoever it was handed to hears about it — after the write, so a
+        // notice that cannot be raised never costs somebody the task.
+        await notifyAssignment({
+          task: { id: ref?.id, workspaceId, projectId: projectId || null, title: title.trim() },
+          before: [],
+          after: assignedTo,
+          byUserId: userId,
+          byName: memberLabel(userId, workspace?.memberProfiles || {}),
+        });
+        toast.success(`Created “${title.trim()}”.`);
+        onClose();
+        return;
+      }
+
+      // ── Update ────────────────────────────────────────────────────────
       // Mirror the auto-stamping logic from setTaskStatus, but only when the
       // user didn't manually fill the corresponding actual date field. This
       // preserves explicit edits while still being helpful for the common
@@ -423,7 +503,7 @@ export default function TaskEditor({ task, projects, onClose }) {
 
       const newId = await duplicateTask(userId, task);
 
-      toast.success(`Copied “${task.title}”.`, {
+      toast.success(`Copied “${task.title}” — the activity log stays with the original.`, {
 
         // A copy nobody wanted is one click to take back.
 
@@ -461,12 +541,31 @@ export default function TaskEditor({ task, projects, onClose }) {
         subtasks,
         recurrence,
       });
-      await addTemplate(userId, { workspaceId: task.workspaceId, name: name.trim(), kind: 'task', payload });
+      await addTemplate(userId, {
+        workspaceId: task.workspaceId || activeWorkspaceId,
+        name: name.trim(), kind: 'task', payload,
+      });
       toast.success(`Saved template "${name.trim()}".`);
     } catch (err) {
       console.error(err);
       toast.error(friendlyError(err, 'Could not save template. Please try again.'));
     }
+  };
+
+  // The Activity tab's Export ▾. `build` runs only when a format is picked,
+  // so opening the tab costs nothing — and the tab is the one place a single
+  // task's log can be got out of the app since the WBS's read-only table was
+  // deleted (T-0162).
+  const activityExportProps = {
+    build: () => buildActivityLogDocument(activities, {
+      taskById: { [task.id]: task },
+      projectById: selectedProject ? { [selectedProject.id]: selectedProject } : {},
+      projectName: selectedProject?.name || null,
+      title: `${title.trim() || task.title} — activity log`,
+    }),
+    baseName: `${title.trim() || task.title || 'task'}-activities`,
+    kind: 'table',
+    title: 'Save this task’s entries as a spreadsheet, a PDF or a CSV',
   };
 
   // ── The five right-hand tabs, straight from the mockup's MTABS ───────────
@@ -539,7 +638,11 @@ export default function TaskEditor({ task, projects, onClose }) {
                 <span className={`te-sub-title ${s.done ? 'is-done' : ''}`}>{s.text}</span>
                 <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); moveSubtask(i, -1); }} disabled={i === 0} aria-label={`Move “${s.text}” up`}>↑</button>
                 <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); moveSubtask(i, 1); }} disabled={i === subtasks.length - 1} aria-label={`Move “${s.text}” down`}>↓</button>
-                <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); promoteSubtask(s); }} aria-label={`Promote “${s.text}” to a task`} title="Promote to a full task">↗</button>
+                {/* A promoted subtask is linked back to its parent, and a
+                    task that has not been written has nothing to link to. */}
+                {!isNew && (
+                  <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); promoteSubtask(s); }} aria-label={`Promote “${s.text}” to a task`} title="Promote to a full task">↗</button>
+                )}
                 <button type="button" className="te-iconbtn te-sub-btn" {...stop} onClick={(e) => { e.stopPropagation(); removeSubtask(s.id); }} aria-label={`Remove “${s.text}”`}>✕</button>
               </div>
             ))}
@@ -622,6 +725,13 @@ export default function TaskEditor({ task, projects, onClose }) {
             <span className="te-log-icon" aria-hidden="true">⏱</span>
             <span className="te-log-title">Activity log</span>
             <span className="te-count" style={{ marginLeft: 'auto' }}>{activities.length}</span>
+            {/* The WBS used to open a read-only table over this task with an
+                Export ▾ on it; clicking a row opens THIS editor now, so the
+                export came with it rather than being lost. `build` runs only
+                when a format is picked, so the tab costs nothing to open. */}
+            {activities.length > 0 && (
+              <ExportButton {...activityExportProps} className="te-pill te-pill-ghost" />
+            )}
           </div>
 
           <div className="te-filters">
@@ -645,10 +755,14 @@ export default function TaskEditor({ task, projects, onClose }) {
             )}
           </div>
 
-          <LogComposer
-            userId={userId}
-            task={{ ...task, title: title.trim() || task.title, projectId: projectId || null, phaseId: phaseId || null, status }}
-          />
+          {isNew ? (
+            <p className="te-hint">Hours are logged against a saved task — create this one first.</p>
+          ) : (
+            <LogComposer
+              userId={userId}
+              task={{ ...task, title: title.trim() || task.title, projectId: projectId || null, phaseId: phaseId || null, status }}
+            />
+          )}
         </div>
       );
     }
@@ -723,9 +837,6 @@ export default function TaskEditor({ task, projects, onClose }) {
 
         <div className="te-card" style={{ padding: '15px 18px', marginTop: 14 }}>
           <span className="te-lbl">Dependencies &amp; relations</span>
-          {dependsOnTasks.length === 0 && blocksTasks.length === 0 && links.length === 0 && (
-            <p className="te-empty">Nothing linked yet.</p>
-          )}
           <div className="te-subs">
             {dependsOnTasks.map((d) => (
               <div key={d.id} className="te-item">
@@ -809,9 +920,13 @@ export default function TaskEditor({ task, projects, onClose }) {
         <div className="te-nav">
           <button type="button" className="te-back" onClick={onClose}>← Back to items</button>
           <span className="te-nav-sep" aria-hidden="true" />
-          <span className="te-pos">{myIndex >= 0 ? `${myIndex + 1} of ${siblings.length}` : `${siblings.length} items`}</span>
+          <span className="te-pos">
+            {isNew ? 'Not saved yet'
+              : myIndex >= 0 ? `${myIndex + 1} of ${siblings.length}`
+              : `${siblings.length} items`}
+          </span>
           <div className="te-nav-actions">
-            <PresenceStack taskId={task.id} workspaceId={task.workspaceId} />
+            {!isNew && <PresenceStack taskId={task.id} workspaceId={task.workspaceId} />}
             <button type="button" className="te-iconbtn" onClick={() => goSibling(-1)} disabled={myIndex <= 0} aria-label="Previous task">↑</button>
             <button type="button" className="te-iconbtn" onClick={() => goSibling(1)} disabled={myIndex < 0 || myIndex >= siblings.length - 1} aria-label="Next task">↓</button>
             <button type="button" className="te-iconbtn te-x" onClick={onClose} aria-label="Close">✕</button>
@@ -822,11 +937,13 @@ export default function TaskEditor({ task, projects, onClose }) {
         <div className="te-primary">
           <div className="te-primary-top">
             <span className="te-kind" aria-hidden="true">✓</span>
-            <span className="te-code">TASK {String(task.id).slice(0, 6).toUpperCase()}</span>
+            <span className="te-code">{isNew ? 'NEW TASK' : `TASK ${String(task.id).slice(0, 6).toUpperCase()}`}</span>
             <div className="te-primary-actions">
-              <button type="button" className="te-pill te-pill-ghost" onClick={duplicate} disabled={saving || !task.id}>Duplicate</button>
+              {!isNew && (
+                <button type="button" className="te-pill te-pill-ghost" onClick={duplicate} disabled={saving} title="Make a copy of this task — not its activity log">Duplicate</button>
+              )}
               <button type="button" className="te-pill te-pill-primary" onClick={save} disabled={saving || !title.trim()}>
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? 'Saving…' : isNew ? 'Create task' : 'Save'}
               </button>
             </div>
           </div>
@@ -846,7 +963,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                 request), so the picker lives HERE — on the field that names the
                 person. Taking the section away without re-homing it would have
                 left the task editor unable to assign anybody. */}
-            <div className="te-ef te-ef-pop">
+            <div className="te-ef te-ef-pop" ref={assignRef}>
               <button
                 type="button"
                 className="te-ef-btn"
@@ -886,7 +1003,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                 <span className="te-lbl">Due from</span>
                 <span className="te-ev">{planStart ? fmtDay(planStart) : '—'}<span className="te-ec" aria-hidden="true">⌄</span></span>
               </span>
-              <input type="date" value={planStart} onChange={(e) => setPlanStart(e.target.value)} aria-label="Planned start" />
+              <input type="date" value={planStart} onChange={(e) => setPlanStart(e.target.value)} onClick={openDatePicker} aria-label="Planned start" />
             </label>
             <span className="te-arrow" aria-hidden="true">→</span>
             <label className="te-ef">
@@ -898,7 +1015,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                   <span className="te-ec" aria-hidden="true">⌄</span>
                 </span>
               </span>
-              <input type="date" value={planEnd} onChange={(e) => setPlanEnd(e.target.value)} aria-label="Planned end" />
+              <input type="date" value={planEnd} onChange={(e) => setPlanEnd(e.target.value)} onClick={openDatePicker} aria-label="Planned end" />
             </label>
 
             <span className="te-meta-sep" aria-hidden="true" />
@@ -938,6 +1055,7 @@ export default function TaskEditor({ task, projects, onClose }) {
             <div className="te-desc-block te-quiet">
               <span className="te-lbl">Description</span>
               <MarkdownEditor
+                bare
                 value={description}
                 onChange={setDescription}
                 rows={4}
@@ -949,12 +1067,19 @@ export default function TaskEditor({ task, projects, onClose }) {
               <div className="te-comments-head">
                 <span className="te-lbl" style={{ margin: 0 }}>Comments</span>
               </div>
-              <CommentsThread
-                task={task}
-                userId={userId}
-                members={workspace?.members || []}
-                memberProfiles={workspace?.memberProfiles || {}}
-              />
+              {/* A comment has to belong to something. Rather than a thread
+                  that silently drops what you type, the panel says what to do
+                  first. */}
+              {isNew ? (
+                <p className="te-empty">Create the task first — then you can talk about it here.</p>
+              ) : (
+                <CommentsThread
+                  task={task}
+                  userId={userId}
+                  members={workspace?.members || []}
+                  memberProfiles={workspace?.memberProfiles || {}}
+                />
+              )}
             </div>
           </div>
 
@@ -981,11 +1106,18 @@ export default function TaskEditor({ task, projects, onClose }) {
 
         {/* footer — the app's own actions; the mockup draws no slot for them */}
         <div className="te-foot">
-          <button type="button" className="te-pill te-pill-danger" onClick={remove} disabled={saving}>Delete task</button>
+          {/* Nothing to delete until it exists. "Save as template" still
+              works — it writes the FORM, not the task. */}
+          {!isNew && (
+            <button type="button" className="te-pill te-pill-danger" onClick={remove} disabled={saving}>Delete task</button>
+          )}
           <button type="button" className="te-pill te-pill-ghost" onClick={saveAsTemplate} disabled={saving || !title.trim()}>Save as template</button>
           <span className="te-foot-spacer" />
           <span className="te-foot-note">
-            {updatedAt ? `Edited ${fmtDay(updatedAt.toISOString().slice(0, 10))}` : createdAt ? `Created ${fmtDay(createdAt.toISOString().slice(0, 10))}` : ''}
+            {isNew ? 'Not saved yet — press Create task'
+              : updatedAt ? `Edited ${fmtDay(updatedAt.toISOString().slice(0, 10))}`
+              : createdAt ? `Created ${fmtDay(createdAt.toISOString().slice(0, 10))}`
+              : ''}
           </span>
         </div>
       </div>
@@ -996,6 +1128,14 @@ export default function TaskEditor({ task, projects, onClose }) {
     )}
     </>
   );
+}
+
+// The date input sits invisibly over its field (see `.te-ef > input`), and a
+// click on a date input only focuses one of its day/month/year segments — the
+// calendar opens from the icon at its right edge, which nobody can see here.
+// So the field did nothing visible when clicked. Ask for the picker outright.
+function openDatePicker(e) {
+  try { e.currentTarget.showPicker?.(); } catch { /* not a user gesture, or unsupported: typing still works */ }
 }
 
 // Progress bar + percentage used by the hierarchy tree rows.
@@ -1199,9 +1339,7 @@ function LinksEditor({ links, onChange, candidates }) {
   return (
     <div>
       <span className="pe-lbl">Related tasks</span>
-      {links.length === 0 ? (
-        <p className="muted small">No relations. Use these for "blocks", "related to", or "duplicate of" — distinct from a hard dependency.</p>
-      ) : (
+      {links.length > 0 && (
         <div className="te-deps">
           {links.map((l, i) => {
             const target = candidateById[l.targetId];
@@ -1258,7 +1396,7 @@ function CommentsThread({ task, userId, members = [], memberProfiles = {} }) {
   const toast = useToast();
   const ask = useDialog();
   const taskId = task.id;
-  const { comments, loading } = useTaskComments(taskId);
+  const { comments, loading } = useTaskComments(task.workspaceId, taskId);
   const [body, setBody] = useState('');
   const [posting, setPosting] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -1306,6 +1444,7 @@ function CommentsThread({ task, userId, members = [], memberProfiles = {} }) {
             return (
               <li key={c.id} className="comment-item">
                 <div className="comment-head">
+                  <strong className="comment-who">{memberLabel(c.userId, memberProfiles) || 'Someone'}</strong>
                   <span className="mono small muted">
                     {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleString() : 'pending'}
                   </span>
@@ -1313,15 +1452,15 @@ function CommentsThread({ task, userId, members = [], memberProfiles = {} }) {
                   <div style={{ flex: 1 }} />
                   {!isEditing && (
                     <>
-                      <button className="btn btn-sm btn-ghost" onClick={() => { setEditingId(c.id); setEditingBody(c.body); }}>✎</button>
-                      <button className="btn btn-sm btn-ghost link-danger"
+                      <button className="btn btn-sm btn-ghost" aria-label="Edit comment" title="Edit comment" onClick={() => { setEditingId(c.id); setEditingBody(c.body); }}>✎</button>
+                      <button className="btn btn-sm btn-ghost link-danger" aria-label="Delete comment" title="Delete comment"
                         onClick={async () => { if (await ask.confirm({ title: 'Delete this comment?', confirmLabel: 'Delete', danger: true })) softDeleteTaskComment(c.id); }}>✕</button>
                     </>
                   )}
                 </div>
                 {isEditing ? (
                   <>
-                    <MarkdownEditor value={editingBody} onChange={setEditingBody} rows={2} />
+                    <MarkdownEditor bare value={editingBody} onChange={setEditingBody} rows={2} />
                     <div style={{ display: 'flex', gap: 6, marginTop: 4, justifyContent: 'flex-end' }}>
                       <button className="btn btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
                       <button className="btn btn-sm btn-primary" onClick={() => saveEdit(c.id)}>Save</button>
@@ -1338,6 +1477,7 @@ function CommentsThread({ task, userId, members = [], memberProfiles = {} }) {
 
       <div className="comment-composer">
         <MarkdownEditor
+          bare
           value={body}
           onChange={setBody}
           rows={3}

@@ -1157,14 +1157,14 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
   // What the user typed after "new project" in ⌘K.
   useSeededField(nameSeed, setName);
   const [segment, setSegment]   = useState(project?.segment || 'Uncategorized');
+  // A NEW project starts with no phases (asked for directly). Planning ·
+  // Execution · Review was a guess at somebody else's process, and three
+  // phases nobody chose are three rows to rename or delete before the project
+  // says anything true about the work. A template still brings its own.
   const [phases, setPhases]     = useState(
     project?.phases?.length ? project.phases :
     seed?.phases?.length ? seed.phases.map((p) => ({ id: uid(), name: p.name, order: p.order })) :
-    [
-      { id: uid(), name: 'Planning',  order: 0 },
-      { id: uid(), name: 'Execution', order: 1 },
-      { id: uid(), name: 'Review',    order: 2 },
-    ]
+    []
   );
   const [customFields, setCustomFields] = useState(project?.customFields || []);
   const [assignedTo, setAssignedTo] = useState(project?.assignedTo || []);
@@ -1391,18 +1391,22 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
   // move. Twelve documents on a mis-click is a lot to tidy by hand, so it
   // comes with an Undo.
   const duplicate = async () => {
-    const preview = duplicateProjectPlan(project, tasks, { startOn: todayLocal() });
+    // Every task comes with it, finished ones included — they come back as
+    // To Do. What never comes is the history: the activity log stays with the
+    // original, and every copy starts at 0 hours and 0%.
+    const opts = { startOn: todayLocal(), includeDone: true };
+    const preview = duplicateProjectPlan(project, tasks, opts);
     const answer = await ask.confirm({
       title: `Duplicate “${project.name}”?`,
-      message: `This creates ${describeDuplicate(preview)}. Nothing is copied from its history — `
-             + 'no logged hours, no activity, no progress.',
+      message: `This creates ${describeDuplicate(preview)}, every one back in To Do. `
+             + 'The activity log is not copied — no logged hours, no activity entries, no progress.',
       confirmLabel: 'Duplicate',
     });
     if (!answer) return;
 
     setSaving(true);
     try {
-      const made = await duplicateProject(userId, project, tasks, { startOn: todayLocal() });
+      const made = await duplicateProject(userId, project, tasks, opts);
       toast.success(
         `Copied “${project.name}” with ${made.taskIds.length} task${made.taskIds.length === 1 ? '' : 's'}.`,
         { undo: async () => { await undoDuplicateProject(made); toast.info('Copy removed.'); } },
@@ -1632,11 +1636,29 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
                     <div className="pe-phase-ctl">
                       <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, -1)} disabled={i === 0} title="Move up" aria-label="Move up">↑</button>
                       <button type="button" className="btn btn-sm btn-ghost" onClick={() => movePhase(i, 1)} disabled={i === phases.length - 1} title="Move down" aria-label="Move down">↓</button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} disabled={phases.length === 1} title="Remove phase" aria-label="Remove phase">✕</button>
+                      {/* No "you must keep one" any more: a project with no
+                          phases is a legal project — that is what a new one
+                          starts as — so the last phase can go the same way
+                          the others do. Its tasks become Unphased, which the
+                          WBS and the board already draw. */}
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => removePhase(p.id)} title="Remove phase" aria-label="Remove phase">✕</button>
                     </div>
                   </div>
                 );
               })}
+
+              {phases.length === 0 && (
+                <div className="pe-tree-row pe-tree-phase pe-tree-nophase">
+                  <span className="pe-kind pe-kind-phase">PHASE</span>
+                  <div className="pe-tree-body">
+                    <div className="pe-tree-name muted">No phases yet</div>
+                    <div className="pe-tree-meta">
+                      Tasks go straight under the project until you add one — the WBS
+                      and the board call that <strong>Unphased</strong>.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <button type="button" className="btn btn-sm pe-add-phase" onClick={addPhase}>+ Add phase</button>
             </section>
@@ -2000,7 +2022,7 @@ function ProjectEditor({ project, userId, workspace, fromTemplate, nameSeed, onC
               <button type="button" className="btn btn-sm" onClick={archive} disabled={saving}>Archive</button>
               <button
                 type="button" className="btn btn-sm" onClick={duplicate} disabled={saving}
-                title={`Make another project like “${project.name}”, with its open tasks`}
+                title={`Make another project like “${project.name}”, with all its tasks — not its activity log`}
               >Duplicate</button>
             </>
           )}

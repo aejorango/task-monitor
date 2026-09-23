@@ -102,9 +102,13 @@ test('an empty log still produces a file rather than failing', async () => {
 
 // ─── all four surfaces, and no hand-rolled CSV left ─────────────────────────
 
+// The WBS page's own activity modal was deleted in T-0162 — a row opens the
+// TASK EDITOR now — so the surface that has to carry the export is the
+// editor's Activity tab, which is where that log ended up. The list follows
+// the log, not the file it used to live in.
 const SURFACES = [
   ['TableView.jsx', 'the Activity Log'],
-  ['WBSView.jsx', 'the WBS page’s activity modal'],
+  ['TaskEditor.jsx', 'the task editor’s Activity tab'],
   ['WbsModal.jsx', 'the WBS modal'],
   ['ProjectsView.jsx', 'the per-project activity log'],
 ];

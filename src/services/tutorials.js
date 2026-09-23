@@ -87,7 +87,7 @@ export const TUTORIALS = [
         view: 'board',
         selector: '[data-tutorial="project-picker"]',
         title: 'Filter by project',
-        body: 'Use the project picker in the topbar to narrow the whole app — Board, Gantt, Calendar, Table — to a single project.',
+        body: 'Use the project picker at the left of the toolbar to narrow the whole app — Board, Gantt, Calendar, WBS — to a single project. It sits in the same spot on the Dashboard, Projects, Reports and Messages.',
       },
       {
         view: 'board',

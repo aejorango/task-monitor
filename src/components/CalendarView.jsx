@@ -6,13 +6,13 @@ import {
   useDraggable, useDroppable, DragOverlay,
 } from '@dnd-kit/core';
 import { useTasks, useProjects, useAuth, useAllActivities } from '../hooks/useTasks';
+import { useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { tagFilterState } from '../services/tagFilter';
 import { useSettings } from '../hooks/useSettings';
 import { updateTask, todayLocal } from '../services/firebase';
 import { scopeTasks, scopeOf, blockedTaskIds } from '../services/boardScope';
 import { moveTaskToDay } from '../services/workload';
-import TaskEditor from './TaskEditor';
-import TaskQuickAdd from './TaskQuickAdd';
+import TaskEditor, { newTaskDraft } from './TaskEditor';
 import { friendlyError } from '../services/access';
 import { useToast } from './Toast';
 import { PageActions, PageSubtitle } from './PageHeader';
@@ -36,6 +36,7 @@ export default function CalendarView({ projectFilter, initialTagFilter, route = 
   });
   const [editing, setEditing] = useState(null);
   const { userId } = useAuth();
+  const activeWorkspaceId = useActiveWorkspaceId();
   const [activeDrag, setActiveDrag] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' or one of TASK_STATUSES
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -238,10 +239,13 @@ export default function CalendarView({ projectFilter, initialTagFilter, route = 
         />
       )}
 
+      {/* "New task" opens the full editor on an unsaved task — the same
+          screen editing one uses, so a task can arrive with an owner, an
+          estimate and a dependency rather than needing a second pass. */}
       {quickAddOpen && (
-        <TaskQuickAdd
+        <TaskEditor
+          task={newTaskDraft({ workspaceId: activeWorkspaceId, projectId: projectFilter })}
           projects={projects}
-          projectFilter={projectFilter}
           onClose={() => setQuickAddOpen(false)}
         />
       )}

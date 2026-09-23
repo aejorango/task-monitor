@@ -1901,6 +1901,12 @@ export async function duplicateProject(userId, project, tasks = [], opts = {}) {
       ref: refs[i],
       data: {
         ...payload,
+        // `duplicateTaskPayload` leaves category undefined when the original
+        // had none, and a batch — unlike `addTask`, which defaults it — hands
+        // that straight to Firestore, which refuses the WHOLE write
+        // ("Unsupported field value: undefined"). So a project whose tasks had
+        // no legacy category could never be duplicated.
+        category: payload.category || 'Personal',
         projectId,
         userId,
         // Placeholders become real ids now that the refs exist.
@@ -2162,11 +2168,23 @@ export async function softDeleteTaskComment(commentId) {
   });
 }
 
-export function subscribeToTaskComments(taskId, callback) {
-  const q = query(taskCommentsRef, where('taskId', '==', taskId));
+// Needs `workspaceId` AND `taskId` — the same trap as subscribeToActivities.
+// `where('taskId','==',id)` on its own states nothing the read rule can check
+// (RULES ARE NOT FILTERS), so Firestore refused the whole query and every
+// thread rendered "No comments yet" while the comments were being written
+// fine. The workspace clause is what `isWorkspaceMember` can prove.
+export function subscribeToTaskComments(workspaceId, taskId, callback) {
+  if (!workspaceId || !taskId) { callback([]); return () => {}; }
+  const q = query(
+    taskCommentsRef,
+    where('workspaceId', '==', workspaceId),
+    where('taskId', '==', taskId),
+  );
   return onSnapshot(q, (snap) => {
     const data = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+      // 'estimate' so a comment still waiting on its server timestamp sorts
+      // as NOW (the bottom of the thread) rather than as 1970 (the top).
+      .map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }))
       .filter((c) => !c.deleted)
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
     callback(data);

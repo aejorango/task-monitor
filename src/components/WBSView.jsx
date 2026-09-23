@@ -13,8 +13,10 @@
 // without a home.
 //
 // What survived, because it exists nowhere else:
-//   · clicking any row opens that scope's activity log (project / phase /
-//     task) — the modal at the foot of this file;
+//   · clicking a row opens that TASK'S EDITOR. It opened a read-only activity
+//     table until T-0162 — one modal standing in front of the thing you
+//     actually wanted. The log is the editor's Activity tab, and the Export ▾
+//     that table carried went with it, so the middle step could go;
 //   · the green tick on an item that had activity logged TODAY;
 //   · subtasks, as a fourth indent following the same rule;
 //   · collapse, per project and per phase.
@@ -24,13 +26,7 @@ import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { todayLocal } from '../services/firebase';
 import { scopeTasks, scopeOf, blockedTaskIds, displayStatus } from '../services/boardScope';
-import ActivityEditor from './ActivityEditor';
-import ActivityLogger from './ActivityLogger';
-import TaskEditor from './TaskEditor';
-import TaskQuickAdd from './TaskQuickAdd';
-import ExportButton from './ExportButton';
-import { buildActivityLogDocument } from '../services/activityExport';
-import { useModalDialog } from '../hooks/useModalDialog';
+import TaskEditor, { newTaskDraft } from './TaskEditor';
 import { PageActions, PageSubtitle } from './PageHeader';
 import Avatar from './Avatar';
 
@@ -92,7 +88,11 @@ export default function WBSView({ projectFilter, route = {} }) {
   }, [activities]);
 
   const [collapsed, setCollapsed] = useState(() => new Set());
-  const [logScope, setLogScope] = useState(null); // { type, project, phase?, task? }
+  // Clicking a row opens THAT TASK'S editor. It used to open a read-only
+  // activity table over it, which is one modal in front of the thing you
+  // actually wanted — the log is the editor's own Activity tab, Export and
+  // all, so nothing was lost by taking the middle step out.
+  const [editingTask, setEditingTask] = useState(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -203,12 +203,8 @@ export default function WBSView({ projectFilter, route = {} }) {
         </div>
       ) : (
         <div className="wbs">
-          {/* The mockup titles the card and names the hierarchy, because
-              "project › phase › item" is easy to miss once the outline is
-              full. */}
           <div className="wbs-head">
             <span className="bx-h">Work breakdown</span>
-            <span className="bx-note">project › phase › item</span>
             {/* The status filter sits at the right-hand end of the card head
                 (asked for directly): it filters THIS card, so it belongs on
                 it rather than up in the page commands. */}
@@ -284,7 +280,7 @@ export default function WBSView({ projectFilter, route = {} }) {
                           today={today}
                           resourceOf={resourceOf}
                           activeToday={activeTodayIds.has(t.id)}
-                          onOpenLog={() => setLogScope({ type: 'task', project, task: t })}
+                          onOpen={() => setEditingTask(t)}
                         />
                       ))}
                     </div>
@@ -296,14 +292,20 @@ export default function WBSView({ projectFilter, route = {} }) {
         </div>
       )}
 
-      {logScope && (
-        <ScopedActivityLogModal scope={logScope} onClose={() => setLogScope(null)} />
+      {editingTask && (
+        <TaskEditor
+          task={editingTask}
+          projects={projects}
+          onClose={() => setEditingTask(null)}
+        />
       )}
 
+      {/* "New task" opens the same editor on a task that does not exist yet,
+          so creating one and editing one are one screen. */}
       {quickAddOpen && (
-        <TaskQuickAdd
+        <TaskEditor
+          task={newTaskDraft({ workspaceId: activeWs, projectId: projectFilter })}
           projects={projects}
-          projectFilter={projectFilter}
           onClose={() => setQuickAddOpen(false)}
         />
       )}
@@ -317,7 +319,7 @@ export default function WBSView({ projectFilter, route = {} }) {
 // and the owner's face. Two app facts join them, both of which would be lost
 // otherwise: the today-tick and the subtask count.
 
-function WbsItem({ code, task: t, project, blockedIds, today, resourceOf, activeToday, onOpenLog }) {
+function WbsItem({ code, task: t, project, blockedIds, today, resourceOf, activeToday, onOpen }) {
   const subs = t.subtasks || [];
   const done = t.status === 'done';
   // Past its plan date it reads Stuck, whatever status it carries — the same
@@ -339,8 +341,8 @@ function WbsItem({ code, task: t, project, blockedIds, today, resourceOf, active
       <button
         type="button"
         className="wbs-item"
-        onClick={onOpenLog}
-        title={`${t.title} — open this task's activity log`}
+        onClick={onOpen}
+        title={`${t.title} — open this task`}
       >
         <span className="wbs-icode">{code}</span>
         <span className={`wbs-ititle${done ? ' is-done' : ''}`}>{t.title}</span>
@@ -395,237 +397,6 @@ function WbsItem({ code, task: t, project, blockedIds, today, resourceOf, active
           <span className={`wbs-stitle${s.done ? ' is-done' : ''}`}>{s.text}</span>
         </div>
       ))}
-    </>
-  );
-}
-
-// ─── Scoped activity log modal ──────────────────────────────────────────────
-// scope: { type: 'project'|'phase'|'task', project, phase?, task? }
-// Phase scope resolves each activity's phase from the task's CURRENT phaseId
-// (fallback: the activity's denormalized snapshot), consistent with the
-// project Activity Log view.
-
-function ScopedActivityLogModal({ scope, onClose }) {
-  const modal = useModalDialog({ onClose });
-  const { activities, loading } = useAllActivities();
-  const { tasks, userId } = useTasks();
-  const { projects } = useProjects();
-  const [editing, setEditing] = useState(null);          // activity being edited
-  const [loggingTask, setLoggingTask] = useState(null);  // task to add a log to
-  const [editingTask, setEditingTask] = useState(null);  // task being edited
-  const [selectedTaskId, setSelectedTaskId] = useState('');
-
-  const taskById = {};
-  tasks.forEach((t) => { taskById[t.id] = t; });
-
-  const { project } = scope;
-
-  // Tasks inside this scope — the candidates for "+ Log activity" / "Edit task".
-  // For task scope it's just the (live) task itself; project/phase scopes get a
-  // picker over their tasks.
-  const orphanScopeIds = scope.taskIds ? new Set(scope.taskIds) : null;
-  const scopeTasks =
-    scope.type === 'task'
-      ? [taskById[scope.task.id] || scope.task]
-      : tasks.filter((t) => {
-          if (orphanScopeIds) return orphanScopeIds.has(t.id);
-          if (t.projectId !== project.id) return false;
-          return scope.type === 'phase' ? t.phaseId === scope.phase.id : true;
-        });
-
-  const actionTask =
-    scope.type === 'task'
-      ? scopeTasks[0]
-      : taskById[selectedTaskId] || null;
-
-  const livePhaseId = (a) => {
-    const liveTask = taskById[a.taskId];
-    return liveTask ? (liveTask.phaseId || null) : (a.phaseId || null);
-  };
-
-  const rows = activities
-    .filter((a) => {
-      if (scope.type === 'task') return a.taskId === scope.task.id;
-      if (orphanScopeIds) return orphanScopeIds.has(a.taskId); // unassigned bucket
-      if (a.projectId !== project.id) return false;
-      if (scope.type === 'phase') return livePhaseId(a) === scope.phase.id;
-      return true; // project scope
-    })
-    .map((a) => {
-      const phase = project.phases?.find((p) => p.id === livePhaseId(a));
-      return {
-        ...a,
-        _phase: phase?.name || '—',
-        _task: a.taskTitle || taskById[a.taskId]?.title || '—',
-        _outputs: a.attachments || [],
-      };
-    })
-    .sort((a, b) =>
-      (b.date || '').localeCompare(a.date || '')
-      || (b.loggedAt?.seconds || 0) - (a.loggedAt?.seconds || 0));
-
-  const totalHours = rows.reduce((s, r) => s + (r.hoursSpent || 0), 0);
-
-  const scopeTitle =
-    scope.type === 'project' ? project.name
-    : scope.type === 'phase' ? `${project.name} · ${scope.phase.name}`
-    : `${project.name} · ${scope.task.title}`;
-
-  const scopeLabel =
-    scope.type === 'project' ? 'project'
-    : scope.type === 'phase' ? 'phase'
-    : 'task';
-
-  // Export ▾ instead of a lone CSV button: this modal is one of the pages
-  // somebody sends to a manager (BUG-031). `build` runs only when a format is
-  // picked, so opening the modal costs nothing.
-  const exportProps = {
-    build: () => buildActivityLogDocument(rows, {
-      projectById: { [project.id]: project },
-      taskById,
-      projectName: project.name,
-      title: `${scopeTitle} — activity log`,
-    }),
-    baseName: `${scopeTitle}-activities`,
-    kind: 'table',
-    title: 'Save these entries as a spreadsheet, a PDF or a CSV',
-  };
-
-  return (
-    <>
-      <div className="modal-backdrop" {...modal.backdropProps}>
-        <div className="modal" style={{ maxWidth: 1100, width: '95vw' }} {...modal.dialogProps}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-            <span className="proj-dot" style={{ background: project.color, width: 14, height: 14 }} />
-            <h3 className="modal-title" style={{ margin: 0 }} id={modal.titleId}>{scopeTitle} — Activity log</h3>
-          </div>
-          <p className="modal-sub" style={{ marginBottom: 12 }}>
-            All activities under this {scopeLabel} · {rows.length} entr{rows.length === 1 ? 'y' : 'ies'} · {totalHours.toFixed(1)}h total
-          </p>
-
-          {loading ? (
-            <p className="muted">Loading activity log…</p>
-          ) : rows.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">☰</div>
-              <p>No activities logged for this {scopeLabel} yet.</p>
-            </div>
-          ) : (
-            <div className="table-wrap" style={{ maxHeight: '60vh', overflow: 'auto' }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Phase</th>
-                    <th>Task</th>
-                    <th>Activity details</th>
-                    <th>Date</th>
-                    <th>Completion</th>
-                    <th>Output</th>
-                    <th>Bottlenecks / remarks</th>
-                    <th>Requested by</th>
-                    <th>Hours</th>
-                    <th aria-label="actions" style={{ width: 48 }} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r._phase}</td>
-                      <td className="table-cell-wrap"><strong>{r._task}</strong></td>
-                      <td className="table-cell-wrap">{r.comment || <span className="muted">—</span>}</td>
-                      <td className="mono small">{r.date}</td>
-                      <td>
-                        {r.completionStatus ? (
-                          <span className={`badge badge-soft-${
-                            r.completionStatus === 'completed'   ? 'success' :
-                            r.completionStatus === 'blocked'     ? 'danger'  :
-                            r.completionStatus === 'in-progress' ? 'info'    : 'muted'
-                          }`}>{r.completionStatus}</span>
-                        ) : <span className="muted">—</span>}
-                      </td>
-                      <td>
-                        {r._outputs[0] ? (
-                          <a className="table-link" href={r._outputs[0].url} target="_blank" rel="noreferrer">
-                            📎 {(r._outputs[0].name || 'link').slice(0, 30)}
-                            {r._outputs.length > 1 && <span className="muted"> +{r._outputs.length - 1}</span>}
-                          </a>
-                        ) : <span className="muted">—</span>}
-                      </td>
-                      <td className="table-cell-wrap">
-                        {r.bottleneckRemarks
-                          ? <span style={{ color: 'var(--c-warn)' }}>⚠ {r.bottleneckRemarks}</span>
-                          : <span className="muted">—</span>}
-                      </td>
-                      <td>{r.requestedBy || <span className="muted">—</span>}</td>
-                      <td className="mono small">{(r.hoursSpent || 0).toFixed(1)}h</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          title="Edit this activity entry"
-                          onClick={() => setEditing(r)} aria-label="Edit this activity entry">✎</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="modal-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
-            {rows.length > 0 && (
-              <ExportButton {...exportProps} className="btn btn-sm" />
-            )}
-            <div style={{ flex: 1 }} />
-            {scope.type !== 'task' && scopeTasks.length > 0 && (
-              <select
-                className="select select-sm"
-                value={selectedTaskId}
-                onChange={(e) => setSelectedTaskId(e.target.value)}
-                style={{ maxWidth: 240 }}
-                title="Pick a task to log against or edit"
-              >
-                <option value="">— Pick a task —</option>
-                {scopeTasks.map((t) => (
-                  <option key={t.id} value={t.id}>{t.title}</option>
-                ))}
-              </select>
-            )}
-            <button
-              className="btn btn-sm btn-primary"
-              disabled={!actionTask}
-              title={actionTask ? `Log activity on "${actionTask.title}"` : 'Pick a task first'}
-              onClick={() => setLoggingTask(actionTask)}
-            >+ Log activity</button>
-            <button
-              className="btn btn-sm"
-              disabled={!actionTask}
-              title={actionTask ? `Edit "${actionTask.title}"` : 'Pick a task first'}
-              onClick={() => setEditingTask(actionTask)}
-            >✎ Edit task</button>
-            <button className="btn" onClick={onClose}>Close</button>
-          </div>
-        </div>
-      </div>
-
-      {editing && (
-        <ActivityEditor activity={editing} onClose={() => setEditing(null)} />
-      )}
-
-      {loggingTask && (
-        <ActivityLogger
-          task={loggingTask}
-          userId={userId}
-          onClose={() => setLoggingTask(null)}
-        />
-      )}
-
-      {editingTask && (
-        <TaskEditor
-          task={editingTask}
-          projects={projects}
-          onClose={() => setEditingTask(null)}
-        />
-      )}
     </>
   );
 }

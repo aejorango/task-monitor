@@ -382,22 +382,22 @@ export function useSavedViews() {
 
 // ─── useTaskComments ────────────────────────────────────────────────────────
 
-export function useTaskComments(taskId) {
+export function useTaskComments(workspaceId, taskId) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!taskId) {
+    if (!workspaceId || !taskId) {
       setComments([]);
       setLoading(false);
       return;
     }
-    const unsub = subscribeToTaskComments(taskId, (data) => {
+    const unsub = subscribeToTaskComments(workspaceId, taskId, (data) => {
       setComments(data);
       setLoading(false);
     });
     return () => unsub();
-  }, [taskId]);
+  }, [workspaceId, taskId]);
 
   return { comments, loading };
 }

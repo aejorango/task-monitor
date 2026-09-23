@@ -1161,8 +1161,44 @@ a:hover { text-decoration: underline; }
   background: var(--c-surface-2);
   border-bottom: 1px solid var(--c-border);
 }
-.gc-ruler-pad { border-right: 1px solid var(--c-border); }
+/* The ruler follows you down the page. The scroll container is `.content`, so
+   `top: 0` pins it at the top of the work area — and `.gantt-card` has to use
+   `overflow: clip` rather than `hidden` for that to work at all: `hidden`
+   makes the card its own scroll container, and a sticky child of a container
+   that never scrolls never sticks. */
+.gc-rulers {
+  position: sticky;
+  /* NOT `top: 0`. A sticky element's offsets are measured from the scrollport,
+     which is the PADDING box of `.content` — so zero would pin the ruler
+     `--content-pad` below the top edge and let a row slide through the gap
+     above it. The negative offset puts it flush against the top of the work
+     area, which is where it has to be to still be readable. */
+  top: calc(var(--content-pad) * -1);
+  z-index: 4;
+}
+.gc-ruler-pad { border-right: 1px solid var(--c-border); background: var(--c-surface-2); }
 .gc-ruler-cols { display: grid; }
+
+/* The second ruler row: one letter per day, under the week it belongs to.
+   Drawn only on a short window (see DAY_ROW_MAX) — at a quarter the cells are
+   two pixels wide and the row is a grey smear. */
+/* The week row above already rules itself off, so this one needs no line of
+   its own — two would read as a third band. */
+.gc-day {
+  padding: 4px 0 5px;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--c-text-3);
+  overflow: hidden;
+}
+.gc-day.is-weekend { background: var(--c-surface); color: var(--c-text-muted); }
+.gc-day.is-today {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-ink);
+  font-weight: 800;
+}
 .gc-col {
   padding: 9px 0;
   text-align: center;
@@ -10703,15 +10739,9 @@ a:hover { text-decoration: underline; }
   min-height: 38px;
   font-size: 11.5px;
 }
-/* Centred on the STRIP, not between its neighbours: absolute, so a long
-   workspace name on the left cannot shunt it off-centre. */
-.crumbs-mid {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-}
+/* `.crumbs-mid` held the project picker, centred on this strip. The picker is
+   the toolbar's now — one home, the Board's — so the rule went with it rather
+   than sitting here matching nothing. */
 .crumb {
   color: rgba(255,255,255,0.55);
   white-space: nowrap;
@@ -12575,7 +12605,11 @@ a:hover { text-decoration: underline; }
 .cal-task-done  { background: var(--c-emerald);    color: #fff; }
 
 /* ── Gantt tab ─────────────────────────────────────────────────────── */
-.gantt-card { padding: 0; }
+/* `clip`, NOT the `.bcard` default of `hidden`: both clip the rounded corners,
+   but `hidden` makes this card a scroll container of its own, and a sticky
+   child of a box that never scrolls never sticks — which would leave the
+   ruler scrolling away with the rows. See `.gc-rulers`. */
+.gantt-card { padding: 0; overflow: clip; }
 /* The head's own line is the card's border; the ruler brings its own. */
 .gantt-card-head {
   display: flex; align-items: center; gap: 10px;
@@ -13862,8 +13896,12 @@ a:hover { text-decoration: underline; }
 .te-ec { font-size: 10px; color: var(--c-text-muted); opacity: 0; transition: opacity 0.12s; }
 .te-ef:hover .te-ec, .te-ef:focus-within .te-ec { opacity: 1; }
 /* The native control sits invisibly over the field: one keyboard-reachable
-   widget, rather than a fake menu that a screen reader cannot drive. */
-.te-ef select, .te-ef input {
+   widget, rather than a fake menu that a screen reader cannot drive.
+   DIRECT children only (`>`). As a descendant selector it also caught every
+   input inside the Accountable popover — `.te-ef-pop` is a `.te-ef` too — so
+   the assignee picker's name box was stretched invisibly over the whole
+   popover and swallowed every click on a teammate. */
+.te-ef > select, .te-ef > input {
   position: absolute; inset: 0; width: 100%; height: 100%;
   opacity: 0; cursor: pointer; font: inherit;
 }
@@ -14105,35 +14143,46 @@ a:hover { text-decoration: underline; }
 
 /* Quiet-until-reached editors (T-0161).
    The description and the comment box read as plain text — no boxes, no
-   borders — and only take on input chrome when the pointer or the keyboard
-   arrives. The same idea as `.te-ef` in the primary block: the modal is
-   something you READ first and edit second, and a page of framed inputs
-   says the opposite. `:focus-within` is what keeps it keyboard-reachable —
-   a hover-only reveal is a control a keyboard user cannot find. */
+   borders, no Write/Preview tabs — and you edit them by clicking into them.
+   The same idea as `.te-ef` in the primary block: the modal is something
+   you READ first and edit second, and a page of framed inputs says the
+   opposite. */
+/* No frame at all — not even on hover. The field is text you click into
+   and type; focus is shown by a faint tint, which keeps it findable for a
+   keyboard user without drawing a box round it. */
 .te-quiet textarea,
 .te-quiet input[type="text"],
 .te-quiet .te-composer-input,
 .te-quiet .te-desc-input {
   background: transparent;
-  border-color: transparent;
+  border: 0;
   box-shadow: none;
-  transition: background 0.12s, border-color 0.12s;
+  outline: none;
+  transition: background 0.12s;
 }
-.te-quiet:hover textarea,
-.te-quiet:hover input[type="text"],
-.te-quiet:hover .te-composer-input,
-.te-quiet:hover .te-desc-input,
 .te-quiet textarea:focus,
 .te-quiet input[type="text"]:focus,
 .te-quiet .te-composer-input:focus,
 .te-quiet .te-desc-input:focus {
   background: var(--c-surface-2);
-  border-color: var(--c-border-soft);
+  box-shadow: none;
 }
-/* The markdown editor's own toolbar is chrome too — it waits its turn. */
-.te-quiet .md-toolbar { opacity: 0; transition: opacity 0.12s; }
-.te-quiet:hover .md-toolbar,
-.te-quiet:focus-within .md-toolbar { opacity: 1; }
+
+/* MarkdownEditor's `bare` mode: the text box alone — no tabs, no syntax
+   crib, no border, the app's own face rather than the mono one. */
+.markdown-editor-bare { border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.markdown-editor-bare .markdown-textarea {
+  font-family: inherit; font-size: 13.5px; line-height: 1.7; color: var(--c-text-2);
+  padding: 6px 8px; margin: 0 -8px; width: calc(100% + 16px);
+  border-radius: 8px; resize: none; min-height: 0;
+}
+
+/* The comment thread inside the task editor: plain rows, not boxed cards. */
+.te-comments .comments-list { max-height: none; overflow: visible; gap: 14px; }
+.te-comments .comment-item { background: none; border: 0; padding: 0; }
+.te-comments .comment-who { font-size: 12.5px; color: var(--c-text); }
+.te-comments .comment-item .markdown { font-size: 13px; color: var(--c-text-2); line-height: 1.6; }
+.te-comments .comment-composer { border-top: 1px solid var(--c-line); padding-top: 10px; }
 
 /* The Accountable field's popover — the mockup's `.menu`, holding the real
    assignee picker now that the Details tab no longer carries one. */
@@ -14158,6 +14207,37 @@ a:hover { text-decoration: underline; }
    a wide dropdown with a 999px radius reads as an oblong lozenge. */
 .bt-proj .btn { border-radius: var(--r-md); }
 .bt-proj .dropdown-menu { border-radius: var(--r-lg); }
+
+/* The same strip, on a hub that has nothing else to put in it. The picker is
+   the whole row, so the row is shallower than the Board's. */
+.bt-plain { padding-top: 10px; padding-bottom: 10px; }
+
+/* ── The project picker's own menu ──────────────────────────────────────
+   Three fixes, all of them the same bug seen from different sides: the menu
+   is anchored at the LEFT of its button here, because this button sits at the
+   left edge of the work area and `.dropdown-menu`'s default `right: 0` grew
+   it leftwards, off the page and under the rail. It also sits above the rail
+   (z-index 20) rather than under it, and each project stays on one line —
+   "BSP 2026 · SRC – DES Balance Sheet Approach (BSA)" wrapped to three. */
+.proj-picker .dropdown-menu {
+  left: 0;
+  right: auto;
+  z-index: 60;
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 32px));
+  max-height: min(60vh, 420px);
+}
+.proj-picker .dropdown-item { white-space: nowrap; }
+.proj-picker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The trigger has to be allowed to shrink too, or a long project name pushes
+   the ▾ off the end of the button. */
+.proj-picker > .btn { max-width: min(320px, 60vw); }
+.proj-picker > .btn .proj-picker-name { flex: 1; text-align: left; }
 
 /* WBS: the status filter at the right-hand end of the card head, and a named
    owner rather than a bare circle (T-0161). */
