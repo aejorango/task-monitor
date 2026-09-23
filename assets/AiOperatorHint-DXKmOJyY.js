@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-Q_vdFYJR.js";import{a as t}from"./useTasks-DaDU6edA.js";import{r as n}from"./useAiStatus-BZiEZZFO.js";var r=e();function i({hint:e}){let{userId:i}=t(),{isOperator:a}=n(i);return!e||!a?null:(0,r.jsxs)(`p`,{className:`muted small`,style:{marginTop:6},children:[(0,r.jsx)(`strong`,{children:`Operator:`}),` `,e]})}export{i as t};
