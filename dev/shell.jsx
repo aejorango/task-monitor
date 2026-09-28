@@ -1943,6 +1943,126 @@ function TutorialSample() {
   );
 }
 
+// Projects → Minutes: the project list and the card, one open and three
+// folded, on the real classes. Mirrors MinuteCard's markup.
+function MinutesSample() {
+  const PROJ = {
+    sblaf: { name: 'SBLAF onboarding', color: '#0051BA' },
+    api:   { name: 'Partner API integration', color: '#e2892e' },
+    comp:  { name: 'Compliance & audit', color: '#1DA449' },
+    mkt:   { name: 'Marketplace redesign', color: '#7B2D8F' },
+  };
+  const ITEMS = [
+    { text: 'Rotate partner sandbox keys', owner: 'Rob', due: 'Jul 19', done: true, linked: true },
+    { text: 'Share data-lake QA checklist', owner: 'Mary', due: 'Jul 20', done: true, linked: true },
+    { text: 'De-dup borrower records', owner: 'Rob', due: 'Jul 25' },
+    { text: 'Escalate KYC MSA to legal', owner: 'Diana', due: 'Jul 14', late: true },
+  ];
+  const folded = [
+    ['Partner integration kickoff', 'Fri, Jul 17, 2026 · Zoom', PROJ.api, '1/3', 'quiet'],
+    ['Marketplace design review', 'Wed, Jul 15, 2026 · Design studio', PROJ.mkt, '5/5', 'done'],
+    ['Compliance quarterly check-in', 'Mon, Jul 13, 2026 · Boardroom B', PROJ.comp, '2/6', 'quiet'],
+  ];
+  const Head = ({ title, meta, proj, count, tone, open }) => (
+    <button className="minute-card-head" aria-expanded={open}>
+      <div className="minute-card-main">
+        <span className="minute-card-title">{title}</span>
+        <span className="minute-card-meta">
+          {meta} · <span className="minute-card-proj"><span className="proj-dot" style={{ background: proj.color }} />{proj.name}</span>
+        </span>
+      </div>
+      <span className={`minute-chip minute-chip-${tone}`}>{count} actions</span>
+      <span className="minute-card-chevron" aria-hidden="true">{open ? '▾' : '▸'}</span>
+    </button>
+  );
+  return (
+    <div className="minutes-layout">
+      <aside className="minutes-nav">
+        <div className="minutes-nav-label">Projects</div>
+        <button className="minutes-nav-link active"><span className="minutes-nav-name">All projects</span><span className="minutes-nav-count">7</span></button>
+        {[['Lending', [['sblaf', 3], ['api', 2], ['comp', 1]]], ['Product', [['mkt', 1]]]].map(([seg, list]) => (
+          <div key={seg} className="minutes-nav-segment">
+            <div className="minutes-nav-segment-title">{seg}</div>
+            {list.map(([k, n]) => (
+              <button key={k} className="minutes-nav-link">
+                <span className="proj-dot" style={{ background: PROJ[k].color }} />
+                <span className="minutes-nav-name">{PROJ[k].name}</span>
+                <span className="minutes-nav-count">{n}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </aside>
+      <div className="minutes-content">
+        <div className="minutes-list">
+          <div className="minute-card is-open" style={{ '--minute-accent': PROJ.sblaf.color }}>
+            <Head title="Weekly sync — Data Governance" meta="Mon, Jul 20, 2026 · Boardroom A" proj={PROJ.sblaf} count="2/4" tone="open" open />
+            <div className="minute-card-body">
+              <div className="minute-top">
+                <div className="minute-section"><div className="minute-section-label">Attendees</div><div className="minute-section-text">Diana Harris, Mary Perkins, Rob Santos, Tim Francis</div></div>
+                <div className="minute-section"><div className="minute-section-label">Notes</div><div className="minute-section-text pre">Reviewed the unified data-lake milestone. QA slipping a few days on schema validation. Partner API sandbox is live and rotating keys weekly. Agreed to prioritise borrower-record de-duplication before scoring work begins.</div></div>
+                <div className="minute-section"><div className="minute-section-label">Decisions</div><div className="minute-section-text pre">{'• De-dup work moves ahead of risk scoring.\n• KYC vendor MSA escalated to legal with a Friday deadline.'}</div></div>
+                <div className="minute-tools no-print">
+                  <button className="minute-pill">✎ Edit</button>
+                  <button className="minute-pill">⎘ Copy as text</button>
+                  <button className="minute-pill">⎙ Print</button>
+                  <span className="export-button"><button className="minute-pill">Export ▾</button></span>
+                </div>
+              </div>
+              <div className="minute-bottom has-both">
+                <div className="minute-items">
+                  <div className="minute-section-label">Action items</div>
+                  <ul className="minute-actions">
+                    {ITEMS.map((it) => (
+                      <li key={it.text} className={`minute-action${it.done ? ' done' : ''}`}>
+                        <span className="minute-action-check">{it.done ? '✓' : ''}</span>
+                        <span className="minute-action-text">{it.text}</span>
+                        <span className="minute-action-owner">{it.owner}</span>
+                        <span className={`minute-action-due${it.late ? ' is-late' : ''}`}>{it.due}</span>
+                        {it.linked ? (
+                          <span className="minute-action-task">
+                            <button className="minute-sq minute-sq-open" aria-label="Open the linked task"><Icon name="board" size={14} /></button>
+                            <button className="minute-sq minute-sq-del" aria-label="Delete the linked task"><Icon name="trash" size={13} /></button>
+                          </span>
+                        ) : (
+                          <button className="minute-sq minute-sq-add" aria-label="Add as task"><Icon name="plus" size={15} /></button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <aside className="minute-priority">
+                  <div className="minute-priority-head">
+                    <span className="minute-priority-icon">⚑</span>
+                    <span className="minute-priority-title">The Priority</span>
+                    <span className="minute-priority-boss">Mr. Reyes</span>
+                  </div>
+                  <div className="minute-priority-block">
+                    <div className="minute-priority-label">Things Mr. Reyes keeps mentioning</div>
+                    <div className="minute-priority-hint">important to him</div>
+                    <ol className="minute-priority-list"><li>Time-to-decision must drop this quarter.</li><li>Data quality before any new features.</li></ol>
+                  </div>
+                  <div className="minute-priority-rule" />
+                  <div className="minute-priority-block">
+                    <div className="minute-priority-label">Things he pushed back</div>
+                    <div className="minute-priority-hint">ideas/items he shot down</div>
+                    <ol className="minute-priority-list"><li>Building a custom BI tool in-house.</li><li>Delaying the marketplace launch to Q1.</li></ol>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>
+          {folded.map(([title, meta, proj, count, tone]) => (
+            <div key={title} className="minute-card" style={{ '--minute-accent': proj.color }}>
+              <Head title={title} meta={meta} proj={proj} count={count} tone={tone} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const NEW_SAMPLES = {
   members:    () => <MembersSample />,
   goals:      () => <GoalsSample />,
@@ -1957,6 +2077,7 @@ const NEW_SAMPLES = {
   library:    () => <LibrarySample />,
   'how-to-use': () => <HowToUseSample />,
   tutorial:   () => <TutorialSample />,
+  minutes:    () => <MinutesSample />,
 };
 
 // One root, kept across hot updates. Calling createRoot again on every edit

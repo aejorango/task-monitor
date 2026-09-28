@@ -49,7 +49,7 @@ test('the print stylesheet hides the app and shows only the minutes', () => {
     'a collapsed card would print empty');
 });
 
-test('the action row itself is not printed', () => {
-  assert.match(card, /minute-card-actions no-print/);
-  assert.match(css, /\.minute-card-actions \{ display: none; \}/);
+test('the card\'s commands are not printed', () => {
+  assert.match(card, /minute-tools no-print/);
+  assert.match(css, /\.minute-tools \{ display: none; \}/);
 });

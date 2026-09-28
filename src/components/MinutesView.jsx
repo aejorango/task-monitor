@@ -39,6 +39,28 @@ function fmtDate(s) {
   return new Date(y, m - 1, d).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// An action item's due date as the mockup prints it: "Jul 19", month first,
+// the same order as every other date chip in the app.
+function fmtDue(s) {
+  if (!s) return '';
+  const [y, m, d] = s.split('-').map(Number);
+  if (!y) return s;
+  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
+// One labelled column of the expanded card. An empty field keeps its column
+// (a dash) so Attendees · Notes · Decisions stay lined up card to card.
+function MinuteSection({ label, text, pre }) {
+  return (
+    <div className="minute-section">
+      <div className="minute-section-label">{label}</div>
+      {text?.trim()
+        ? <div className={`minute-section-text${pre ? ' pre' : ''}`}>{text}</div>
+        : <div className="minute-section-text minute-section-empty">—</div>}
+    </div>
+  );
+}
+
 const emptyMinute = () => ({
   title: '',
   date: todayLocal(),
@@ -140,7 +162,7 @@ export default function MinutesView({ projectFilter = 'all' }) {
         <aside className="minutes-nav">
           <div className="minutes-nav-label">Projects</div>
           <button
-            className={`minutes-nav-link minutes-nav-link-all ${selectedId === '__all__' ? 'active' : ''}`}
+            className={`minutes-nav-link ${selectedId === '__all__' ? 'active' : ''}`}
             onClick={() => setSelectedId('__all__')}
           >
             <span className="minutes-nav-name">All projects</span>
@@ -320,152 +342,157 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
   const hasPriority = minute.bossName || mentions.length || pushbacks.length;
   const boss = minute.bossName?.trim();
 
+  // Tone of the "2/4 actions" chip: green once every item is done; otherwise
+  // the open card's chip is lit and a folded card's is quiet — the mockup's
+  // way of saying which card you are reading.
+  const chipTone = items.length && doneCount === items.length ? 'done' : open ? 'open' : 'quiet';
+  const today = todayLocal();
+
   return (
-    <div className="minute-card" style={project ? { '--minute-accent': project.color } : undefined}>
-      <button className="minute-card-head" onClick={() => setOpen((o) => !o)}>
+    <div
+      className={`minute-card${open ? ' is-open' : ''}`}
+      style={project ? { '--minute-accent': project.color } : undefined}
+    >
+      <button className="minute-card-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <div className="minute-card-main">
           <span className="minute-card-title">{minute.title || 'Untitled meeting'}</span>
           <span className="minute-card-meta">
             {fmtDate(minute.date)}
             {minute.location && <> · {minute.location}</>}
-            {project && <> · <span className="proj-tag"><span className="proj-dot" style={{ background: project.color }} />{project.name}</span></>}
+            {project && (
+              <> · <span className="minute-card-proj"><span className="proj-dot" style={{ background: project.color }} />{project.name}</span></>
+            )}
           </span>
         </div>
-        <div className="minute-card-side">
-          {items.length > 0 && (
-            <span className={`badge ${doneCount === items.length ? 'badge-soft-success' : 'badge-soft-accent'}`}>
-              {doneCount}/{items.length} actions
-            </span>
-          )}
-          <span className="minute-card-chevron">{open ? '▾' : '▸'}</span>
-        </div>
+        {items.length > 0 && (
+          <span className={`minute-chip minute-chip-${chipTone}`}>{doneCount}/{items.length} actions</span>
+        )}
+        <span className="minute-card-chevron" aria-hidden="true">{open ? '▾' : '▸'}</span>
       </button>
 
       {open && (
-        <div className={`minute-card-body ${hasPriority ? 'has-priority' : ''}`}>
-          <div className="minute-card-actions no-print">
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={copyMarkdown}
-              title="Copy these minutes as Markdown, ready to paste into Slack, email or a doc"
-            >
-              {copied ? '✓ Copied' : '⎘ Copy as text'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={printMinute}
-              title="Print or save as PDF from the print dialog"
-            >
-              ⎙ Print
-            </button>
-            <ExportButton
-              build={() => buildMinutesDocument(minute, { projectName: project?.name })}
-              baseName={minutesFileBase(minute)}
-              kind="document"
-              className="btn btn-sm"
-              label="Export"
-              title="Save these minutes as Word, PDF, Markdown or a web page"
-            />
-          </div>
-          <div className="minute-body-main">
-            {minute.attendees && (
-              <div className="minute-section">
-                <div className="minute-section-label">Attendees</div>
-                <div className="minute-section-text">{minute.attendees}</div>
-              </div>
-            )}
-            {minute.notes && (
-              <div className="minute-section">
-                <div className="minute-section-label">Notes</div>
-                <div className="minute-section-text pre">{minute.notes}</div>
-              </div>
-            )}
-            {minute.decisions && (
-              <div className="minute-section">
-                <div className="minute-section-label">Decisions</div>
-                <div className="minute-section-text pre">{minute.decisions}</div>
-              </div>
-            )}
-
-            {items.length > 0 && (
-              <div className="minute-section">
-                <div className="minute-section-label">Action items</div>
-                <ul className="minute-actions">
-                  {items.map((it) => (
-                    <li key={it.id} className={`minute-action ${it.done ? 'done' : ''}`}>
-                      <span className="minute-action-check">{it.done ? '✓' : '○'}</span>
-                      <span className="minute-action-text">{it.text || <span className="muted">—</span>}</span>
-                      {it.owner && <span className="minute-action-owner">{it.owner}</span>}
-                      {it.due && <span className="minute-action-due">{it.due}</span>}
-                      {it.taskId ? (
-                        <span className="minute-action-task">
-                          <button
-                            className="icon-btn minute-action-open"
-                            title={tasksById[it.taskId] ? 'Open task — log activity / edit' : 'Linked task not found in this workspace'}
-                            disabled={!tasksById[it.taskId]}
-                            onClick={() => { const t = tasksById[it.taskId]; if (t) setEditingTask(t); }}
-                          ><Icon name="board" size={15} /></button>
-                          <button
-                            className="icon-btn link-danger"
-                            disabled={busyId === it.id}
-                            onClick={() => deleteTaskForItem(it)}
-                            title="Delete the linked task"
-                          ><Icon name="trash" size={15} /></button>
-                        </span>
-                      ) : (
-                        it.text?.trim() && (
-                          <button
-                            className="icon-btn minute-action-add"
-                            disabled={busyId === it.id}
-                            onClick={() => createTaskFromItem(it)}
-                            title="Add as task"
-                          ><Icon name="plus" size={15} /></button>
-                        )
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="minute-card-actions">
-              <button className="btn btn-sm" onClick={onEdit}>✎ Edit</button>
+        <div className="minute-card-body">
+          {/* Top row: what was said — and the card's own commands. */}
+          <div className="minute-top">
+            <MinuteSection label="Attendees" text={minute.attendees} />
+            <MinuteSection label="Notes" text={minute.notes} pre />
+            <MinuteSection label="Decisions" text={minute.decisions} pre />
+            <div className="minute-tools no-print">
+              <button type="button" className="minute-pill" onClick={onEdit}>✎ Edit</button>
+              <button
+                type="button"
+                className="minute-pill"
+                onClick={copyMarkdown}
+                title="Copy these minutes as Markdown, ready to paste into Slack, email or a doc"
+              >
+                {copied ? '✓ Copied' : '⎘ Copy as text'}
+              </button>
+              <button
+                type="button"
+                className="minute-pill"
+                onClick={printMinute}
+                title="Print or save as PDF from the print dialog"
+              >
+                ⎙ Print
+              </button>
+              <ExportButton
+                build={() => buildMinutesDocument(minute, { projectName: project?.name })}
+                baseName={minutesFileBase(minute)}
+                kind="document"
+                className="minute-pill"
+                label="Export"
+                title="Save these minutes as Word, PDF, Markdown or a web page"
+              />
             </div>
           </div>
 
-          {hasPriority && (
-            <aside className="minute-body-side">
-              <div className="minute-priority">
-                <div className="minute-priority-head">
-                  <span className="minute-priority-icon"><PriorityIcon /></span>
-                  <span className="minute-priority-title">The Priority</span>
-                  {boss && <span className="minute-priority-boss">{boss}</span>}
+          {/* Bottom row: who does what next, and The Priority beside it. */}
+          {(items.length > 0 || hasPriority) && (
+            <div className={`minute-bottom${items.length > 0 && hasPriority ? ' has-both' : ''}`}>
+              {items.length > 0 && (
+                <div className="minute-items">
+                  <div className="minute-section-label">Action items</div>
+                  <ul className="minute-actions">
+                    {items.map((it) => {
+                      const late = !it.done && it.due && it.due < today;
+                      const linked = it.taskId ? tasksById[it.taskId] : null;
+                      return (
+                        <li key={it.id} className={`minute-action${it.done ? ' done' : ''}`}>
+                          <span className="minute-action-check" aria-label={it.done ? 'Done' : 'Open'}>{it.done ? '✓' : ''}</span>
+                          <span className="minute-action-text">{it.text || <span className="muted">—</span>}</span>
+                          {it.owner && <span className="minute-action-owner">{it.owner}</span>}
+                          {it.due && (
+                            <span className={`minute-action-due${late ? ' is-late' : ''}`} title={late ? `Past due · ${it.due}` : it.due}>
+                              {fmtDue(it.due)}
+                            </span>
+                          )}
+                          {it.taskId ? (
+                            <span className="minute-action-task">
+                              <button
+                                type="button"
+                                className="minute-sq minute-sq-open"
+                                title={linked ? 'Open task — log activity / edit' : 'Linked task not found in this workspace'}
+                                aria-label="Open the linked task"
+                                disabled={!linked}
+                                onClick={() => { if (linked) setEditingTask(linked); }}
+                              ><Icon name="board" size={14} /></button>
+                              <button
+                                type="button"
+                                className="minute-sq minute-sq-del no-print"
+                                disabled={busyId === it.id}
+                                onClick={() => deleteTaskForItem(it)}
+                                title="Delete the linked task"
+                                aria-label="Delete the linked task"
+                              ><Icon name="trash" size={13} /></button>
+                            </span>
+                          ) : (
+                            it.text?.trim() && (
+                              <button
+                                type="button"
+                                className="minute-sq minute-sq-add no-print"
+                                disabled={busyId === it.id}
+                                onClick={() => createTaskFromItem(it)}
+                                title="Add as task"
+                                aria-label="Add as task"
+                              ><Icon name="plus" size={15} /></button>
+                            )
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-                <div className="minute-priority-block">
-                  <div className="minute-priority-label">
-                    Things {boss || 'the boss'} keeps mentioning
-                    <span className="minute-priority-hint">important to him</span>
+              )}
+
+              {hasPriority && (
+                <aside className="minute-priority">
+                  <div className="minute-priority-head">
+                    <span className="minute-priority-icon"><PriorityIcon /></span>
+                    <span className="minute-priority-title">The Priority</span>
+                    {boss && <span className="minute-priority-boss">{boss}</span>}
                   </div>
-                  {mentions.length > 0 ? (
-                    <ol className="minute-priority-list">
-                      {mentions.map((x) => <li key={x.id}>{x.text}</li>)}
-                    </ol>
-                  ) : <div className="minute-priority-empty">—</div>}
-                </div>
-                <div className="minute-priority-block">
-                  <div className="minute-priority-label">
-                    Things {boss || 'he'} pushed back
-                    <span className="minute-priority-hint">ideas/items he shot down</span>
+                  <div className="minute-priority-block">
+                    <div className="minute-priority-label">Things {boss || 'the boss'} keeps mentioning</div>
+                    <div className="minute-priority-hint">important to him</div>
+                    {mentions.length > 0 ? (
+                      <ol className="minute-priority-list">
+                        {mentions.map((x) => <li key={x.id}>{x.text}</li>)}
+                      </ol>
+                    ) : <div className="minute-priority-empty">—</div>}
                   </div>
-                  {pushbacks.length > 0 ? (
-                    <ol className="minute-priority-list">
-                      {pushbacks.map((x) => <li key={x.id}>{x.text}</li>)}
-                    </ol>
-                  ) : <div className="minute-priority-empty">—</div>}
-                </div>
-              </div>
-            </aside>
+                  <div className="minute-priority-rule" />
+                  <div className="minute-priority-block">
+                    <div className="minute-priority-label">Things {boss ? 'he' : 'the boss'} pushed back</div>
+                    <div className="minute-priority-hint">ideas/items he shot down</div>
+                    {pushbacks.length > 0 ? (
+                      <ol className="minute-priority-list">
+                        {pushbacks.map((x) => <li key={x.id}>{x.text}</li>)}
+                      </ol>
+                    ) : <div className="minute-priority-empty">—</div>}
+                  </div>
+                </aside>
+              )}
+            </div>
           )}
         </div>
       )}

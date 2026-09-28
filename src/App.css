@@ -6582,95 +6582,175 @@ a:hover { text-decoration: underline; }
 }
 .chat-members-btn:hover { background: var(--c-surface-2); color: var(--c-text); border-color: var(--c-accent); }
 
-/* ─── Minutes (meeting minutes) ──────────────────────────────────────────── */
+/* ─── Minutes (meeting minutes) ────────────────────────────────────────────
+   Ported from "Minutes Redesign.dc.html": a white card whose head carries
+   the project's colour as a 4px rail; opened, it is two rows — Attendees ·
+   Notes · Decisions with the card's commands beside them, then the action
+   items beside The Priority. Numbers are the mockup's own. */
 .minutes-list { display: flex; flex-direction: column; gap: 14px; }
 .minute-card {
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-2xl);
   background: var(--c-surface);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 20px;
+  box-shadow: 0 2px 14px rgba(22, 50, 77, 0.06);
   overflow: hidden;
-  border-left: 4px solid var(--minute-accent, var(--c-border));
-  transition: box-shadow 0.15s ease;
 }
 .minute-card-head {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
-  padding: 16px 20px;
-  background: transparent;
+  padding: 18px 22px;
   border: 0;
+  border-left: 4px solid var(--minute-accent, var(--c-border));
+  background: transparent;
   cursor: pointer;
   text-align: left;
+  font: inherit;
   color: var(--c-text);
 }
 .minute-card-head:hover { background: var(--c-surface-2); }
-.minute-card-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.minute-card-title { font-family: var(--font-display); font-weight: 700; font-size: 16.5px; }
-.minute-card-meta { font-size: 12.5px; color: var(--c-text-3); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.minute-card-side { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.minute-card-chevron { color: var(--c-text-muted); font-size: 13px; }
+.minute-card-head:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+.minute-card-main { flex: 1; min-width: 0; }
+.minute-card-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--c-text);
+}
+.minute-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--c-text-3);
+}
+.minute-card-proj { display: inline-flex; align-items: center; gap: 5px; }
+.minute-card-meta .proj-dot { width: 8px; height: 8px; }
+.minute-card-chevron { flex: none; color: var(--c-arrow-faint); font-size: 14px; }
+
+/* "2/4 actions": green once all are done; lit on the open card, quiet on a
+   folded one. Text on a tint is always the ink, never the fill. */
+.minute-chip {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums;
+}
+.minute-chip-open  { color: var(--c-accent-ink);  background: var(--c-accent-soft); }
+.minute-chip-done  { color: var(--c-success-ink); background: var(--c-success-bg); }
+.minute-chip-quiet { color: var(--c-text-3);      background: var(--c-surface-3); }
 
 .minute-card-body {
-  padding: 4px 20px 20px;
-  border-top: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  padding: 4px 22px 22px;
 }
-.minute-body-main {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.minute-top {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: start;
+}
+.minute-section { min-width: 0; }
+.minute-section-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+  margin-bottom: 6px;
+}
+.minute-section-text { font-size: 13px; line-height: 1.6; color: var(--c-text-2); overflow-wrap: anywhere; }
+.minute-section-text.pre { white-space: pre-wrap; }
+.minute-section-empty { color: var(--c-text-muted); }
+
+/* The card's own commands: Edit first, then the three ways out. */
+.minute-tools { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.minute-tools .export-button { display: flex; }
+.minute-tools .export-button > .minute-pill { flex: 1; }
+.minute-pill {
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font: 600 12px var(--font-sans);
+  padding: 8px 15px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.minute-pill:hover:not(:disabled) { background: var(--c-surface-3); border-color: var(--c-border-strong); }
+.minute-pill:disabled { opacity: 0.55; cursor: default; }
+
+.minute-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-line);
+}
+.minute-bottom.has-both { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.minute-items {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 18px;
+  padding: 16px 16px 14px;
   min-width: 0;
 }
-/* On web/tablet, float "THE PRIORITY" into a right-hand column. */
-@media (min-width: 820px) {
-  .minute-card-body.has-priority {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-    gap: 20px;
-    align-items: start;
-  }
-}
-.minute-body-side { min-width: 0; }
-.minute-section-label {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--c-text-3); margin-bottom: 4px;
-}
-.minute-section-text { font-size: 14px; color: var(--c-text-2); line-height: 1.5; }
-.minute-section-text.pre { white-space: pre-wrap; word-break: break-word; }
+.minute-items .minute-section-label { margin-bottom: 8px; }
 
 .minute-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .minute-action {
   display: flex;
   align-items: center;
   gap: 11px;
-  font-size: 13.5px;
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  border: 1px solid transparent;
-  border-radius: var(--r-lg);
-  padding: 9px 13px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft);
 }
-.minute-action:not(.done) { background: var(--c-surface); border-color: var(--c-border); }
+.minute-action.done { background: var(--c-surface-2); border-color: transparent; }
 .minute-action-check {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; flex-shrink: 0;
+  flex: none;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: #fff;
   border: 2px solid var(--c-border-strong);
-  color: transparent;
-  font-size: 11px;
 }
-.minute-action.done .minute-action-check { background: var(--c-emerald); border-color: var(--c-emerald); color: #fff; }
-.minute-action.done .minute-action-text { text-decoration: line-through; color: var(--c-text-3); }
-.minute-action-text { flex: 1; min-width: 0; font-weight: 500; }
-.minute-action-owner { font-size: 11px; font-weight: 600; background: var(--c-surface-3); border-radius: var(--r-pill); padding: 2px 9px; color: var(--c-text); }
-.minute-action-due { font-size: 11px; color: var(--c-text-3); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.minute-action-task { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.minute-action-linked { display: inline-flex; align-items: center; color: var(--c-emerald); }
+.minute-action.done .minute-action-check { background: var(--c-emerald); border-color: var(--c-emerald); }
+.minute-action-text { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--c-text); overflow-wrap: anywhere; }
+.minute-action.done .minute-action-text { font-weight: 400; color: var(--c-text-3); text-decoration: line-through; }
+.minute-action-owner {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-text);
+  background: var(--c-surface-3);
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+}
+.minute-action-due {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.minute-action-due.is-late { color: var(--c-danger); font-weight: 600; }
+.minute-action-task { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+
 /* Compact square icon-only button */
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -6682,12 +6762,30 @@ a:hover { text-decoration: underline; }
 .icon-btn:hover { background: var(--c-surface-3, var(--c-surface)); color: var(--c-text); }
 .icon-btn:disabled { opacity: .5; cursor: default; }
 .icon-btn.link-danger:hover { color: var(--c-rose, #e5484d); border-color: var(--c-rose, #e5484d); }
-.minute-action-open { background: var(--c-blue-deep-soft); color: var(--c-blue-deep); }
-.minute-action-open:hover:not(:disabled) { color: var(--c-accent); }
-.minute-action-add { background: var(--c-accent-soft); color: var(--c-accent-ink, var(--c-accent)); opacity: 0; transition: opacity .12s ease; }
-.minute-action:hover .minute-action-add, .minute-action-add:focus-visible { opacity: 1; }
-@media (hover: none) { .minute-action-add { opacity: 1; } }
-.minute-card-actions { display: flex; justify-content: flex-end; }
+/* The 26px squares at the end of an action row: open the linked task, add
+   it as a task, or delete the linked one. Always visible — the mockup draws
+   "+" at rest, and a control that appears only on hover is invisible on a
+   phone. */
+.minute-sq {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: filter 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.minute-sq:disabled { opacity: 0.5; cursor: default; }
+.minute-sq-open { background: var(--c-nest-proj-bg); color: var(--c-nest-proj-ink); }
+.minute-sq-add  { background: var(--c-accent-soft);  color: var(--c-accent); }
+.minute-sq-open:hover:not(:disabled),
+.minute-sq-add:hover:not(:disabled) { filter: brightness(0.95); }
+.minute-sq-del  { background: var(--c-surface-3); color: var(--c-text-3); }
+.minute-sq-del:hover:not(:disabled) { background: var(--c-danger-bg); color: var(--c-danger-ink); }
+.minute-sq:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 1px; }
 
 /* Minutes editor — action item rows */
 .minute-edit-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
@@ -6699,70 +6797,46 @@ a:hover { text-decoration: underline; }
 .minute-edit-check.done { background: var(--c-emerald); border-color: var(--c-emerald); }
 .minute-edit-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
-/* Minutes — "The Priority" panel (dark callout, mirrors the sidebar treatment) */
+/* Minutes — "The Priority": the navy callout beside the action items. */
 .minute-priority {
-  border: none;
-  border-radius: var(--r-xl);
-  background: linear-gradient(160deg, var(--c-sidebar-from), var(--c-sidebar-to));
-  padding: 18px 18px 20px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  color: var(--c-sidebar-text);
-}
-.minute-priority-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 0 15px;
-  background: transparent;
-  border-bottom: none;
-  color: var(--c-sidebar-text);
-}
-.minute-priority-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--r-md);
-  background: linear-gradient(135deg, var(--c-accent-hover), var(--c-accent));
-  color: var(--c-sidebar-to);
-}
-.minute-priority-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 14px;
-  text-transform: none;
-  letter-spacing: 0;
+  min-width: 0;
+  border-radius: 18px;
+  padding: 20px;
   color: #fff;
+  background: linear-gradient(160deg, var(--c-sidebar-from), var(--c-sidebar-to));
 }
+.minute-priority-head { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
+.minute-priority-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #f0a94f, var(--c-accent));
+  color: var(--c-te-nav);
+}
+.minute-priority-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: #fff; }
 .minute-priority-boss {
   margin-left: auto;
-  font-weight: 700;
   font-size: 11px;
-  color: var(--c-accent-hover);
-  background: rgba(239,154,67,0.16);
+  font-weight: 700;
+  color: #f0a94f;
+  background: rgba(239, 154, 67, 0.16);
   padding: 3px 10px;
   border-radius: var(--r-pill);
-  letter-spacing: 0;
 }
-.minute-priority-block { padding: 12px 0; }
-.minute-priority-block + .minute-priority-block { border-top: 1px solid rgba(255,255,255,0.1); }
-.minute-priority-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 2px;
-  display: block;
+.minute-priority-label { font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+.minute-priority-hint { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); margin-bottom: 9px; }
+.minute-priority-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
 }
-.minute-priority-hint {
-  display: block;
-  font-weight: 400;
-  font-size: 10.5px;
-  color: var(--c-sidebar-text-muted);
-  font-style: normal;
-  margin-bottom: 9px;
-}
-.minute-priority-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
-.minute-priority-list li { font-size: 12.5px; color: rgba(255,255,255,0.88); line-height: 1.55; padding-left: 2px; }
-.minute-priority-empty { color: var(--c-sidebar-text-muted); font-size: 12.5px; padding-left: 2px; }
+.minute-priority-empty { font-size: 12.5px; color: rgba(255, 255, 255, 0.5); }
+.minute-priority-rule { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 18px 0 16px; }
 
 /* Minutes editor — priority groups */
 .minute-priority-edit { gap: 4px; }
@@ -6906,15 +6980,15 @@ a:hover { text-decoration: underline; }
 }
 .wp-hero-legend-item .muted { font-size: 11.5px; }
 
-/* ─── Minutes — project panel + content (two-pane) ───────────────────────── */
+/* ─── Minutes — project list + content (two-pane) ─────────────────────── */
 .minutes-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 24px;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 @media (max-width: 900px) {
-  .minutes-layout { grid-template-columns: 1fr; }
+  .minutes-layout { grid-template-columns: minmax(0, 1fr); }
 }
 .minutes-nav {
   position: sticky;
@@ -6924,9 +6998,9 @@ a:hover { text-decoration: underline; }
   gap: 3px;
   padding: 14px;
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 20px;
+  box-shadow: 0 2px 14px rgba(22, 50, 77, 0.06);
   max-height: calc(100vh - var(--topbar-h) - 40px);
   overflow-y: auto;
 }
@@ -6936,8 +7010,8 @@ a:hover { text-decoration: underline; }
 .minutes-nav-label {
   font-size: 10.5px;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--c-text-muted);
   padding: 4px 12px 8px;
 }
@@ -6947,58 +7021,57 @@ a:hover { text-decoration: underline; }
   gap: 9px;
   width: 100%;
   text-align: left;
-  background: transparent;
   border: 0;
+  background: transparent;
   padding: 9px 12px;
-  border-radius: var(--r-lg);
-  font-size: 13px;
-  font-weight: 500;
+  border-radius: 11px;
+  font: 500 13px var(--font-sans);
   color: var(--c-text-2);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.minutes-nav-link:hover { background: var(--c-surface-2); color: var(--c-text); }
-.minutes-nav-link.active { background: var(--c-accent-soft); color: var(--c-accent-ink, var(--c-accent)); font-weight: 600; }
-.minutes-nav-link-all.active {
-  background: var(--c-text);
-  color: var(--c-bg);
-  font-weight: 700;
-}
-.minutes-nav-link-all.active .minutes-nav-count { background: rgba(255,255,255,0.18); color: inherit; }
-.minutes-nav-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.minutes-nav-link:hover { background: var(--c-bg); color: var(--c-text); }
+.minutes-nav-link:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+/* The selected row is the navy chrome colour in BOTH themes — --c-text
+   would invert to white-on-white in dark mode. */
+.minutes-nav-link.active,
+.minutes-nav-link.active:hover { background: var(--c-te-nav); color: #fff; font-weight: 700; }
+.minutes-nav-link .proj-dot { width: 9px; height: 9px; flex: none; }
+.minutes-nav-name { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
 .minutes-nav-count {
-  flex-shrink: 0;
+  flex: none;
   font-size: 11px;
   font-weight: 700;
   color: var(--c-text-3);
-  background: var(--c-surface-2);
+  background: var(--c-bg);
+  padding: 2px 8px;
   border-radius: var(--r-pill);
-  padding: 1px 7px;
   font-variant-numeric: tabular-nums;
 }
-.minutes-nav-link.active .minutes-nav-count { background: var(--c-surface); }
+.minutes-nav-link.active .minutes-nav-count { background: rgba(255, 255, 255, 0.18); color: #fff; padding: 2px 9px; }
 
-/* Segment grouping in minutes nav */
-.minutes-nav-segment {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
-}
+/* Segment grouping in the project list */
+.minutes-nav-segment { display: flex; flex-direction: column; gap: 3px; }
 .minutes-nav-segment-title {
   font-size: 10px;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--c-blue-light);
-  padding: 8px 8px 4px;
-  margin-top: 2px;
+  text-transform: uppercase;
+  color: var(--c-arrow-faint);
+  padding: 12px 12px 6px;
+}
+
+/* A narrow content column: the card's two rows stack. */
+@media (max-width: 820px) {
+  .minute-top { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .minute-tools { flex-direction: row; flex-wrap: wrap; }
+  .minute-bottom.has-both { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .minute-card-head { padding: 15px 16px; gap: 10px; }
+  .minute-card-body { padding: 4px 16px 16px; }
+  .minute-action { flex-wrap: wrap; row-gap: 6px; }
+  .minute-action-text { flex-basis: calc(100% - 40px); }
 }
 
 .minutes-content { min-width: 0; }
@@ -9713,14 +9786,6 @@ a:hover { text-decoration: underline; }
   .export-note { display: none; }
 }
 
-/* Export control inside an expanded minutes card. */
-.minute-card-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
 /* ── Printing one set of minutes ──────────────────────────────────────────
    "Print" on a minutes card marks that card and sets a flag on <body>; this
    hides everything else so the page prints as a clean document rather than a
@@ -9750,7 +9815,7 @@ a:hover { text-decoration: underline; }
     background: #fff;
     color: #000;
   }
-  .minute-card-actions { display: none; }
+  .minute-tools { display: none; }
 }
 
 /* Icon column for an action row in the ⌘K palette. */

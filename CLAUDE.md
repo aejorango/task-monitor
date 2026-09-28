@@ -304,6 +304,7 @@ The panels the mockups specify, and the modules behind them:
 | Report cards | Reports → Library | `savedViews` + the export builders |
 | Load per person, segmented, against a cap | Board → Workload | `services/workload.js` |
 | Numbered outline (WBS · 1 · 1.2 · dates · priority) | Board → WBS | projects › phases › tasks |
+| Project list · minute card (two rows) · The Priority | Projects → Minutes | minutes, `tasks` for linked action items |
 
 None of them invent a number. Where the mockup showed something this app does
 not have, the panel was pointed at the nearest real thing rather than filled
@@ -348,6 +349,20 @@ dash imply the stronger claim. `projects` and `activities` are passed in from
 the Settings page, which already subscribes to both; the Workspaces modal
 renders the same component without them and degrades to "Workspace" and a
 dash, which is the truth when nothing is known.
+
+**Projects → Minutes is the Minutes Redesign's card** (`.minute-*`,
+`Minutes Redesign.dc.html`). The project list is the mockup's panel, and the
+selected row is `--c-te-nav`, not `--c-text`, so it stays navy in dark mode.
+Opened, a card is **two rows**: Attendees · Notes · Decisions beside the
+card's commands, then Action items beside The Priority. An empty field keeps
+its column as a dash, so the columns line up from card to card. The card
+keeps more than the mockup shows: the tools column has **Copy as text · Print
+· Export** under the mockup's lone Edit, and a linked action item keeps its
+**delete** square next to the open-task square. The "+ add as task" square is
+always visible, not hover-only. The "2/4 actions" chip prints in `--c-accent-ink`
+rather than the mockup's orange, because the fill colour is unreadable at 11px
+on its own tint. An open action item's due date turns red only once it is
+past, never on a done item. Guarded by `tests/ui/minutesExplorer.test.mjs`.
 
 **Settings is five routes over one component** (six until T-0158 moved Tutorial to the Dashboard hub). `SETTINGS_SECTIONS` in
 `SettingsView.jsx` maps each route to the blocks it draws, and the blocks are
