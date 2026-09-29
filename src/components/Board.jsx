@@ -105,15 +105,13 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
     : tasks.filter((t) => t.projectId === projectFilter);
 
   const tagFiltered = filterByTag(projectFiltered, tagFilter);
-  const statusFiltered = initialStatusFilter
-    ? tagFiltered.filter((t) => t.status === initialStatusFilter)
-    : tagFiltered;
-  // The Board hub's shared toolbar — All / Mine / Stuck and the roster — is
-  // applied through the one module that defines what those words mean, so the
-  // Kanban, the Table and the Timeline cannot disagree about the count.
+  // The Board hub's filters — Status, Assigned to, Find item — are applied
+  // through the one module that defines what those words mean, so the Kanban,
+  // the Calendar and the Gantt cannot disagree about the count. `?status=`
+  // used to be read here and nowhere else; `scopeTasks` reads it for all five.
   const blockedIds = blockedTaskIds(allActivities);
-  const filtered = scopeTasks(statusFiltered, {
-    scope: scopeOf(route), who: route.who, q: route.q, userId, blockedIds, today: todayLocal(),
+  const filtered = scopeTasks(tagFiltered, {
+    scope: scopeOf(route), who: route.who, q: route.q, status: route.statusFilter, userId, blockedIds, today: todayLocal(),
   });
 
   // All tags available across the (project-filtered) tasks, for the chip strip.

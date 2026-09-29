@@ -5,7 +5,7 @@
 //   - middle     (move whole bar)
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useTasks, useProjects } from '../hooks/useTasks';
+import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
 import TaskEditor, { newTaskDraft } from './TaskEditor';
@@ -15,7 +15,7 @@ import { buildTaskListDocument } from '../services/taskExport';
 import { tagFilterState } from '../services/tagFilter';
 import Avatar from './Avatar';
 import Icon from './Icon';
-import { scopeTasks, scopeOf } from '../services/boardScope';
+import { scopeTasks, scopeOf, blockedTaskIds } from '../services/boardScope';
 import { weekDays } from '../services/timesheet';
 import { readSettings } from '../hooks/useSettings';
 import { useToast } from './Toast';
@@ -198,6 +198,8 @@ function periodOf(from, to) {
 
 export default function GanttView({ projectFilter, initialTagFilter, route = {} }) {
   const { tasks, loading, userId } = useTasks();
+  const { activities } = useAllActivities();
+  const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
   const { projects, byId: projectById } = useProjects();
   const activeWorkspaceId = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
@@ -275,7 +277,7 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
 
     // The Board hub's toolbar applies here too — one definition of Mine and
     // Stuck for all eight tabs (services/boardScope.js).
-    return scopeTasks(tasks, { scope: scopeOf(route), who: route.who, q: route.q, userId, today: todayLocal() })
+    return scopeTasks(tasks, { scope: scopeOf(route), who: route.who, q: route.q, status: route.statusFilter, userId, blockedIds, today: todayLocal() })
       .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
       .filter((t) => t.plan?.startDate || t.plan?.endDate || t.actual?.startDate || t.actual?.endDate)
       .filter(inPeriod)
@@ -287,7 +289,7 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
         // 2. Within a project, earliest start first
         return earliestOf(a).localeCompare(earliestOf(b));
       });
-  }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo, route.onlyMine, route.stuckOnly, route.who, route.q, userId]);
+  }, [tasks, projectFilter, projectById, periodActive, periodFrom, periodTo, route.statusFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId, blockedIds]);
 
   // The chip strip offers the tags on the rows this page would otherwise show,
   // and `rows` becomes the tag-filtered set. `missing` covers a saved view

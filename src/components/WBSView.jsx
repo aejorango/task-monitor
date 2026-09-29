@@ -63,13 +63,6 @@ function inkOf(color) {
   return color ? `color-mix(in srgb, ${color} 62%, var(--c-text))` : 'var(--c-text)';
 }
 
-const STATUS_FILTERS = [
-  { id: 'all',   label: 'All' },
-  { id: 'todo',  label: 'To do' },
-  { id: 'doing', label: 'Ongoing' },
-  { id: 'done',  label: 'Done' },
-];
-
 export default function WBSView({ projectFilter, route = {} }) {
   const { tasks, loading: tasksLoading, userId } = useTasks();
   const { projects, loading: projectsLoading } = useProjects();
@@ -94,7 +87,6 @@ export default function WBSView({ projectFilter, route = {} }) {
   // all, so nothing was lost by taking the middle step out.
   const [editingTask, setEditingTask] = useState(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
 
   const memberProfiles = workspaces.find((w) => w.id === activeWs)?.memberProfiles || {};
 
@@ -105,17 +97,21 @@ export default function WBSView({ projectFilter, route = {} }) {
     || null;
 
   // ── Build the tree: project → phase groups → tasks ───────────────────────
-  const statusActive = statusFilter !== 'all';
+  // Status comes from the tab row's Status menu. The card head's own
+  // All · To do · Ongoing · Done segments were removed so there is one status
+  // filter on the page, not two that could quietly disagree.
+  const statusActive = !!route.statusFilter || !!route.stuckOnly;
   const tree = useMemo(() => {
     const sortTasks = (arr) =>
       [...arr].sort((a, b) => (taskStart(a) || '9999').localeCompare(taskStart(b) || '9999'));
 
-    // The Board hub's toolbar first — All · Mine · Stuck, the roster and the
-    // find box — then this page's own status filter on top of it.
-    let scopedTasks = scopeTasks(tasks, {
-      scope: scopeOf(route), who: route.who, q: route.q, userId, today: todayLocal(),
+    // The Board hub's filters — Status, the person, the find box — through
+    // the one module that defines them. `blockedIds` so Stuck means what it
+    // means on the Kanban: a logged bottleneck, not only a passed date.
+    const scopedTasks = scopeTasks(tasks, {
+      scope: scopeOf(route), who: route.who, q: route.q, status: route.statusFilter,
+      userId, blockedIds, today: todayLocal(),
     });
-    if (statusActive) scopedTasks = scopedTasks.filter((t) => t.status === statusFilter);
 
     const visible = projects.filter((p) => projectFilter === 'all' || p.id === projectFilter);
     let blocks = visible.map((p) => {
@@ -153,8 +149,8 @@ export default function WBSView({ projectFilter, route = {} }) {
       }
     }
     return blocks;
-  }, [projects, tasks, projectFilter, statusFilter, statusActive,
-      route.onlyMine, route.stuckOnly, route.who, route.q, userId]);
+  }, [projects, tasks, projectFilter, statusActive, blockedIds,
+      route.statusFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId]);
 
   const allTreeTasks = useMemo(() => tree.flatMap((b) => b.tasks), [tree]);
   const totalPhases = useMemo(
@@ -194,8 +190,8 @@ export default function WBSView({ projectFilter, route = {} }) {
           <div className="empty-state-icon">▦</div>
           {statusActive ? (
             <>
-              <p>No tasks are {STATUS_FILTERS.find((s) => s.id === statusFilter)?.label.toLowerCase()}.</p>
-              <p className="small">Set the status filter back to <strong>All</strong> to see the full breakdown.</p>
+              <p>No tasks match the Status filter.</p>
+              <p className="small">Set <strong>Status</strong> back to <strong>All</strong>, at the top right, to see the full breakdown.</p>
             </>
           ) : (
             <p>No projects yet. Create one in the Projects view.</p>
@@ -205,19 +201,6 @@ export default function WBSView({ projectFilter, route = {} }) {
         <div className="wbs">
           <div className="wbs-head">
             <span className="bx-h">Work breakdown</span>
-            {/* The status filter sits at the right-hand end of the card head
-                (asked for directly): it filters THIS card, so it belongs on
-                it rather than up in the page commands. */}
-            <span className="seg wbs-head-seg" role="group" aria-label="Filter by status">
-              {STATUS_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  className={`seg-btn${statusFilter === f.id ? ' is-on' : ''}`}
-                  aria-pressed={statusFilter === f.id}
-                  onClick={() => setStatusFilter(f.id)}
-                >{f.label}</button>
-              ))}
-            </span>
           </div>
 
           {tree.map(({ project, tasks: pTasks, groups, isOrphan }) => {

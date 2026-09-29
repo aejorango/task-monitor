@@ -17,10 +17,12 @@ import { createRoot } from 'react-dom/client';
 import Icon from '../src/components/Icon';
 import PageHeader, { PageActions, PageSubtitle } from '../src/components/PageHeader';
 import { HUBS, hubForView, hubLanding, RENDERABLE_VIEWS } from '../src/services/views';
+import { STATUS_OPTIONS } from '../src/services/boardScope';
 import { Tile } from '../src/components/DashboardView';
 import WorkspaceSwitcher from '../src/components/WorkspaceSwitcher';
 import Avatar, { AvatarStack } from '../src/components/Avatar';
 import FindItem from '../src/components/FindItem';
+import FilterMenu from '../src/components/FilterMenu';
 import '../src/App.css';
 
 const WORKSPACES = [
@@ -135,27 +137,27 @@ function Harness() {
         workspaceName={WORKSPACES.find((w) => w.id === ws)?.name}
         onToggleMenu={() => setDrawer((d) => !d)}
         tools={<>
-          <span className="chip">★ Saved views</span>
           <button className="btn btn-sm btn-ghost" onClick={() => setOnline((o) => !o)}>
             {online ? 'Go offline' : 'Go online'}
           </button>
         </>}
-        search={activeHub?.id === 'board'
-          ? <FindItem value={find} onChange={(v) => setFind(v || '')} />
-          : null}
+        filters={activeHub?.id === 'board' ? (
+          <>
+            <ToolbarSample />
+            <FindItem value={find} onChange={(v) => setFind(v || '')} />
+          </>
+        ) : (
+          <div className="bt" role="group" aria-label="Project filter">
+            <div className="bt-proj"><ProjectPickerSample /></div>
+          </div>
+        )}
         status={<>
           {activeHub?.id === 'board' && (
             <span className="crumb-chip stuck"><span className="crumb-dot" />2 stuck</span>
           )}
-          <span className={`crumb-live${online ? '' : ' is-off'}`}>{online ? 'live' : 'offline'}</span>
+          <span className={`crumb-live${online ? '' : ' is-off'}`}>{online ? 'Powered by BLUE INNOVATION' : 'offline'}</span>
         </>}
       />
-
-      {activeHub?.id === 'board' ? <ToolbarSample /> : (
-        <div className="bt bt-plain" role="group" aria-label="Project filter">
-          <div className="bt-proj"><ProjectPickerSample /></div>
-        </div>
-      )}
 
       <main className="content">
         <Sample key={view} view={view} />
@@ -181,10 +183,10 @@ function ProjectPickerSample() {
   const selected = SAMPLE_PROJECTS.find((p) => p.id === value) || SAMPLE_PROJECTS[0];
   return (
     <div className="dropdown proj-picker">
-      <button className="btn btn-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <button className="fbx" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="proj-dot" style={{ background: selected.color }} />
         <span className="proj-picker-name">{selected.name}</span>
-        <span style={{ opacity: 0.5 }}>▾</span>
+        <span className="fbx-caret" aria-hidden="true">▾</span>
       </button>
       {open && (
         <div className="dropdown-menu">
@@ -204,41 +206,33 @@ function ProjectPickerSample() {
   );
 }
 
-// ─── The Board hub's shared toolbar (static twin of BoardToolbar) ─────────
-const FACES =[['Ace'], ['Rob'], ['Mary'], ['Tim'], ['Pam']].map(([n]) => [n, null]);
+// ─── The Board hub's filters (static twin of BoardToolbar) ────────────────
+// Project ▾ · Status ▾ · <person> ▾, in the tab row beside the find box.
+// The dropdowns are the real FilterMenu, so only the data here is fake.
+const FACES = ['Ace', 'Rob', 'Mary', 'Tim', 'Pam'];
 function ToolbarSample() {
   const [scope, setScope] = useState('all');
-  const [who, setWho] = useState(null);
+  const [who, setWho] = useState('__everyone__');
   return (
     <div className="bt" role="group" aria-label="Board filters">
-      {/* The project picker, not "+ New item" — the twin has to move when the
-          component does, or the harness is checking a design that stopped
-          shipping. */}
       <div className="bt-proj"><ProjectPickerSample /></div>
-      {['All', 'Mine', 'Stuck'].map((label) => {
-        const id = label.toLowerCase();
-        return (
-          <button
-            key={id}
-            className={`bt-pill${scope === id ? ' is-on' : ''}`}
-            aria-pressed={scope === id}
-            onClick={() => setScope(id)}
-          >{label}</button>
-        );
-      })}
-      <div className="bt-faces">
-        {who && <button className="bt-clear" onClick={() => setWho(null)}>Everyone</button>}
-        {FACES.map(([initial]) => (
-          <span
-            key={initial}
-            className={`bt-face${who === initial ? ' is-on' : ''}`}
-            role="button"
-            tabIndex={0}
-            onClick={() => setWho(who === initial ? null : initial)}
-            onKeyDown={(e) => { if (e.key === 'Enter') setWho(who === initial ? null : initial); }}
-          ><Avatar id={initial} name={initial} size={28} /></span>
-        ))}
-      </div>
+      <FilterMenu
+        name="Status"
+        icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity="0.35" /><path d="M12 3a9 9 0 0 1 9 9" /><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></svg>}
+        value={scope}
+        options={STATUS_OPTIONS}
+        onChange={setScope}
+      />
+      <FilterMenu
+        name="Assigned to"
+        icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>}
+        value={who}
+        options={[
+          { id: '__everyone__', label: 'Everyone' },
+          ...FACES.map((n) => ({ id: n, label: n, icon: <Avatar id={n} name={n} size={20} /> })),
+        ]}
+        onChange={setWho}
+      />
     </div>
   );
 }
@@ -1195,6 +1189,16 @@ const ILOG = [
 ];
 const ICON_FOR = { red: '!', green: '✓', navy: '•', amber: '•' };
 const ISUBS = [['Draft copy variants', true], ['Compliance review', true], ['Legal sign-off', false], ['Ship to staging', false]];
+// Monday-first, which is the app's default week start (`weekStart: 1`).
+const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// Sample items by day of July: [title, status, project colour].
+const CAL_DUE = {
+  8:  [['Draft borrower eligibility rules', 'done', '#0051BA']],
+  14: [['Set up sandbox test accounts', 'doing', '#e2892e']],
+  17: [['Legal review of disbursement copy', 'review', '#7B2D8F']],
+  20: [['Migrate legacy loan records', 'doing', '#0051BA'], ['Rotate partner API keys', 'todo', '#e2892e']],
+  24: [['Quarterly compliance report', 'todo', '#1DA449']],
+};
 function CalendarSample() {
   return (
     <div className="bcard calendar">
@@ -1203,11 +1207,6 @@ function CalendarSample() {
         <button className="cal-nav-btn">‹</button>
         <button className="cal-nav-btn">›</button>
         <button className="cal-nav-today">Today</button>
-        <div className="cal-filter-group">
-          {['All', 'To do', 'Ongoing', 'Done'].map((l, i) => (
-            <button key={l} className={`cal-filter-btn${i === 0 ? ' active' : ''}`}>{l}</button>
-          ))}
-        </div>
         <span className="cal-basis">by due date</span>
       </div>
       <div className="cal-header">

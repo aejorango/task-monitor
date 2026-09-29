@@ -158,7 +158,7 @@ their labels back.
 nothing left in it, so the row went too: the app now starts at the breadcrumb
 strip, and `--topbar-h` is `0px` for the handful of `calc(100vh - …)` heights
 that budgeted for it. What the bar still had to carry became slots on the
-header — `tools` (the running timer, the saved-views menu, Save as view) sits
+header — `tools` (the running timer and Save as view) sits
 in the title block left of the page's own commands, and the phone's menu
 button moved to the head of the crumb strip. Nothing was merely deleted; a
 control taken off the chrome and not re-homed is not simpler, it is a feature
@@ -167,7 +167,7 @@ nobody can reach:
 | Was in the top bar | Is now |
 | --- | --- |
 | Workspace switcher | the **rail**, under the wordmark (`.rail-ws`) — the navy skin it was drawn for, so the whole `.topbar .ws-*` override block went with it |
-| Project picker | the **middle of the crumb strip** (`.crumbs-mid`, absolutely centred so a long workspace name cannot shunt it) — it decides what every page below is about, which is a breadcrumb's job |
+| Project picker | the **right-hand end of the tab strip** (`.chrome-tabtools`), drawn like the Find item box. It sat in the middle of the crumb strip, then in a toolbar strip under the tabs, before moving up into the tab row on request |
 | Tutorials dropdown | **Dashboard → Tutorial** (Settings → Tutorial until T-0158, when the page was rebuilt to the mockup and moved to the hub that draws it). The tour itself is still mounted app-wide by `AppShell` with `showLauncher={false}`, because it navigates between pages and highlights elements on them; the page asks for one by firing `START_TUTORIAL_EVENT`, and reads the same `TUTORIALS` list — which lives in `services/tutorials.js` now, not in the component |
 | Inbox bell 📥 | **Messages → Inbox**, the same `InboxPanel` over the same `useInbox` listener. Notices had to keep a home or `mentions.js` would go on writing things nobody could read |
 | Due-alert bell | gone; the on/off switch is **Settings → Notifications**, which is why removing it does not strand the feature |
@@ -175,6 +175,7 @@ nobody can reach:
 | "My tasks" chip | gone; `?mine=1` is still a route the palette, a link and the Board toolbar's **Mine** pill all set |
 | AI helper popup | gone; AI is the **Ask AI** page |
 | Tag chip strip (every page) | gone (T-0148); the **filter** stays — `?tag=` still applies, a saved view still carries it, and each page **names the active tag in its subtitle with a "show all"** beside it. Dropping the strip and the filter both would make one saved view mean two different things |
+| Saved views chip (`.saved-views-btn`) | gone from every page on request; saved views are opened and removed in **Reports → Library**, which now also hides a view whose page was deleted (`isKnownView`, the menu's old guard). **Save view** stays in `tools`, and its toast says where the view went |
 | Board's "+ Add item" per column | gone (T-0148); **"+ New item"** in the Board toolbar and ⌘K → New task both open the quick-add, which is no longer a strip standing open on every visit |
 
 `AiHelper.jsx`, `InboxBell.jsx` and `DueAlertBell.jsx` are still in the tree
@@ -251,9 +252,10 @@ every device. A "👤 Diana" pill is not the same thing: the mockup's card has
 room for four facts and a pill spends the row on one of them.
 
 **The chrome carries two more things from the mockups.** The breadcrumb's
-right-hand end is the red **"N stuck"** count and the connection as one mono
-word — `live` / `offline` — not the sentence "Sync healthy". And the tab strip
-ends in a **Find item** box: it writes `?q=` and every Board page already runs
+right-hand end is the red **"N stuck"** count and then, online, the maker's
+line **"Powered by BLUE INNOVATION"** (on request, in place of the mockup's
+word `live`); offline it still says `offline` in amber, because that is the
+one state somebody has to act on. And the tab strip ends in a **Find item** box: it writes `?q=` and every Board page already runs
 its list through `scopeTasks`, so one input narrows every tab at once. It
 commits on a pause rather than per keystroke, or the back button would walk
 back through every letter.
@@ -265,10 +267,35 @@ on the hub states that, because `hubLanding` otherwise returns `tabs[0]` and a
 cosmetic reorder would silently move the hub's home. The Board Explorer draws eight; **Table, Flow and Item were
 deleted in T-0152** at Ace's request, and their pages went with them rather
 than being left unreachable — what that cost is in the "what happened to each
-mockup tab" table below. Above all five sits `BoardToolbar`: **+ New item**,
-the **All · Mine · Stuck** pills and the member roster. `AppShell` draws it
-**once**, for `hubForView(view)?.id === 'board'` — five copies is how the
-Kanban and the Timeline come to disagree about how much work there is.
+mockup tab" table below. The hub's filters are `BoardToolbar`: three
+dropdowns at the right-hand end of the tab strip, left of the Find item box
+and drawn like it (`.fbx`, the find box's own field and height) — **Project ▾ ·
+Status ▾ · <person> ▾**. They were a strip of pills and faces under the tabs
+until they moved up on request; `components/FilterMenu.jsx` is the dropdown.
+**Status** replaced an All · Mine · Stuck menu on request: its options are the
+board's own status words (`STATUS_OPTIONS` — Not started · Working on it · In
+review · Done) plus **Stuck**, the derived status, so nothing the pills did was
+lost — Stuck is an option and **Mine is picking yourself** in the person menu.
+A status rides on `?status=`, which `scopeTasks` now applies on **all five**
+tabs (only the Kanban read it before, and `tests/ui/boardHub.test.mjs` fails the
+build if a page stops passing it); Stuck rides on `stuckOnly`, and
+`statusPatch` never sets both. The person menu has **no visible label** on
+request — "Everyone" or a face and a name — but keeps `name="Assigned to"` for a
+screen reader. The Status trigger is **an icon, not the word** (a part-filled
+ring), with `name="Status"` for the screen reader and the tooltip. It is the
+**only** status filter on a Board page: the Calendar's All · To do · Ongoing ·
+In review · Done buttons and the WBS card head's segments were removed. Three
+things had to be true for it to work, and `tests/ui/statusFilterFlow.test.mjs`
+drives all three through the real router, tab strip and menu: every page
+passes `status: route.statusFilter` **and lists it in its `useMemo` deps** (the
+Calendar, WBS, Gantt and Workload did not, so the menu did nothing there); a
+**tab click keeps `?status=`** (it used to clear it, so Done on the Kanban
+showed everything on the Gantt); and every page passes `blockedIds`, so Stuck
+counts a logged bottleneck on the WBS, Gantt and Workload as it does on the
+Kanban. `AppShell` draws the filters **once**, for
+`hubForView(view)?.id === 'board'` — five copies is how the Kanban and the
+Timeline come to disagree about how much work there is. The other hubs with
+something to scope get the project picker alone, in the same place.
 
 What the pills MEAN is `services/boardScope.js`, and only there. "Stuck" is
 deliberately narrow: a bottleneck somebody wrote down, or an item that is open
@@ -665,7 +692,8 @@ src/
 │   ├── AppShell.jsx          ← icon rail + topbar + view router + global search + ⌘K
 │   ├── PageHeader.jsx        ← breadcrumb + title + tabs; PageSubtitle / PageActions
 │   ├── Avatar.jsx            ← a person as a coloured circle; colour derived from the id
-│   ├── BoardToolbar.jsx      ← the Board hub's one strip: New item · All/Mine/Stuck · roster
+│   ├── BoardToolbar.jsx      ← the Board hub's filters in the tab row: Project · Status · person
+│   ├── FilterMenu.jsx        ← a tab-row filter as a dropdown, drawn like the find box (`.fbx`)
 │   ├── FindItem.jsx          ← the tab strip's find box; writes ?q=, debounced
 │   ├── TutorialView.jsx      ← Dashboard → Tutorial: the lesson rail, the active
 │   │                            lesson, Try it here; the tour runs in the shell
@@ -730,7 +758,7 @@ src/
 │   ├── dueChip.js            ← the due date as a board card shows it
 │   ├── myWeek.js             ← my week across workspaces: day columns and two rails
 │   ├── effort.js             ← estimated hours vs logged hours, and the variance
-│   ├── boardScope.js         ← what Mine and Stuck mean, for all eight Board tabs
+│   ├── boardScope.js         ← what Stuck, a status, a person and Mine mean, for every Board tab
 │   ├── boardBands.js        ← which Kanban bands are open; first one by default
 │   ├── activeWorkspace.js    ← which workspace is active after a snapshot, and
 │   │                            why an EMPTY one must never clear it

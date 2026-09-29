@@ -3,17 +3,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BOARD_SCOPES, blockedTaskIds, describeScope, displayStatus, isStuck,
-  scopeOf, scopePatch, scopeTasks,
+  blockedTaskIds, describeScope, displayStatus, isStuck,
+  scopeOf, scopeTasks, STATUS_OPTIONS, statusOf, statusPatch,
 } from './boardScope.js';
 
 const TODAY = '2026-07-20';
 const T = (over) => ({ id: 'a', status: 'todo', assignedTo: [], plan: {}, ...over });
-
-test('the three pills are the ones the mockup draws, and each says what it means', () => {
-  assert.deepEqual(BOARD_SCOPES.map((s) => s.id), ['all', 'mine', 'stuck']);
-  BOARD_SCOPES.forEach((s) => assert.ok(s.hint, `${s.id} has no explanation`));
-});
 
 test('All filters nothing at all', () => {
   const tasks = [T({ id: '1' }), T({ id: '2' })];
@@ -74,12 +69,12 @@ test('a member filter stacks on top of a pill', () => {
   assert.deepEqual(out.map((t) => t.id), ['1']);
 });
 
-test('the route says which pill is lit, and pressing the lit one clears it', () => {
+test('the route says which scope is on', () => {
+  // ?mine=1 and stuckOnly outlived the pills: Mine comes from ⌘K or a link,
+  // Stuck from the Status menu.
   assert.equal(scopeOf({}), 'all');
   assert.equal(scopeOf({ onlyMine: true }), 'mine');
   assert.equal(scopeOf({ stuckOnly: true }), 'stuck');
-  assert.deepEqual(scopePatch('mine', 'all'), { onlyMine: true, stuckOnly: false });
-  assert.deepEqual(scopePatch('mine', 'mine'), { onlyMine: false, stuckOnly: false });
 });
 
 test('a filter that is on says so in words', () => {
@@ -129,4 +124,33 @@ test('the chip agrees with the Stuck pill, item for item', () => {
   const shown = tasks.filter((t) => displayStatus(t, new Set(), TODAY).stuck).map((t) => t.id);
   const filtered = scopeTasks(tasks, { scope: 'stuck', today: TODAY }).map((t) => t.id);
   assert.deepEqual(shown, filtered);
+});
+
+// ─── the tab row's Status menu ──────────────────────────────────────────────
+
+test('the Status menu speaks the board\'s own status words, plus Stuck', () => {
+  const ids = STATUS_OPTIONS.map((o) => o.id);
+  STATUS_OPTIONS.forEach((o) => assert.ok(o.hint, `${o.id} has no explanation`));
+  assert.deepEqual(ids, ['all', 'todo', 'doing', 'review', 'done', 'stuck']);
+  assert.equal(STATUS_OPTIONS.find((o) => o.id === 'doing').label, 'Working on it');
+});
+
+test('choosing a status writes ?status=, choosing Stuck writes stuckOnly — never both', () => {
+  assert.deepEqual(statusPatch('review'), { stuckOnly: false, statusFilter: 'review' });
+  assert.deepEqual(statusPatch('stuck'), { stuckOnly: true, statusFilter: null });
+  assert.deepEqual(statusPatch('all'), { stuckOnly: false, statusFilter: null });
+});
+
+test('the menu reads its value back from the route', () => {
+  assert.equal(statusOf({}), 'all');
+  assert.equal(statusOf({ statusFilter: 'done' }), 'done');
+  assert.equal(statusOf({ stuckOnly: true, statusFilter: 'done' }), 'stuck');
+  assert.equal(statusOf({ statusFilter: 'nonsense' }), 'all', 'an unknown status filters nothing');
+});
+
+test('scopeTasks applies a status, and ignores one it does not know', () => {
+  const tasks = [{ id: 'a', status: 'todo' }, { id: 'b', status: 'review' }, { id: 'c', status: 'done' }];
+  assert.deepEqual(scopeTasks(tasks, { status: 'review', today: TODAY }).map((t) => t.id), ['b']);
+  assert.equal(scopeTasks(tasks, { status: 'bogus', today: TODAY }).length, 3);
+  assert.equal(scopeTasks(tasks, { status: null, today: TODAY }).length, 3);
 });

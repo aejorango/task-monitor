@@ -23,17 +23,19 @@
 // The arithmetic and the meaning of a load level stay in the pure module.
 
 import { useMemo } from 'react';
-import { useProjects, useTasks, useAuth } from '../hooks/useTasks';
+import { useProjects, useTasks, useAuth, useAllActivities } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import { memberLabel } from '../services/invites';
 import { todayLocal } from '../services/recurrence';
 import { DEFAULT_CAPACITY_HOURS, HOURS_PER_TASK, taskHours } from '../services/workload';
-import { scopeTasks, scopeOf } from '../services/boardScope';
+import { scopeTasks, scopeOf, blockedTaskIds } from '../services/boardScope';
 import { PageActions, PageSubtitle } from './PageHeader';
 import Avatar from './Avatar';
 
 export default function WorkloadView({ projectFilter = 'all', route = {}, navigate }) {
   const { tasks, loading } = useTasks();
+  const { activities } = useAllActivities();
+  const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
   const { byId: projectById } = useProjects();
   const { userId } = useAuth();
   const workspaceId = useActiveWorkspaceId();
@@ -46,9 +48,9 @@ export default function WorkloadView({ projectFilter = 'all', route = {}, naviga
   const visible = useMemo(
     () => scopeTasks(
       projectFilter === 'all' ? tasks : tasks.filter((t) => t.projectId === projectFilter),
-      { scope: scopeOf(route), who: route.who, q: route.q, userId, today: todayLocal() },
+      { scope: scopeOf(route), who: route.who, q: route.q, status: route.statusFilter, userId, blockedIds, today: todayLocal() },
     ),
-    [tasks, projectFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId],
+    [tasks, projectFilter, route.statusFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId, blockedIds],
   );
 
   // One bar per person, segmented by project, against a real cap.

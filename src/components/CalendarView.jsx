@@ -38,7 +38,6 @@ export default function CalendarView({ projectFilter, initialTagFilter, route = 
   const { userId } = useAuth();
   const activeWorkspaceId = useActiveWorkspaceId();
   const [activeDrag, setActiveDrag] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' or one of TASK_STATUSES
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   // A saved view stores the tag it was filtered by; the router hands it over
   // here. The audit believed this page already honoured it — it did not
@@ -51,12 +50,12 @@ export default function CalendarView({ projectFilter, initialTagFilter, route = 
   const blockedIds = useMemo(() => blockedTaskIds(allActivities), [allActivities]);
   const inProject = useMemo(
     () => scopeTasks(
-      tasks
-        .filter((t) => projectFilter === 'all' || t.projectId === projectFilter)
-        .filter((t) => statusFilter === 'all' || t.status === statusFilter),
-      { scope: scopeOf(route), who: route.who, q: route.q, userId, blockedIds, today: todayLocal() },
+      // Status comes from the tab row's Status menu (`route.statusFilter`),
+      // not from a row of buttons on this card — one status filter per page.
+      tasks.filter((t) => projectFilter === 'all' || t.projectId === projectFilter),
+      { scope: scopeOf(route), who: route.who, q: route.q, status: route.statusFilter, userId, blockedIds, today: todayLocal() },
     ),
-    [tasks, projectFilter, statusFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId, blockedIds],
+    [tasks, projectFilter, route.statusFilter, route.onlyMine, route.stuckOnly, route.who, route.q, userId, blockedIds],
   );
   const tagState = useMemo(() => tagFilterState(inProject, tagFilter), [inProject, tagFilter]);
   const filtered = tagState.filtered;
@@ -167,21 +166,6 @@ export default function CalendarView({ projectFilter, initialTagFilter, route = 
           <button className="cal-nav-btn" onClick={prev} aria-label="Previous month">‹</button>
           <button className="cal-nav-btn" onClick={next} aria-label="Next month">›</button>
           <button className="cal-nav-today" onClick={goToday}>Today</button>
-          <div className="cal-filter-group">
-          {[
-            { id: 'all',   label: 'All' },
-            { id: 'todo',  label: 'To do' },
-            { id: 'doing', label: 'Ongoing' },
-            { id: 'review', label: 'In review' },
-            { id: 'done',  label: 'Done' },
-          ].map((s) => (
-            <button
-              key={s.id}
-              className={`cal-filter-btn ${statusFilter === s.id ? 'active' : ''}`}
-              onClick={() => setStatusFilter(s.id)}
-            >{s.label}</button>
-          ))}
-          </div>
           <span className="cal-basis">by due date</span>
         </div>
           <div className="cal-header">

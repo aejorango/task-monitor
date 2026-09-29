@@ -229,7 +229,10 @@ test('\u2026and what it carried that exists nowhere else survived', () => {
   assert.ok(!wbs.includes('ScopedActivityLogModal'), 'and the modal it replaced is gone');
   assert.match(wbs, /<TaskEditor/);
   assert.match(wbs, /newTaskDraft\(/,      '+ New task opens the same editor, on an unsaved task');
-  assert.match(wbs, /STATUS_FILTERS/,      'the status filter moved to the title block, not away');
+  // Its own status segments went when the tab row's Status menu arrived:
+  // one status filter per page. The status still filters — from the route.
+  assert.ok(!wbs.includes('STATUS_FILTERS'), 'the card head\'s status segments are gone');
+  assert.match(wbs, /status: route\.statusFilter/, 'the Status menu filters the WBS');
 });
 
 test('a project name is darkened ink, never the raw brand colour', () => {

@@ -60,15 +60,54 @@ test('the project picker is in the toolbar, on every hub that can use one', () =
 // for a button at the end of a row and wrong for one at the left edge of the
 // page — the menu grew leftwards under the rail, and the rail (z-index 20)
 // painted over it.
-test('the picker’s menu opens rightwards, above the rail, one line per project', () => {
-  const block = css.slice(css.indexOf('.proj-picker .dropdown-menu {'),
-    css.indexOf('.proj-picker .dropdown-menu {') + 300);
-  assert.match(block, /left: 0/);
-  assert.match(block, /right: auto/);
-  const z = Number(block.match(/z-index: (\d+)/)[1]);
+test('the picker’s menu stays on screen, above the rail, one line per project', () => {
+  // Anywhere else the picker opens rightwards from the left edge (the base
+  // rule). In the tab row it sits at the right-hand end, so there the menu
+  // anchors right instead — rightwards would run off the page.
+  const base = css.slice(css.lastIndexOf('\n.proj-picker .dropdown-menu {'));
+  assert.match(base.slice(0, 300), /left: 0/);
+  assert.match(base.slice(0, 300), /right: auto/);
+  assert.match(css, /\.chrome-tabtools \.proj-picker \.dropdown-menu \{ left: auto; right: 0; \}/);
+  const z = Number(css.match(/\.chrome-tabtools \.dropdown-menu \{ z-index: (\d+)/)[1]);
   const railZ = Number(css.slice(css.indexOf('.rail {')).match(/z-index: (\d+)/)[1]);
   assert.ok(z > railZ, `the menu (${z}) must sit above the rail (${railZ})`);
   assert.match(css, /\.proj-picker-name \{[\s\S]*?text-overflow: ellipsis/);
+});
+
+// The filters moved up into the tab row, left of the find box, and were
+// drawn as the find box — and the Saved views chip left the chrome. The
+// strip they used to fill below the tabs is gone, not left empty.
+test('the filters are in the tab row, drawn like the find box', () => {
+  assert.match(shell, /filters=\{activeHub\?\.id === 'board' \? \(/);
+  assert.match(header, /<div className="chrome-tabtools">\{filters\}<\/div>/);
+  const toolbar = read('src', 'components', 'BoardToolbar.jsx');
+  // Status: an icon in place of the word, the word kept for a screen reader.
+  assert.match(toolbar, /<FilterMenu\s+name="Status"\s+icon=\{<StatusIcon \/>\}/);
+  assert.ok(!/label="Status"/.test(toolbar), 'the word "Status" is not drawn');
+  // The person menu carries no visible word (on request) — only a name for a
+  // screen reader, so it still announces itself as "Assigned to".
+  assert.match(toolbar, /<FilterMenu\s+name="Assigned to"/);
+  assert.ok(!/label="Assigned to"/.test(toolbar), 'the word "Assigned to" is not drawn');
+  assert.ok(!/label="Show"/.test(toolbar), 'the All · Mine · Stuck menu was replaced by Status');
+  assert.match(toolbar, /triggerClassName="fbx"/);
+  // Same field as the find box: background, border, radius and height.
+  const fbx = css.slice(css.indexOf('\n.fbx {'), css.indexOf('}', css.indexOf('\n.fbx {')));
+  const box = css.slice(css.indexOf('\n.findbox {'), css.indexOf('}', css.indexOf('\n.findbox {')));
+  for (const prop of ['background: var(--c-surface-2)', 'border: 1px solid var(--c-border)', 'border-radius: 8px', 'height: 32px']) {
+    assert.ok(fbx.includes(prop) && box.includes(prop), `.fbx and .findbox must share ${prop}`);
+  }
+  for (const gone of ['.bt-pill', '.bt-face', '.bt-clear', '.bt-plain', 'saved-views-btn']) {
+    assert.ok(!css.includes(gone), `${gone} is back in App.css`);
+  }
+  assert.ok(!shell.includes('SavedViewsMenu'), 'the Saved views chip is gone from the chrome');
+});
+
+test('saved views still have a home once the chip is gone', () => {
+  // Nothing is removed from the chrome without somewhere to land.
+  const lib = read('src', 'components', 'LibraryView.jsx');
+  assert.match(lib, /useSavedViews/);
+  assert.match(lib, /isKnownView\(v\.view\)/, 'a view on a deleted page must not be offered');
+  assert.match(shell, /find it in Reports → Library/, 'Save view says where the view went');
 });
 
 test('⌘K still opens the palette, and nothing is left in the DOM when it is shut', () => {

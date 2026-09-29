@@ -65,7 +65,7 @@ export function PageActions({ children }) {
 
 export default function PageHeader({
   route, navigate, pageLabel, pageIcon, workspaceName, status,
-  search = null, tools = null, onToggleMenu = null,
+  filters = null, tools = null, onToggleMenu = null,
 }) {
   const tabs = tabsForView(route.view);
   const hub = hubForView(route.view);
@@ -142,22 +142,26 @@ export default function PageHeader({
                 key={t.view}
                 className={`chrome-tab${t.active ? ' active' : ''}`}
                 aria-current={t.active ? 'page' : undefined}
+                // The Status choice travels with you between tabs, as the
+                // person and Stuck always did — it is the hub's filter, not
+                // one page's. (It used to be cleared here, so picking Done on
+                // the Kanban and opening the Gantt quietly showed everything.)
                 onClick={() => navigate({
                   view: t.view,
                   savedViewId: null,
                   tagFilter: null,
-                  statusFilter: null,
                 })}
               >
                 {t.label}
               </button>
             ))}
           </nav>
-          {/* The mockups put a find box at the right-hand end of the tab
-              strip. A hub supplies one when it has something to search; the
-              rest of the app leaves the slot empty rather than drawing a box
-              that does nothing. */}
-          {search}
+          {/* The right-hand end of the tab strip: the hub's filters and, on
+              the Board, the find box, all drawn as the same cream field. A hub
+              supplies them when it has something to scope; the rest of the app
+              leaves the slot empty rather than drawing a control that filters
+              nothing. */}
+          {filters && <div className="chrome-tabtools">{filters}</div>}
           </div>
         )}
       </div>

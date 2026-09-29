@@ -192,7 +192,7 @@ test('every role="button" div goes through the helper', () => {
 });
 
 test('the four Dashboard and editor rows use it', () => {
-  for (const [file, count] of [['DashboardView.jsx', 3], ['TaskEditor.jsx', 1], ['WorkPerformedView.jsx', 1], ['AppShell.jsx', 1]]) {
+  for (const [file, count] of [['DashboardView.jsx', 3], ['TaskEditor.jsx', 1], ['WorkPerformedView.jsx', 1]]) {
     const src = fs.readFileSync(path.join(componentsDir, file), 'utf8');
     const uses = (src.match(/\{\.\.\.activateProps\(/g) || []).length;
     assert.equal(uses, count, `${file} should spread it ${count} time(s)`);
@@ -200,9 +200,11 @@ test('the four Dashboard and editor rows use it', () => {
 });
 
 test('an icon-only row is given a name, a readable one is not', () => {
+  // The saved-views menu whose ✕ this used to check was removed from the
+  // chrome; saved views are removed from Reports → Library now, whose button
+  // says "Remove" in words.
   const shell = fs.readFileSync(path.join(componentsDir, 'AppShell.jsx'), 'utf8');
-  assert.match(shell, /label: `Remove saved view \$\{v\.name\}`/,
-    'a bare ✕ means nothing to a screen reader');
+  assert.ok(!shell.includes('saved-view-delete'), 'the chrome no longer lists saved views');
 
   const dash = fs.readFileSync(path.join(componentsDir, 'DashboardView.jsx'), 'utf8');
   // The row opens the EDITOR now, not the read-only activity list — one click,
@@ -212,8 +214,9 @@ test('an icon-only row is given a name, a readable one is not', () => {
 });
 
 test('the confirm behind the saved-view delete is written once', () => {
-  const shell = fs.readFileSync(path.join(componentsDir, 'AppShell.jsx'), 'utf8');
-  const confirms = (shell.match(/Remove saved view "\$\{v\.name\}"\?/g) || []).length;
+  // Its home is Reports → Library now that the chrome menu is gone.
+  const lib = fs.readFileSync(path.join(componentsDir, 'LibraryView.jsx'), 'utf8');
+  const confirms = (lib.match(/Remove "\$\{v\.name\}" from the library\?/g) || []).length;
   assert.equal(confirms, 1, 'it used to be written once per input, and could drift');
 });
 

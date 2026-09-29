@@ -2341,32 +2341,6 @@ a:hover { text-decoration: underline; }
 }
 .cal-month-label .accent { color: var(--c-accent); }
 
-.cal-filter-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-pill);
-  padding: 4px;
-}
-.cal-filter-btn {
-  border: none;
-  background: transparent;
-  border-radius: var(--r-pill);
-  padding: 6px 13px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--c-text-3);
-  cursor: pointer;
-  transition: all 0.12s;
-}
-.cal-filter-btn:hover { color: var(--c-text); }
-.cal-filter-btn.active {
-  background: var(--c-accent);
-  color: white;
-}
-
 .calendar {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
@@ -3215,20 +3189,6 @@ a:hover { text-decoration: underline; }
   align-items: center;
 }
 .ai-subtask-item.off .input { opacity: 0.55; text-decoration: line-through; }
-
-/* ─── Saved views ─────────────────────────────────────────── */
-/* The ✕ that removes one. It hides until you point at the row — except on a
-   touch screen, where there is no pointing (see the `hover: none` block). */
-.saved-views-row .saved-view-delete {
-  opacity: 0;
-  font-size: 13px;
-  padding: 0 8px 0 4px;
-  color: var(--c-text-muted);
-  cursor: pointer;
-  transition: opacity 0.15s, color 0.15s;
-}
-.saved-views-row:hover .saved-view-delete { opacity: 1; }
-.saved-views-row .saved-view-delete:hover { color: var(--c-danger); }
 
 /* ─── Presence avatar stack ───────────────────────────────── */
 .presence-stack {
@@ -4341,7 +4301,6 @@ a:hover { text-decoration: underline; }
 /* ── Touch: show task-card actions without hover ─────────── */
 @media (hover: none) {
   .task-card-actions { opacity: 1; }
-  .saved-views-row .saved-view-delete { opacity: 1; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -10863,17 +10822,28 @@ a:hover { text-decoration: underline; }
 }
 .crumb-live.is-off { color: #f0a94f; font-weight: 600; }
 
-/* The tab strip and the find box share a row; the strip scrolls, the box
-   does not shrink below something you can type into. */
+/* The tab strip and the hub's filters share a row; the strip scrolls, the
+   filters do not shrink below something you can read. */
 .chrome-tabrow { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .chrome-tabrow .chrome-tabs { flex: 1; }
+.chrome-tabtools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+/* The hub's filters inside it — Project ▾ · Show ▾ · Assigned to ▾. */
+.bt { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .findbox {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
   width: 170px;
-  margin-bottom: 8px;
+  height: 32px;
+  box-sizing: border-box;
   padding: 6px 12px;
   background: var(--c-surface-2);
   border: 1px solid var(--c-border);
@@ -10893,6 +10863,52 @@ a:hover { text-decoration: underline; }
 }
 .findbox-input::placeholder { color: var(--c-text-muted); }
 .findbox-input::-webkit-search-cancel-button { cursor: pointer; }
+
+/* A dropdown trigger drawn as the find box: the same cream field, border,
+   radius and height, so the right end of the tab row reads as one set of
+   filters. The filter's name is muted; the value, which is what changes, is
+   in ink — and turns accent-ink once it narrows anything. */
+.fbx {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  box-sizing: border-box;
+  max-width: 220px;
+  padding: 6px 10px 6px 12px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font: 500 12px var(--font-sans);
+  color: var(--c-text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s ease;
+}
+.fbx:hover { border-color: var(--c-border-strong); }
+.fbx:focus-visible,
+.fbx[aria-expanded="true"] { outline: none; border-color: var(--c-accent); }
+.fbx .proj-dot { flex: none; }
+.fbx .proj-picker-name { flex: 1; min-width: 0; text-align: left; }
+.fbx-k { color: var(--c-text-muted); flex: none; }
+.fbx-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.fbx.is-set .fbx-v { color: var(--c-accent-ink); }
+.fbx-caret { flex: none; color: var(--c-text-muted); font-size: 10px; }
+
+/* Their menus open from the right-hand end of the row, so they anchor right
+   (the default) and sit above the page below. */
+.chrome-tabtools .dropdown-menu { z-index: 60; min-width: 190px; }
+.chrome-tabtools .proj-picker .dropdown-menu { left: auto; right: 0; }
+.fmenu-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbx-icon { display: inline-flex; flex: none; color: var(--c-text-muted); }
 
 /* ─── Title block + tabs ───────────────────────────────────── */
 .chrome-bar {
@@ -11023,48 +11039,6 @@ a:hover { text-decoration: underline; }
   border-bottom-color: var(--c-accent);
 }
 
-/* ─── Saved views menu (topbar) ────────────────────────────── */
-.saved-views { position: relative; }
-.saved-views-btn { display: inline-flex; align-items: center; gap: 6px; }
-.saved-views-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 220px;
-  max-height: 340px;
-  overflow-y: auto;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 6px;
-  z-index: 60;
-}
-.saved-views-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-radius: var(--r-md);
-}
-.saved-views-row:hover { background: var(--c-surface-2); }
-.saved-views-row.active { background: var(--c-accent-soft); }
-.saved-views-go {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: none;
-  background: none;
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--c-text);
-  cursor: pointer;
-  text-align: left;
-}
-.saved-views-icon { display: inline-flex; color: var(--c-text-3); flex: none; }
-.saved-views-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── Chrome at narrow widths ──────────────────────────────── */
 @media (max-width: 900px) {
@@ -11290,10 +11264,6 @@ a:hover { text-decoration: underline; }
    live — so the whole `.topbar .ws-*` override block that made it legible on
    a white bar is gone with it. See `.rail-ws` above.  */
 
-@media (max-width: 720px) {
-  /* Saved views keep their star; the word goes with every other chip label. */
-  .saved-views-menu { min-width: 200px; }
-}
 
 /* ══════════════════════════════════════════════════════════════
    DASHBOARD — Main board, delivery pipeline, alerts, utilization
@@ -12548,70 +12518,6 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
 }
 
-/* ── The shared toolbar above every Board tab ──────────────────────── */
-.bt {
-  grid-area: toolbar;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: var(--c-bg);
-  border-bottom: 1px solid var(--c-border);
-  flex-wrap: wrap;
-}
-.bt-new {
-  border: none;
-  cursor: pointer;
-  font: 600 12px var(--font-sans);
-  padding: 8px 14px;
-  border-radius: var(--r-pill);
-  background: var(--c-accent);
-  color: #fff;
-  box-shadow: 0 5px 14px rgba(226, 137, 46, 0.3);
-}
-.bt-new:hover { background: var(--c-accent-hover); }
-.bt-pill {
-  border: 1px solid var(--c-border);
-  cursor: pointer;
-  font: 600 12px var(--font-sans);
-  padding: 8px 14px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text);
-}
-.bt-pill:hover { border-color: var(--c-border-strong); }
-/* The mockup's lit pill is navy on cream. `#fff` on `--c-text` inverts to
-   near-white on near-white in dark mode, so the ink is the PAGE colour. */
-.bt-pill.is-on {
-  background: var(--c-text);
-  border-color: var(--c-text);
-  color: var(--c-bg);
-  font-weight: 700;
-}
-.bt-faces { margin-left: auto; display: flex; align-items: center; gap: 7px; }
-.bt-clear {
-  border: 1px solid var(--c-border);
-  background: var(--c-surface);
-  color: var(--c-text-2);
-  font: 600 11px var(--font-sans);
-  padding: 5px 10px;
-  border-radius: var(--r-pill);
-  cursor: pointer;
-  margin-right: 4px;
-}
-.bt-face {
-  width: 28px; height: 28px; border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 11px; font-weight: 700; color: #fff;
-  box-shadow: 0 0 0 2px var(--c-bg);
-  margin-left: -8px;
-  cursor: pointer;
-  overflow: hidden;
-}
-.bt-face:first-of-type { margin-left: 0; }
-.bt-face img { width: 100%; height: 100%; object-fit: cover; }
-.bt-face.is-on { box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 4px var(--c-accent); }
-
 /* ── A person, as a circle ─────────────────────────────────────────── */
 .av {
   border-radius: 50%;
@@ -12826,8 +12732,14 @@ a:hover { text-decoration: underline; }
 
 @media (max-width: 900px) {
   .wl-name { width: 108px; }
-  .bt { padding: 10px 16px; }
-  .bt-faces { margin-left: 0; width: 100%; }
+  /* Too narrow for tabs AND filters on one line: the filters take their own
+     row under the tabs, and the find box gives up its fixed width. */
+  .chrome-tabrow { flex-wrap: wrap; row-gap: 0; }
+  .chrome-tabrow .chrome-tabs { flex: 1 1 100%; }
+  .chrome-tabtools { flex: 1 1 100%; flex-wrap: wrap; margin-top: 8px; }
+  .chrome-tabtools .bt { flex-wrap: wrap; }
+  .chrome-tabtools .findbox { flex: 1 1 140px; width: auto; }
+  .fbx { max-width: 100%; }
 }
 
 /* ── Settings → Tutorial ───────────────────────────────────────────── */
@@ -14267,15 +14179,8 @@ a:hover { text-decoration: underline; }
   border-radius: 12px; box-shadow: var(--shadow-xl); padding: 12px;
 }
 
-/* The Board toolbar's project picker, where "+ New item" used to be. Its
-   corners are the app's own radius, not the pill the primary button wore —
-   a wide dropdown with a 999px radius reads as an oblong lozenge. */
-.bt-proj .btn { border-radius: var(--r-md); }
-.bt-proj .dropdown-menu { border-radius: var(--r-lg); }
-
-/* The same strip, on a hub that has nothing else to put in it. The picker is
-   the whole row, so the row is shallower than the Board's. */
-.bt-plain { padding-top: 10px; padding-bottom: 10px; }
+/* The tab row's menus take the app's own radius. */
+.chrome-tabtools .dropdown-menu { border-radius: var(--r-lg); }
 
 /* ── The project picker's own menu ──────────────────────────────────────
    Three fixes, all of them the same bug seen from different sides: the menu
@@ -14304,9 +14209,8 @@ a:hover { text-decoration: underline; }
 .proj-picker > .btn { max-width: min(320px, 60vw); }
 .proj-picker > .btn .proj-picker-name { flex: 1; text-align: left; }
 
-/* WBS: the status filter at the right-hand end of the card head, and a named
-   owner rather than a bare circle (T-0161). */
-.wbs-head-seg { margin-left: auto; }
+/* WBS: a named owner rather than a bare circle (T-0161). The card head's
+   status segments went when the tab row's Status menu arrived. */
 .wbs-owner {
   display: inline-flex; align-items: center; gap: 7px;
   flex: none; width: 132px; min-width: 0; justify-content: flex-end;

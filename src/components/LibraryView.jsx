@@ -19,7 +19,7 @@ import { buildStatusReport, statusReportFileBase } from '../services/statusRepor
 import { buildDigest } from '../services/askAiCore';
 import { buildActivityLogDocument } from '../services/activityExport';
 import { buildTaskListDocument } from '../services/taskExport';
-import { RENDERABLE_VIEWS } from '../services/views';
+import { RENDERABLE_VIEWS, isKnownView } from '../services/views';
 import { PageActions, PageSubtitle } from './PageHeader';
 import ExportButton from './ExportButton';
 import Icon from './Icon';
@@ -34,7 +34,13 @@ export default function LibraryView({ navigate }) {
   const { tasks, loading: tLoading } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { activities } = useAllActivities();
-  const { views, loading: vLoading } = useSavedViews();
+  // A saved view can outlive the page it points at — Table, Flow and Item
+  // were deleted in T-0152 and their saved views are still in Firestore.
+  // Opening one would land on Not Found, so it is not offered. (The chrome's
+  // Saved views menu did this filtering until it was removed; this page is
+  // where saved views are opened now.) The documents are left alone.
+  const { views: allViews, loading: vLoading } = useSavedViews();
+  const views = useMemo(() => allViews.filter((v) => isKnownView(v.view)), [allViews]);
   const { workspaces } = useWorkspaces();
   const activeWsId = useActiveWorkspaceId();
   const workspace = workspaces.find((w) => w.id === activeWsId);

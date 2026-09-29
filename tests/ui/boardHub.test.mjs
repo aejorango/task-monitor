@@ -173,13 +173,44 @@ test('the find box filters every tab, not the one that drew it', () => {
 
   const shell = read('src', 'components', 'AppShell.jsx');
   assert.match(shell, /<FindItem value=\{route\.q \|\| ''\}/);
-  assert.match(shell, /activeHub\?\.id === 'board'\n?\s*\? <FindItem/,
-    'the box belongs to the hub that can answer it');
+  const boardBranch = shell.slice(shell.indexOf("filters={activeHub?.id === 'board'"),
+    shell.indexOf('PICKER_HUBS.has(activeHub?.id) ?'));
+  assert.match(boardBranch, /<FindItem/, 'the box belongs to the hub that can answer it');
+  assert.ok(!shell.slice(shell.indexOf('PICKER_HUBS.has(activeHub?.id) ?')).includes('<FindItem'),
+    'and to no other hub');
 
   Object.values(BOARD_PAGES).forEach((file) => {
     assert.match(read('src', 'components', file), /q: route\.q/,
       `${file} draws the find box but ignores what is typed into it`);
   });
+});
+
+test('the Status menu narrows every Board tab, not only the Kanban', () => {
+  // `?status=` used to be read by Board.jsx alone, so a hub-level Status menu
+  // would have filtered one tab of five. It goes through scopeTasks now.
+  Object.entries(BOARD_PAGES).forEach(([, file]) => {
+    const src = read('src', 'components', file);
+    assert.match(src, /status: route\.statusFilter/, `${file} ignores the Status menu`);
+    // …and it RE-filters when the menu changes. The Calendar, WBS, Gantt and
+    // Workload memoise their list; without the dependency the menu did nothing
+    // on those pages until something else happened to change.
+    if (/useMemo\([\s\S]*?scopeTasks\(/.test(src)) {
+      assert.match(src, /\[[^\]]*route\.statusFilter[^\]]*\]/,
+        `${file} filters by status but does not re-filter when it changes`);
+    }
+    // One status filter per page: the tab row's.
+    assert.ok(!/setStatusFilter|STATUS_FILTERS|cal-filter-btn/.test(src),
+      `${file} still draws a status filter of its own`);
+    // And Stuck means the same on every tab: a logged bottleneck counts.
+    assert.match(src, /blockedIds/, `${file} would call a blocked task "not stuck"`);
+  });
+});
+
+test('moving between Board tabs keeps the Status choice', () => {
+  const header = read('src', 'components', 'PageHeader.jsx');
+  const tabClick = header.slice(header.indexOf('className={`chrome-tab'), header.indexOf('{t.label}'));
+  assert.ok(!tabClick.includes('statusFilter: null'),
+    'a tab click cleared ?status=, so Done on the Kanban showed everything on the Gantt');
 });
 
 test('the find box does not write a history entry per keystroke', () => {
