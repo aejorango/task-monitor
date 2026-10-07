@@ -770,7 +770,46 @@ export default function TaskEditor({ task, projects, onClose }) {
     // Details
     return (
       <>
-        <div className="te-card" style={{ padding: '4px 18px' }}>
+        {/* First on the tab (on request): what this task waits on and what
+            waits on it decides whether the fields below matter yet. */}
+        <div className="te-card" style={{ padding: '15px 18px' }}>
+          <span className="te-lbl">Dependencies &amp; relations</span>
+          <div className="te-subs">
+            {dependsOnTasks.map((d) => (
+              <div key={d.id} className="te-item">
+                <span className="te-rel tone-red">Blocked by</span>
+                <span className="te-item-title">{d.title}</span>
+                <span className="te-state">{STATUS_TEXT[d.status] || d.status}</span>
+                <button type="button" className="te-iconbtn te-sub-btn" onClick={() => removeDep(d.id)} aria-label={`Remove dependency ${d.title}`}>✕</button>
+              </div>
+            ))}
+            {blocksTasks.map((b) => (
+              <div key={b.id} className="te-item">
+                <span className="te-rel tone-amber">Blocks</span>
+                <span className="te-item-title">{b.title}</span>
+                <span className="te-state">{STATUS_TEXT[b.status] || b.status}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <DepPicker candidates={dependsOnCandidates} onAdd={addDep} />
+          </div>
+          {blockedBy.length > 0 && (
+            <p className="te-bottleneck" style={{ marginTop: 10 }}>
+              <span aria-hidden="true">⚠</span>
+              <span>Blocked by {blockedBy.length} unfinished {blockedBy.length === 1 ? 'task' : 'tasks'}.</span>
+            </p>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <LinksEditor
+              links={links}
+              onChange={setLinks}
+              candidates={allTasks.filter((t) => t.id !== task.id)}
+            />
+          </div>
+        </div>
+
+        <div className="te-card" style={{ padding: '4px 18px', marginTop: 14 }}>
           <div className="te-row">
             <span className="te-lbl">Phase</span>
             <span className="te-row-val">
@@ -831,44 +870,6 @@ export default function TaskEditor({ task, projects, onClose }) {
               <input type="date" value={actualStart} onChange={(e) => setActualStart(e.target.value)} aria-label="Actual start" />
               <input type="date" value={actualEnd} onChange={(e) => setActualEnd(e.target.value)} aria-label="Actual end" />
             </span>
-          </div>
-        </div>
-
-
-        <div className="te-card" style={{ padding: '15px 18px', marginTop: 14 }}>
-          <span className="te-lbl">Dependencies &amp; relations</span>
-          <div className="te-subs">
-            {dependsOnTasks.map((d) => (
-              <div key={d.id} className="te-item">
-                <span className="te-rel tone-red">Blocked by</span>
-                <span className="te-item-title">{d.title}</span>
-                <span className="te-state">{STATUS_TEXT[d.status] || d.status}</span>
-                <button type="button" className="te-iconbtn te-sub-btn" onClick={() => removeDep(d.id)} aria-label={`Remove dependency ${d.title}`}>✕</button>
-              </div>
-            ))}
-            {blocksTasks.map((b) => (
-              <div key={b.id} className="te-item">
-                <span className="te-rel tone-amber">Blocks</span>
-                <span className="te-item-title">{b.title}</span>
-                <span className="te-state">{STATUS_TEXT[b.status] || b.status}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <DepPicker candidates={dependsOnCandidates} onAdd={addDep} />
-          </div>
-          {blockedBy.length > 0 && (
-            <p className="te-bottleneck" style={{ marginTop: 10 }}>
-              <span aria-hidden="true">⚠</span>
-              <span>Blocked by {blockedBy.length} unfinished {blockedBy.length === 1 ? 'task' : 'tasks'}.</span>
-            </p>
-          )}
-          <div style={{ marginTop: 12 }}>
-            <LinksEditor
-              links={links}
-              onChange={setLinks}
-              candidates={allTasks.filter((t) => t.id !== task.id)}
-            />
           </div>
         </div>
 
