@@ -32,6 +32,19 @@
         "--strictPort"
       ],
       "port": 5175
+    },
+    {
+      "name": "mobile-harness",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "dev/mobile.vite.config.js",
+        "--port",
+        "5176",
+        "--strictPort"
+      ],
+      "port": 5176
     }
   ]
 }

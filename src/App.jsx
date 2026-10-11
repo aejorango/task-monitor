@@ -12,6 +12,7 @@ import { useUserProfile } from './hooks/useUserProfile';
 import { useOverdueScan } from './hooks/useNotifications';
 import { useRecurrenceCatchUp } from './hooks/useRecurrenceCatchUp';
 import { useSettings } from './hooks/useSettings';
+import { useIsPhone } from './hooks/useIsPhone';
 import AppShell, { useRoute } from './components/AppShell';
 import { isKnownView, RENDERABLE_VIEWS } from './services/views';
 import NotFoundView from './components/NotFoundView';
@@ -21,6 +22,10 @@ import DueTaskAlertModal from './components/DueTaskAlertModal';
 import LandingView from './components/LandingView';
 import PendingApprovalView from './components/PendingApprovalView';
 import './App.css';
+
+// The phone app (≤720px): a different shape, not a narrower desktop — see
+// src/mobile/MobileApp.jsx. Lazy, so a desktop never downloads it.
+const MobileApp = lazy(() => import('./mobile/MobileApp'));
 
 const TableView         = lazy(() => import('./components/TableView'));
 const TrashView         = lazy(() => import('./components/TrashView'));
@@ -196,11 +201,22 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
     return () => timers.forEach(clearTimeout);
   }, [route.openTaskId]);
 
+  const isPhone = useIsPhone();
+
   return (
     <ToastProvider>
     <DialogProvider>
     {/* In-app due-task alert: one task at a time, on every view. */}
     <DueTaskAlertModal navigate={navigate} />
+    {/* A phone (≤720px) gets the phone app instead of the desktop shell —
+        same providers, same alert, same data; a different shape. */}
+    {isPhone ? (
+      <ErrorBoundary scope="view" viewName="Task Monitor" resetKey="mobile">
+        <Suspense fallback={<ViewSpinner />}>
+          <MobileApp userId={userId} profile={profile} route={route} />
+        </Suspense>
+      </ErrorBoundary>
+    ) : (
     <AppShell
       userId={userId}
       ready={ready}
@@ -263,6 +279,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
       </Suspense>
       </ErrorBoundary>
     </AppShell>
+    )}
     </DialogProvider>
     </ToastProvider>
   );

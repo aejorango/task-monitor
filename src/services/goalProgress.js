@@ -22,6 +22,19 @@ export function toneOf(pct) {
   return 'red';
 }
 
+/**
+ * One task's % complete, as the goals count it: done is 100, a checklist
+ * counts its ticks, a stated progress is taken at its word, Working is 50.
+ * Moved here from GoalsView so the mobile Goals screen cannot disagree.
+ */
+export function taskPct(t) {
+  if (t.status === 'done') return 100;
+  const subs = t.subtasks || [];
+  if (subs.length > 0) return Math.round((subs.filter((s) => s.done).length / subs.length) * 100);
+  if (typeof t.progress === 'number' && t.progress > 0) return Math.min(100, Math.round(t.progress));
+  return t.status === 'doing' ? 50 : 0;
+}
+
 /** A deliverable's linked projects, accepting the legacy single `projectId`. */
 export function deliverableProjectIds(d) {
   if (Array.isArray(d?.projectIds)) return d.projectIds.filter(Boolean);

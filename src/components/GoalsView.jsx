@@ -30,7 +30,7 @@ import { useDialog } from './Dialog';
 import { useModalDialog } from '../hooks/useModalDialog';
 import { PageActions, PageSubtitle } from './PageHeader';
 import Avatar from './Avatar';
-import { atRiskCount, goalProgress, deliverableProjectIds } from '../services/goalProgress';
+import { atRiskCount, goalProgress, deliverableProjectIds, taskPct } from '../services/goalProgress';
 
 const BANNER_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12'];
 const BG_COLORS = ['#1e2a52', '#0f3d3e', '#3b2a5a', '#5a2a3b', '#1f3a5f', '#2d2d44', '#14532d', '#7c2d12', '#0b1220', '#3f2d12', '#4a1d3d', '#1a3a34'];
@@ -48,13 +48,6 @@ const emptyGoal = () => ({
 
 // Per-task completion (mirrors the WBS): done → 100, else subtask ratio, else
 // manual progress, else a token 50% for "doing".
-function taskPct(t) {
-  if (t.status === 'done') return 100;
-  const subs = t.subtasks || [];
-  if (subs.length > 0) return Math.round((subs.filter((s) => s.done).length / subs.length) * 100);
-  if (typeof t.progress === 'number' && t.progress > 0) return Math.min(100, Math.round(t.progress));
-  return t.status === 'doing' ? 50 : 0;
-}
 
 export default function GoalsView() {
   const { goals, loading } = useGoals();

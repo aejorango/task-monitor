@@ -152,7 +152,10 @@ implementation and one URL per page, and a sub-tab can be linked, bookmarked and
 saved as a view. The mobile bottom bar is the same six hubs, derived from `HUBS`
 rather than listed again, and it lights the hub you are *in* (on Calendar, Board
 is lit). At ≤720px the rail becomes the off-canvas drawer, where the icons get
-their labels back.
+their labels back — **but no phone sees either any more**: at ≤720px `App.jsx`
+renders the phone app instead of `AppShell` (see "The phone app" below). The
+drawer and the bottom bar are still reachable on a narrow desktop window that
+crosses the breakpoint the other way, and are kept for that.
 
 **There is no top bar** (T-0146). Once its contents had moved there was
 nothing left in it, so the row went too: the app now starts at the breadcrumb
@@ -398,6 +401,66 @@ bridge, and paying for all six to open Preferences is how a settings page comes
 to spam a CLI. The "On this page" rail is gone; the tab strip is that list.
 `WorkspaceMembers` is exported so the Members page and the Workspaces modal
 render one implementation, not two.
+
+## The phone app (≤720px)
+
+`src/mobile/*` is "Mobile App v7.dc.html", built as **its own shell**, not the
+desktop one narrowed: the mockup is a different shape — five tabs (Home ·
+Tasks · **+** · Ask AI · More), screens pushed over them, a full-screen task,
+and bottom sheets on top. `App.jsx` forks on `useIsPhone()` (720px, the
+breakpoint the rail already broke at) **under** the one set of providers and
+the one `DueTaskAlertModal`, and the phone app is a lazy chunk a desktop never
+downloads. Nothing on it has its own data path: it writes through `addTask`,
+`setTaskStatus`, `addActivity`, `uploadFile`, `addTaskComment`, `updateMinute`,
+`updateWorkspaceMemberRole`, `notifyAssignment` — so a task changed on a phone
+is changed everywhere, notices and automations included.
+
+```
+mobile/MobileApp.jsx      ← the shell: tabs, push/task/sheet stack, toast,
+                             celebrate, every write and the bulk bar
+mobile/mobileUi.jsx       ← MobileCtx, the mockup's icon paths, Face, StatusPill
+mobile/MobileRows.jsx     ← a task as a row (lists) and as a railed card
+mobile/MobileHome.jsx · MobileTasks.jsx · MobileAskAi.jsx · MobileMore.jsx
+mobile/MobilePush.jsx     ← Minutes, Projects, one project, Alerts, Goals,
+                             Settings, How to use, Reports, and `embed`
+mobile/MobileTaskDetail.jsx ← the task: Log · Chat · Sub-items · Files · Links · AI
+mobile/MobileSheets.jsx   ← Status, Log time, Create, New task, pickers, Filter
+services/mobileModel.js   ← every rule the screens apply (pure, tested)
+hooks/useIsPhone.js       ← the fork
+```
+
+What it counts is shared with the desktop on purpose: Stuck is
+`displayStatus`, a project's RAG is `rateProjects`, a goal is `goalProgress`
+(and "How it's calculated" is worked back from it, so the rows add up to the
+goal), the task code is the editor's, and Ask AI is the desktop engine
+(`buildDigest` → `buildAnswer` → `narrate`). The CSS is one `.m-*` section at
+the foot of `App.css`, every number copied from the mockup's markup and style
+objects, every colour an `--m-*` token defined in all three theme blocks.
+
+Where the mockup and the app part company — every row an honesty one:
+
+| The mockup draws | The phone app does |
+| --- | --- |
+| Photos of people (`diana.png` …) | The person's own photo or their `Avatar` initial. A stranger's face on somebody's task is a lie about who owns it. Only the two scene images (`ai-robo.jpg`, `celebrate.jpg`) ship, in `public/mobile/`. |
+| "Daily digest" switch | **Dark mode**. There is no digest — no backend, no SMTP (Out of Scope) — and a switch that changes nothing is read as a promise. |
+| Stuck as a status you can set | Stuck is derived (a logged bottleneck, or open and late), so choosing it **opens Log time with "Blocked" chosen** — the act that makes a task stuck. Nothing writes `status: 'stuck'`. |
+| Four statuses | **Five**: In review is real here (T-0147). |
+| "3 min" per lesson | The **step count**; nothing times a tour. Done is the same per-device record the Tutorial page keeps. |
+| AI & DATA toggles, "Share usage data" | Rows that open the real Settings sections (`embed`) — knowledge base, AI access, webhooks, the data export. No toggle for a thing nobody collects. |
+| "+ Link projects" | Opens the real Goals page (`embed`); the deliverable editor is not rebuilt for a phone. |
+| "No projects linked — progress is 0%" | "nothing to measure yet" and a dash: an unwired goal is not a failed one (same rule as Dashboard → Goals). |
+| The Team view's 35h bars from estimates | The same, plus "**N not estimated**" on the row — unestimated work adds nothing and is counted, never assumed. |
+| Invite link copied | Invite **by email** (`inviteToWorkspaceByEmail`), editor role; claimed at next sign-in. Only an owner/admin sees + Invite or can change a role. |
+
+`embed` renders a desktop page inside a push screen behind its own
+`ErrorBoundary`, so a page that fails costs that screen, not the app.
+`tests/ui/mobileApp.test.mjs` guards the fork, the tokens in both dark blocks,
+that every `m-*` class the JSX writes has a rule, the stock-photo and digest
+rows above, and that writes go through `services/firebase.js`.
+`dev/mobile.html` renders the **real** `MobileApp` over an in-memory store:
+`dev/mobile.vite.config.js` swaps only the Firestore-touching modules
+(`firebase.js`, `aiProxyClient.js`, `useTasks`, `useWorkspace`, `useInbox`,
+`useAiStatus`) for generated stubs that answer from `dev/mobileStore.js`.
 
 ## Views
 
@@ -682,7 +745,7 @@ module-level helper cannot, so it returns a result and the component speaks.
 - **Soft delete** via `deleted: false` flag; **archive** via `archived: false`. Never hard-delete tasks because activities reference them.
 - **`userId` on every document** — keeps security rules trivial.
 - **Theme:** CSS variables in `:root` and `@media (prefers-color-scheme: dark)`. All tokens prefixed `--c-` (colors), `--s-` (spacing), `--r-` (radii). **The default is `'system'`** (T-0126) — it was `'light'` from before the System option existed, so a new user on a dark-mode Mac got a bright white app. No migration was written and none is wanted: a stored value always beats a default, so a device that chose Light keeps Light. **`color-scheme` is declared beside the tokens in all three states**, because native chrome — date pickers, number spinners, select popups, scrollbars — is painted by the browser and stays light without it, which is a white date picker inside a dark task editor.
-- **Mobile-responsive** — the icon rail becomes a drawer under 720px, with the six hubs repeated in the bottom bar.
+- **Mobile** — at ≤720px the app is the **phone app** (`src/mobile`), not the desktop shell squeezed; see "The phone app". A desktop page that the phone embeds (Settings, Goals) must still work at that width.
 
 ## File Layout
 
@@ -785,7 +848,9 @@ src/
 │   ├── accessControl.js      ← who has access, what it lets them do, last seen
 │   ├── uploadPaths.js        ← where a file is stored, and what a delete orphans
 │   └── firebase.js           ← init, CRUD, subscriptions, migration helper (dedup-cached)
-├── App.jsx                   ← root: routes view based on URL hash
+├── mobile/                   ← the phone app (≤720px); see "The phone app"
+├── App.jsx                   ← root: routes view based on URL hash; forks to
+│                                the phone app on useIsPhone()
 └── App.css                   ← single stylesheet, design tokens + components
 ```
 
@@ -796,7 +861,7 @@ src/
 3. **No hard deletes.** Set `deleted: true`.
 4. **Composite indexes.** Every filtered+ordered query needs one. They live in `firestore.indexes.json` (deploy with `npm run deploy:indexes`) — add the entry there, not just by clicking the link Firestore prints in the console, or the next environment breaks. **And then actually deploy it**: the file and the project drifted completely apart once (BUG-033) and five pages went blank. `npx firebase firestore:indexes --project task-monitor-cbaf2` prints what is really deployed.
 5. **Bound every query at the server.** `orderBy` + `limit` in the query, never `.sort().slice()` on the result: slicing after the download does not save a single read. Activity history pages with `loadMoreActivities(workspaceId, beforeDate)`; the live listener holds `ACTIVITY_PAGE_SIZE` entries.
-6. **Mobile-first.** Sidebar collapses under 720px; board collapses under 960px. Any new view must respect this.
+6. **Mobile-first.** At ≤720px a phone gets `src/mobile`, so a feature a phone user needs has to reach the phone app too — a desktop-only page is a page a phone cannot open. The board still collapses under 960px.
 7. **No build-time secrets** beyond `.env.example`. The config is checked before Firebase is imported: `main.jsx` calls `readFirebaseConfig(import.meta.env)` and renders `SetupRequiredView` when anything is missing, so `services/firebase.js` and `App.jsx` must stay dynamic imports there — `initializeApp()` runs at module scope.
 8. **No general backend.** Static frontend + Firestore, plus the single-purpose `functions/aiProxy` (see AI provider layer).
 9. **Theme tokens.** Use CSS variables (`var(--c-text)`) not hardcoded colors. Dark mode is automatic via `prefers-color-scheme`.
@@ -885,6 +950,11 @@ npm run dev          # local at http://localhost:5173/  (vite base is "/",
                      # (NEW_SAMPLES['how-to-use'], NEW_SAMPLES.tutorial)
                      # dev/knowledge.html — harness for Settings → Knowledge base +
                      # NotebookPicker against the live bridge (no sign-in needed)
+npx vite --config dev/mobile.vite.config.js --port 5176
+                     # dev/mobile.html — the REAL phone app over sample data,
+                     # every write applied in memory and logged. Its own server
+                     # because its Firestore stubs must not leak into the app
+                     # (launch.json: "mobile-harness"). View it at 375px.
 npm run build        # produces dist/
 npm run deploy       # builds + deploys dist/ to Firebase Hosting
 npm run deploy:rules # Firestore + Storage rules
