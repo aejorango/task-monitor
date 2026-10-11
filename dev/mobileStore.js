@@ -80,12 +80,13 @@ let state = {
     { id: 'c-2', taskId: 't-1', userId: ME, body: 'Thanks — I will park the collisions until then.', createdAt: secsAgo(40) },
   ],
   minutes: [
-    { id: 'm-1', title: 'SBLAF weekly', date: at(-1), location: 'Room 4', attendees: 'Ace Jorango, Mia Santos, Rafael Cruz',
+    { id: 'm-1', title: 'SBLAF weekly', projectId: 'p-sblaf', date: at(-1), location: 'Room 4', attendees: 'Ace Jorango, Mia Santos, Rafael Cruz',
       notes: 'Migration is two days behind on the borrower ID collisions; vendor answer due Thursday.',
       decisions: '• Freeze the schema until the ID map lands\n• Mia owns the vendor follow-up',
       bossName: 'Mia', bossMentions: [{ id: 'b1', text: 'Get the loan book across before launch' }], bossPushbacks: [{ id: 'b2', text: 'No new SSO providers this quarter' }],
-      actionItems: [{ id: 'x1', text: 'Chase the KYC vendor', done: true, owner: 'Mia Santos' }, { id: 'x2', text: 'Publish the collision list', done: false, owner: 'Ace Jorango' }] },
-    { id: 'm-2', title: 'Partner API sync', date: at(-6), attendees: 'Ace Jorango, Rafael Cruz', notes: 'Sandbox limits agreed.', decisions: '', actionItems: [{ id: 'x3', text: 'Rate-limit the sandbox', done: false, owner: 'Rafael Cruz' }] },
+      actionItems: [{ id: 'x1', text: 'Chase the KYC vendor', done: true, owner: 'Mia Santos' }, { id: 'x2', text: 'Publish the collision list', done: false, owner: 'Ace Jorango', due: at(-1) }] },
+    { id: 'm-2', title: 'Partner API sync', projectId: 'p-api', date: at(-6), attendees: 'Ace Jorango, Rafael Cruz', notes: 'Sandbox limits agreed.', decisions: '', actionItems: [{ id: 'x3', text: 'Rate-limit the sandbox', done: false, owner: 'Rafael Cruz' }] },
+    { id: 'm-3', title: 'Leadership huddle', date: at(-2), attendees: 'Ace Jorango, Mr. Reyes', notes: 'Hiring plan for Q4.', decisions: '', actionItems: [] },
   ],
   goals: [
     { id: 'g-1', title: 'Faster time-to-decision', kpi: '≤ 48h decisions', deliverables: [{ id: 'd1', title: 'Loan book live', projectIds: ['p-sblaf'] }, { id: 'd2', title: 'Partner intake', projectIds: ['p-api', 'p-sblaf'] }] },
@@ -138,7 +139,12 @@ const HOOKS = {
   }), loading: false }),
   useActivities: (taskId) => ({ activities: state.activities.filter((a) => a.taskId === taskId), loading: false }),
   useTaskComments: (_ws, taskId) => ({ comments: state.comments.filter((c) => c.taskId === taskId), loading: false }),
-  useMinutes: () => ({ minutes: state.workspaceId === 'ws-1' ? state.minutes : [], loading: false }),
+  useMinutes: () => ({
+    minutes: state.workspaceId === 'ws-1'
+      ? state.minutes.filter((x) => !x.deleted).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      : [],
+    loading: false,
+  }),
   useGoals: () => ({ goals: state.workspaceId === 'ws-1' ? state.goals : [], loading: false }),
   useAllWorkspaceProjects: () => ({ projects: state.projects, loading: false }),
   useAllWorkspaceTasks: () => ({ tasks: state.tasks.filter(live), loading: false }),
@@ -190,6 +196,16 @@ const CALLS = {
   },
   async uploadFile({ file }) { return { name: file.name, url: URL.createObjectURL(file), type: file.type, size: file.size }; },
   async addTaskComment(userId, t, body) { set((s) => ({ ...s, comments: [...s.comments, { id: nid('c'), taskId: t.id, userId, body, createdAt: secsAgo(0) }] })); },
+  async addMinute(userId, minute) {
+    const id = nid('m');
+    set((s) => ({ ...s, minutes: [{ ...minute, id, userId, deleted: false }, ...s.minutes] }));
+    return { id };
+  },
+  async softDeleteMinute(id) { set((s) => ({ ...s, minutes: s.minutes.map((x) => (x.id === id ? { ...x, deleted: true } : x)) })); },
+  async restoreDeleted(kind, id) {
+    const key = { minute: 'minutes', task: 'tasks', project: 'projects', goal: 'goals' }[kind];
+    set((s) => ({ ...s, [key]: s[key].map((x) => (x.id === id ? { ...x, deleted: false } : x)) }));
+  },
   async updateMinute(id, updates) { set((s) => ({ ...s, minutes: s.minutes.map((m) => (m.id === id ? { ...m, ...updates } : m)) })); },
   async addWorkspace(userId, { name }) {
     const w = { id: nid('ws'), name, color: '#e2892e', members: [userId], memberProfiles: { [userId]: PROFILES[userId] }, acl: { [userId]: 'owner' } };

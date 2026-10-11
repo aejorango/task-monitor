@@ -107,6 +107,12 @@ test('the phone writes through the same functions the desktop does', () => {
   }
   assert.match(sources['MobileTaskDetail.jsx'], /addTaskComment\(/);
   assert.match(sources['MobilePush.jsx'], /updateMinute\(/);
+  // Minutes are written, edited and deleted through the desktop's own calls,
+  // and a delete can be undone.
+  for (const fn of ['addMinute', 'updateMinute', 'softDeleteMinute', 'restoreDeleted']) {
+    assert.match(sources['MobileMinuteEditor.jsx'], new RegExp(`\\b${fn}\\(`), `${fn} in the minutes editor`);
+  }
+  assert.match(sources['MobileMinuteEditor.jsx'], /minutePayload\(form\)/, 'the save rules are the shared ones');
   assert.match(sources['MobilePush.jsx'], /updateWorkspaceMemberRole\(/);
   // Bulk edits keep the deleted bulk bar's rules: in series, each with an inverse.
   assert.match(sources['MobileApp.jsx'], /for \(const t of chosen\)/);
@@ -134,4 +140,15 @@ test('the harness twin renders the real shell, not a copy of it', () => {
   }
   // The stubs belong to the harness config only.
   assert.doesNotMatch(read('vite.config.js'), /mobile-harness-stubs/);
+});
+
+test('Minutes has its filter, its + New and its editor, and asks before discarding', () => {
+  const push = sources['MobilePush.jsx'];
+  assert.match(push, /className="m-push-add" aria-label="New minutes"/);
+  assert.match(push, /role="menuitemradio"[\s\S]*?setFilter\(o\.id\)/, 'the project dropdown');
+  assert.match(push, /if \(p\.kind === 'minute'\) return <MobileMinuteEditor \/>/);
+  // An action item can become a task, assigned to the member it names.
+  assert.match(push, /const makeTask = async/);
+  assert.match(push, /assignedTo: owner \? \[owner\] : \[\]/);
+  assert.match(sources['MobileMinuteEditor.jsx'], /minuteChanged\(form, initial\)[\s\S]*?ask\.confirm/);
 });

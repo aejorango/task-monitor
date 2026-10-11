@@ -15,7 +15,7 @@ import { useInbox } from '../hooks/useInbox';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { useDialog } from '../components/Dialog';
 import {
-  updateMinute, addWorkspace, inviteToWorkspaceByEmail, updateWorkspaceMemberRole,
+  updateMinute, addWorkspace, inviteToWorkspaceByEmail, updateWorkspaceMemberRole, addTask, notifyAssignment,
 } from '../services/firebase';
 import { setActiveWorkspaceId } from '../hooks/useWorkspace';
 import { rateProjects } from '../services/portfolio';
@@ -31,6 +31,7 @@ import {
 import ErrorBoundary from '../components/ErrorBoundary';
 import { useMobile, Ico, ICON, Face } from './mobileUi';
 import { TaskCard } from './MobileRows';
+import MobileMinuteEditor from './MobileMinuteEditor';
 
 const SettingsView = lazy(() => import('../components/SettingsView'));
 const GoalsView = lazy(() => import('../components/GoalsView'));
@@ -43,6 +44,9 @@ const TITLE = {
 export default function MobilePush() {
   const m = useMobile();
   const p = m.push;
+  // The minutes editor is a full screen of its own, with its own Back: it
+  // has to ask before throwing away a half-written meeting.
+  if (p.kind === 'minute') return <MobileMinuteEditor />;
   const project = p.kind === 'project' ? m.projectById[p.projectId] : null;
   const title = p.kind === 'project' ? (project?.name || 'Project') : p.kind === 'embed' ? p.title : TITLE[p.kind];
   const back = () => m.setPush(p.from || null);
@@ -51,6 +55,16 @@ export default function MobilePush() {
       <div className="m-push-top">
         <button type="button" className="m-back" onClick={back} aria-label="Back"><Ico d={ICON.back} stroke={2.6} /></button>
         <span className="m-push-title">{title}</span>
+        {p.kind === 'minutes' && (
+          <button type="button" className="m-push-add" aria-label="New minutes"
+            onClick={() => m.setPush({
+              kind: 'minute', minuteId: null, minute: null,
+              projectId: p.projectId && !p.projectId.startsWith('__') ? p.projectId : '',
+              from: { kind: 'minutes', projectId: p.projectId },
+            })}>
+            <Ico d={ICON.plus} size={18} stroke={2.6} /><span>New</span>
+          </button>
+        )}
       </div>
       <div className="m-push-body">
         {p.kind === 'minutes' && <MinutesScreen />}
@@ -81,6 +95,14 @@ export default function MobilePush() {
 function MinutesScreen() {
   const m = useMobile();
   const { minutes, loading } = useMinutes();
+  const [open, setOpen] = useState(0);
+  const [menu, setMenu] = useState(false);
+  const [busy, setBusy] = useState(null);
+  // The filter rides on the push itself, so it survives a trip into the
+  // editor and back. '__all__' | '__none__' | <projectId>, as on the desktop.
+  const filter = m.push.projectId || '__all__';
+  const setFilter = (id) => { m.setPush({ ...m.push, projectId: id }); setMenu(false); setOpen(0); };
+
   // Minutes store people as typed names. A name that is a member's is drawn
   // as that member, so a person is the same circle here as on their tasks.
   const uidFor = (name) => {
@@ -91,29 +113,107 @@ function MinutesScreen() {
       return full === n || full.split(/\s+/)[0] === n;
     }) || null;
   };
-  const [open, setOpen] = useState(0);
+
+  const counts = useMemo(() => {
+    const c = {};
+    minutes.forEach((x) => { const k = x.projectId || '__none__'; c[k] = (c[k] || 0) + 1; });
+    return c;
+  }, [minutes]);
+  // Only projects that have minutes: a filter that can only ever show nothing is noise.
+  const options = [
+    { id: '__all__', name: 'All', color: 'var(--m-ink)', n: minutes.length },
+    ...m.projects.filter((pr) => counts[pr.id]).map((pr) => ({ id: pr.id, name: pr.name, color: pr.color, n: counts[pr.id] })),
+    ...(counts.__none__ ? [{ id: '__none__', name: 'No project', color: 'var(--m-faint)', n: counts.__none__ }] : []),
+  ];
+  const sel = options.find((o) => o.id === filter) || { id: filter, name: m.projectById[filter]?.name || 'Project', color: m.projectById[filter]?.color, n: 0 };
+  const visible = filter === '__all__' ? minutes
+    : filter === '__none__' ? minutes.filter((x) => !x.projectId)
+    : minutes.filter((x) => x.projectId === filter);
+
+  const edit = (min) => m.setPush({
+    kind: 'minute', minuteId: min?.id || null, minute: min || null,
+    projectId: filter.startsWith('__') ? '' : filter,
+    from: { kind: 'minutes', projectId: filter },
+  });
+
   const toggleAction = async (min, idx) => {
     const next = (min.actionItems || []).map((a, i) => (i === idx ? { ...a, done: !a.done } : a));
     try { await updateMinute(min.id, { actionItems: next }); } catch (err) { m.fail(err, 'Could not tick that off.'); }
   };
+  // "Make it a task", as the desktop card's + square does — and when the owner
+  // is a member, the task is ASSIGNED to them (and they are told), not left
+  // as a typed name.
+  const makeTask = async (min, it) => {
+    if (!it.text?.trim() || busy) return;
+    setBusy(it.id);
+    try {
+      const owner = uidFor(it.owner);
+      const ref = await addTask(m.userId, {
+        workspaceId: m.workspaceId,
+        title: it.text.trim(),
+        projectId: min.projectId || null,
+        description: `From minutes: ${min.title || 'Untitled meeting'}`,
+        plan: { endDate: it.due || null },
+        assignedTo: owner ? [owner] : [],
+        assignedToExternal: !owner && it.owner?.trim() ? [it.owner.trim()] : [],
+      });
+      await updateMinute(min.id, { actionItems: (min.actionItems || []).map((x) => (x.id === it.id ? { ...x, taskId: ref.id } : x)) });
+      if (owner && owner !== m.userId) {
+        await notifyAssignment({
+          task: { id: ref.id, workspaceId: m.workspaceId, projectId: min.projectId || null, title: it.text.trim() },
+          before: [], after: [owner], byUserId: m.userId, byName: m.nameOf(m.userId),
+        });
+      }
+      m.flash('Task created');
+    } catch (err) { m.fail(err, 'Could not make that a task.'); }
+    setBusy(null);
+  };
+
   if (loading) return <div className="m-quiet">Loading minutes…</div>;
-  if (!minutes.length) return <div className="m-quiet">No meeting minutes yet.</div>;
   return (
     <div className="m-stack is-12">
-      {minutes.map((min, i) => {
+      {minutes.length > 0 && (
+        <div className="m-proj-menu">
+          <button type="button" className="m-proj-btn" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+            <span className="m-proj-k">PROJECT</span>
+            <span className="m-dot is-10" style={{ background: sel.color || 'var(--m-faint)' }} />
+            <span className="m-proj-name">{sel.name}</span>
+            <span className="m-proj-count">{visible.length} meeting{visible.length === 1 ? '' : 's'}</span>
+            <span className={`m-chev${menu ? ' is-up' : ''}`}>⌄</span>
+          </button>
+          {menu && (
+            <div className="m-proj-pop" role="menu">
+              {options.map((o) => (
+                <button key={o.id} type="button" role="menuitemradio" aria-checked={o.id === filter}
+                  className={`m-proj-opt${o.id === filter ? ' is-on' : ''}`} onClick={() => setFilter(o.id)}>
+                  <span className="m-dot is-10" style={{ background: o.color || 'var(--m-faint)' }} />
+                  <span className="m-proj-opt-name">{o.name}</span>
+                  <span className="m-proj-opt-n">{o.n}</span>
+                  <span className={`m-proj-check${o.id === filter ? ' is-on' : ''}`}>✓</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {visible.map((min, i) => {
         const items = min.actionItems || [];
         const done = items.filter((a) => a.done).length;
         const isOpen = open === i;
-        const people = String(min.attendees || '').split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+        const people = String(min.attendees || '').split(/[,;]/).map((x) => x.trim()).filter(Boolean);
         const keeps = (min.bossMentions || []).filter((x) => x.text?.trim());
         const pushed = (min.bossPushbacks || []).filter((x) => x.text?.trim());
-        const decisions = String(min.decisions || '').split('\n').map((s) => s.replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
+        const decisions = String(min.decisions || '').split('\n').map((x) => x.replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
+        const project = m.projectById[min.projectId];
         return (
           <div key={min.id} className="m-box">
             <button type="button" className="m-box-head" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? -1 : i)}>
               <span className="m-box-main">
                 <span className="m-box-title">{min.title || 'Untitled meeting'}</span>
-                <span className="m-box-meta">{[shortDate(min.date, m.today), min.location].filter(Boolean).join(' · ')}</span>
+                <span className="m-box-meta">
+                  {[shortDate(min.date, m.today), min.location, filter === '__all__' ? project?.name : null].filter(Boolean).join(' · ')}
+                </span>
               </span>
               {items.length > 0 && <span className={`m-min-count${done === items.length ? ' is-all' : ''}`}>{done}/{items.length}</span>}
             </button>
@@ -133,19 +233,39 @@ function MinutesScreen() {
                   </div>
                 )}
                 {decisions.map((d) => <div key={d} className="m-decision">{d}</div>)}
-                {items.map((a, idx) => (
-                  <button key={a.id || idx} type="button" className="m-action" role="checkbox" aria-checked={!!a.done}
-                    onClick={() => toggleAction(min, idx)}>
-                    <span className={`m-action-box${a.done ? ' is-on' : ''}`}>{a.done ? '✓' : ''}</span>
-                    <span className={`m-action-text${a.done ? ' is-done' : ''}`}>{a.text || '—'}</span>
-                    {a.owner && <Face uid={uidFor(a.owner)} name={a.owner} size={26} />}
-                  </button>
-                ))}
+                {items.map((a, idx) => {
+                  const linked = a.taskId ? m.tasks.find((t) => t.id === a.taskId) : null;
+                  return (
+                    <div key={a.id || idx} className="m-action">
+                      <button type="button" className={`m-action-box${a.done ? ' is-on' : ''}`} role="checkbox" aria-checked={!!a.done}
+                        aria-label={a.done ? 'Mark not done' : 'Mark done'} onClick={() => toggleAction(min, idx)}>{a.done ? '✓' : ''}</button>
+                      <span className={`m-action-text${a.done ? ' is-done' : ''}`}>
+                        {a.text || '—'}
+                        {a.due && <span className={`m-action-due${!a.done && a.due < m.today ? ' is-late' : ''}`}>{shortDate(a.due, m.today)}</span>}
+                      </span>
+                      {a.owner && <Face uid={uidFor(a.owner)} name={a.owner} size={26} />}
+                      {linked ? (
+                        <button type="button" className="m-action-task is-linked" onClick={() => m.openTask(linked.id)} aria-label={`Open task ${linked.title}`}>Task ›</button>
+                      ) : a.text?.trim() && !a.taskId && !a.done ? (
+                        <button type="button" className="m-action-task" disabled={busy === a.id} onClick={() => makeTask(min, a)}
+                          aria-label={`Make "${a.text}" a task`}>{busy === a.id ? '…' : '+ Task'}</button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                <button type="button" className="m-ghost-pill is-edit" onClick={() => edit(min)}>Edit minutes</button>
               </div>
             )}
           </div>
         );
       })}
+
+      {visible.length === 0 && (
+        <div className="m-nothing">
+          <div className="m-nothing-title">{minutes.length ? 'No minutes for this project' : 'No meeting minutes yet'}</div>
+          <button type="button" className="m-pill-btn" onClick={() => edit(null)}>Write the first one</button>
+        </div>
+      )}
     </div>
   );
 }

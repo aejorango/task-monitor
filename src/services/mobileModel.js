@@ -434,3 +434,82 @@ export function shiftPlan(task, days) {
     ...(start ? { 'plan.startDate': addDays(start, days) } : {}),
   };
 }
+
+// ── Minutes ─────────────────────────────────────────────────────────────────
+
+/** "Ace Jorango, Mia" → ['Ace Jorango', 'Mia']. Minutes keep people as typed names. */
+export function splitNames(text) {
+  return String(text || '').split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+}
+
+/** The inverse, de-duplicated without regard to case. */
+export function joinNames(names = []) {
+  const seen = new Set();
+  return names.map((n) => String(n || '').trim()).filter((n) => {
+    const k = n.toLowerCase();
+    if (!n || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).join(', ');
+}
+
+/** A meeting date: today and the six days before it — minutes are written after. */
+export function pastChoices(today) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const ymd = addDays(today, -i);
+    return { ymd, label: i === 0 ? 'Today' : i === 1 ? 'Yesterday' : dateOf(ymd).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }) };
+  });
+}
+
+/**
+ * The editor's working copy of a minute — the same shape the desktop
+ * MinuteEditor holds, so either can save what the other opened. A new one
+ * starts with one empty action item, as the desktop's does.
+ */
+export function minuteDraft(minute, { today, projectId = '', newId }) {
+  const item = (it = {}) => ({ id: it.id || newId(), text: it.text || '', owner: it.owner || '', due: it.due || '', done: !!it.done, taskId: it.taskId || null });
+  const line = (x = {}) => ({ id: x.id || newId(), text: x.text || '' });
+  if (!minute) {
+    return {
+      title: '', date: today, attendees: '', location: '', projectId: projectId || '', notes: '', decisions: '',
+      actionItems: [item()], bossName: '', bossMentions: [], bossPushbacks: [],
+    };
+  }
+  return {
+    title: minute.title || '',
+    date: minute.date || today,
+    attendees: minute.attendees || '',
+    location: minute.location || '',
+    projectId: minute.projectId || '',
+    notes: minute.notes || '',
+    decisions: minute.decisions || '',
+    actionItems: (minute.actionItems || []).map(item),
+    bossName: minute.bossName || '',
+    bossMentions: (minute.bossMentions || []).map(line),
+    bossPushbacks: (minute.bossPushbacks || []).map(line),
+  };
+}
+
+/**
+ * What is written. The desktop's rules exactly: a blank action item is
+ * dropped unless it is linked to a task (dropping that would orphan the
+ * task's link), blank priority lines are dropped, no project is null.
+ */
+export function minutePayload(form) {
+  return {
+    ...form,
+    title: String(form.title || '').trim(),
+    location: String(form.location || '').trim(),
+    projectId: form.projectId || null,
+    actionItems: (form.actionItems || []).filter((it) => it.text.trim() || it.owner.trim() || it.due || it.taskId)
+      .map((it) => ({ ...it, text: it.text.trim(), owner: it.owner.trim() })),
+    bossName: String(form.bossName || '').trim(),
+    bossMentions: (form.bossMentions || []).filter((x) => x.text.trim()),
+    bossPushbacks: (form.bossPushbacks || []).filter((x) => x.text.trim()),
+  };
+}
+
+/** Has the form moved from where it started? Decides whether Back asks first. */
+export function minuteChanged(a, b) {
+  return JSON.stringify(minutePayload(a)) !== JSON.stringify(minutePayload(b));
+}

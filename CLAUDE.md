@@ -424,6 +424,7 @@ mobile/MobileHome.jsx · MobileTasks.jsx · MobileAskAi.jsx · MobileMore.jsx
 mobile/MobilePush.jsx     ← Minutes, Projects, one project, Alerts, Goals,
                              Settings, How to use, Reports, and `embed`
 mobile/MobileTaskDetail.jsx ← the task: Log · Chat · Sub-items · Files · Links · AI
+mobile/MobileMinuteEditor.jsx ← new / edit minutes, for a thumb (see below)
 mobile/MobileSheets.jsx   ← Status, Log time, Create, New task, pickers, Filter
 services/mobileModel.js   ← every rule the screens apply (pure, tested)
 hooks/useIsPhone.js       ← the fork
@@ -450,6 +451,7 @@ Where the mockup and the app part company — every row an honesty one:
 | "+ Link projects" | Opens the real Goals page (`embed`); the deliverable editor is not rebuilt for a phone. |
 | "No projects linked — progress is 0%" | "nothing to measure yet" and a dash: an unwired goal is not a failed one (same rule as Dashboard → Goals). |
 | The Team view's 35h bars from estimates | The same, plus "**N not estimated**" on the row — unestimated work adds nothing and is counted, never assumed. |
+| Minutes, read-only | A **project dropdown** (only projects that have minutes, plus All and No project; it rides on the push so it survives the editor), **+ New** in the header, **Edit minutes** on an open card, and **+ Task** on an action item — the desktop card's "make it a task", except a member's name becomes a real assignment (and a notice), not a typed name. The editor is its own screen: title as the heading, tiles for date · project · where · boss, attendees as member faces plus typed guests, The Priority as add-a-line rows, action items with owner and due chips, Back asks before discarding. Same fields and save rules as the desktop's (`minuteDraft` / `minutePayload`), so either editor opens what the other wrote. |
 | Invite link copied | Invite **by email** (`inviteToWorkspaceByEmail`), editor role; claimed at next sign-in. Only an owner/admin sees + Invite or can change a role. |
 
 `embed` renders a desktop page inside a push screen behind its own

@@ -6,6 +6,7 @@ import {
   addDays, shortDate, bucketOf, triageCounts, priorityTask, needsYou, lateLabel, mobileStatus,
   hoursLeft, hoursLabel, filterTasks, groupTasks, weekStrip, workloadRows, reportFor,
   workLogDays, attachmentsOf, goalBreakdown, weightLabel, shiftPlan, taskCode, fileType,
+  splitNames, joinNames, pastChoices, minuteDraft, minutePayload, minuteChanged,
 } from './mobileModel.js';
 import { goalProgress } from './goalProgress.js';
 
@@ -152,4 +153,50 @@ test('+1 day moves the whole plan and leaves an undated task alone', () => {
 
 test('the task code is the one the desktop editor prints', () => {
   assert.equal(taskCode({ id: 'abc123xyz' }), 'TASK ABC123');
+});
+
+test('attendees are names: split forgivingly, joined without duplicates', () => {
+  assert.deepEqual(splitNames('Ace Jorango, Mia;  Raf\n'), ['Ace Jorango', 'Mia', 'Raf']);
+  assert.equal(joinNames(['Mia', 'mia', ' Ace ', '']), 'Mia, Ace');
+});
+
+test('a meeting date is today or the week before it, never the future', () => {
+  const c = pastChoices(TODAY);
+  assert.equal(c.length, 7);
+  assert.deepEqual([c[0].label, c[1].label], ['Today', 'Yesterday']);
+  assert.ok(c.every((x) => x.ymd <= TODAY));
+});
+
+test('the phone editor keeps the desktop shape, both ways', () => {
+  let n = 0;
+  const newId = () => `n${(n += 1)}`;
+  const fresh = minuteDraft(null, { today: TODAY, projectId: 'p1', newId });
+  assert.equal(fresh.date, TODAY);
+  assert.equal(fresh.projectId, 'p1', 'a new minute starts in the filtered project');
+  assert.equal(fresh.actionItems.length, 1);
+
+  const saved = minuteDraft({
+    title: 'Sync', actionItems: [{ id: 'a', text: 'Do it', owner: 'Mia', taskId: 't9' }], bossMentions: [{ text: 'Ship' }],
+  }, { today: TODAY, newId });
+  assert.equal(saved.actionItems[0].taskId, 't9', 'a link to a task survives the round trip');
+  assert.ok(saved.bossMentions[0].id, 'every line gets an id');
+
+  const out = minutePayload({
+    ...fresh, title: '  Retro ', projectId: '',
+    actionItems: [
+      { id: 'x', text: '', owner: '', due: '', done: false, taskId: null },
+      { id: 'y', text: '', owner: '', due: '', done: false, taskId: 't1' },
+      { id: 'z', text: ' Ship ', owner: ' Raf ', due: '', done: false, taskId: null },
+    ],
+    bossMentions: [{ id: 'm', text: ' ' }], bossPushbacks: [{ id: 'k', text: 'No SSO' }],
+  });
+  assert.equal(out.title, 'Retro');
+  assert.equal(out.projectId, null);
+  assert.deepEqual(out.actionItems.map((x) => x.id), ['y', 'z'], 'blank items go; a linked one stays');
+  assert.equal(out.actionItems[1].owner, 'Raf');
+  assert.deepEqual(out.bossMentions, []);
+  assert.equal(out.bossPushbacks.length, 1);
+
+  assert.equal(minuteChanged(fresh, { ...fresh }), false);
+  assert.equal(minuteChanged(fresh, { ...fresh, title: 'x' }), true);
 });
