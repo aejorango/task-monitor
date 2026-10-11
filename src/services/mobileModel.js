@@ -365,12 +365,41 @@ export function attachmentsOf(activities = []) {
   })));
 }
 
+// Extensions worth printing as a file's type. Anything else a link ends in
+// ("…/docs.google.com", "…/v2") is a LINK, not a "COM" or a "V2".
+const FILE_EXTS = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'md', 'rtf',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic', 'zip', 'mp4', 'mov', 'mp3', 'json', 'html']);
+
 export function fileType(f) {
+  if (f?.type === 'drive') return 'DRIVE';
   const name = String(f?.name || f?.url || '');
-  const ext = name.includes('.') ? name.split('.').pop().split('?')[0] : '';
-  if (ext && ext.length <= 4) return ext.toUpperCase();
-  if (/^https?:/i.test(name)) return 'LINK';
-  return 'FILE';
+  const ext = name.includes('.') ? name.split('.').pop().split('?')[0].toLowerCase() : '';
+  if (FILE_EXTS.has(ext)) return ext.toUpperCase();
+  if (f?.type === 'external' || /^https?:/i.test(f?.url || name)) return 'LINK';
+  return ext && ext.length <= 4 ? ext.toUpperCase() : 'FILE';
+}
+
+/**
+ * A pasted link as an activity attachment — the desktop ActivityLogger's
+ * shape exactly: { name, url, type: 'drive' | 'external' }. A missing scheme
+ * gets https://; anything that is not a web address is refused (null), so a
+ * typo never becomes a link nobody can open. With no name, the file name in
+ * the path is used when there is one ("retry-policy.pdf"), else the site —
+ * never a path word like "edit".
+ */
+export function linkAttachment(rawUrl, rawName = '') {
+  let url = String(rawUrl || '').trim();
+  if (!url) return null;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+  let u;
+  try { u = new URL(url); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.')) return null;
+  const seg = u.pathname.split('/').filter(Boolean).pop();
+  const decode = (x) => { try { return decodeURIComponent(x); } catch { return x; } };
+  const fromPath = seg ? decode(seg) : '';
+  const looksLikeFile = FILE_EXTS.has(fromPath.split('.').pop().toLowerCase()) && fromPath.includes('.');
+  const name = String(rawName || '').trim() || (looksLikeFile ? fromPath : u.hostname.replace(/^www\./, ''));
+  return { name, url: u.href, type: u.href.includes('drive.google') ? 'drive' : 'external' };
 }
 
 export function fileSize(bytes) {

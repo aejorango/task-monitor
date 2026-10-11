@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
 import {
-  addTask, updateTask, setTaskStatus, addActivity, uploadFile, notifyAssignment, todayLocal,
+  addTask, updateTask, setTaskStatus, addActivity, notifyAssignment, todayLocal,
 } from '../services/firebase';
 import { blockedTaskIds } from '../services/boardScope';
 import { memberLabel } from '../services/invites';
@@ -35,7 +35,8 @@ const TABS = [
   ['home', 'Home'], ['board', 'Tasks'], ['plus', 'New'], ['ai', 'Ask AI'], ['more', 'More'],
 ];
 
-const EMPTY_LOG = { taskId: null, hours: 1, details: '', bott: 'None', day: 0, attachments: [], uploading: false };
+// `attachments` are LINKS ({ name, url, type }), as the desktop logger takes them.
+const EMPTY_LOG = { taskId: null, hours: 1, details: '', bott: 'None', day: 0, attachments: [] };
 
 export default function MobileApp({ userId, profile, route }) {
   const { tasks: allTasks } = useTasks();
@@ -152,28 +153,11 @@ export default function MobileApp({ userId, profile, route }) {
     setSheet('log');
   }, [tasks]);
 
-  const attachFiles = useCallback(async (files) => {
-    const t = tasks.find((x) => x.id === log.taskId);
-    if (!t || !files?.length) return;
-    setLog((l) => ({ ...l, uploading: true }));
-    try {
-      const done = [];
-      for (const file of files) {
-        // uploadFile hands back the attachment exactly as an activity stores it.
-        done.push(await uploadFile({ workspaceId: t.workspaceId, taskId: t.id, file }));
-      }
-      setLog((l) => ({ ...l, uploading: false, attachments: [...l.attachments, ...done] }));
-    } catch (err) {
-      setLog((l) => ({ ...l, uploading: false }));
-      fail(err, 'Could not attach that file.');
-    }
-  }, [tasks, log.taskId, fail]);
-
   const saveLog = useCallback(async () => {
     const t = tasks.find((x) => x.id === log.taskId);
     if (!t) { flash('Pick a task first', { tone: 'err' }); return; }
     const blocker = log.bott === 'None' ? '' : log.bott;
-    if (!log.hours && !blocker && !log.details.trim()) return;
+    if (!log.hours && !blocker && !log.details.trim() && !log.attachments.length) return;
     try {
       await addActivity(userId, t, {
         date: addDays(today, -log.day),
@@ -185,7 +169,7 @@ export default function MobileApp({ userId, profile, route }) {
       });
       setSheet(null);
       setLog(EMPTY_LOG);
-      flash(log.hours ? `Logged ${log.hours}h` : 'Logged');
+      flash(log.hours ? `Logged ${log.hours}h` : log.attachments.length ? 'Link added' : 'Logged');
     } catch (err) { fail(err, 'Could not log that time.'); }
   }, [tasks, log, userId, today, flash, fail]);
 
@@ -275,7 +259,7 @@ export default function MobileApp({ userId, profile, route }) {
     tab, setTab, push, setPush, task, openTask, closeTask: () => setTaskId(null), dtab, setDtab,
     sheet, setSheet, picker, setPicker, flash, fail,
     tv, patchTv, log, setLog, nt, setNt, chat, setChat,
-    setStatus, quickDone, openLogFor, saveLog, attachFiles, setTaskField, createTask, bulk,
+    setStatus, quickDone, openLogFor, saveLog, setTaskField, createTask, bulk,
     setCelebrate,
   };
 

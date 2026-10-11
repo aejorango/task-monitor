@@ -7,7 +7,7 @@ import {
   hoursLeft, hoursLabel, filterTasks, groupTasks, weekStrip, workloadRows, reportFor,
   workLogDays, attachmentsOf, goalBreakdown, weightLabel, shiftPlan, taskCode, fileType,
   splitNames, joinNames, pastChoices, minuteDraft, minutePayload, minuteChanged,
-  segmentNames, sortProjects, searchProjects, bySegment, NO_SEGMENT,
+  segmentNames, sortProjects, searchProjects, bySegment, NO_SEGMENT, linkAttachment,
 } from './mobileModel.js';
 import { goalProgress } from './goalProgress.js';
 
@@ -141,6 +141,8 @@ test('artifacts are the files on activities, typed by extension', () => {
   const files = attachmentsOf([{ id: 'a', attachments: [{ name: 'deck.pdf', url: 'u', size: 10 }, { url: 'https://x.test/doc' }] }]);
   assert.deepEqual(files.map((f) => f.type), ['PDF', 'LINK']);
   assert.equal(fileType({ name: 'notes' }), 'FILE');
+  assert.equal(fileType({ name: 'docs.google.com', url: 'https://docs.google.com/x', type: 'external' }), 'LINK', 'not "COM"');
+  assert.equal(fileType({ name: 'x', url: 'https://drive.google.com/x', type: 'drive' }), 'DRIVE');
 });
 
 test("a goal's rows add up to the goal's own percentage", () => {
@@ -234,4 +236,15 @@ test('the Projects sort and search', () => {
   assert.deepEqual(names(sortProjects(rows, 'due')), ['Gamma', 'Beta', 'alpha'], 'no finish date goes last');
   assert.deepEqual(names(searchProjects(rows, 'PAY')), ['Beta'], 'search reads the description too');
   assert.equal(searchProjects(rows, '  ').length, 3);
+});
+
+test('a pasted link becomes the desktop logger\'s attachment, or nothing', () => {
+  assert.deepEqual(linkAttachment('example.com/specs/retry-policy.pdf'),
+    { name: 'retry-policy.pdf', url: 'https://example.com/specs/retry-policy.pdf', type: 'external' });
+  assert.equal(linkAttachment('https://drive.google.com/file/d/1/view').type, 'drive');
+  assert.equal(linkAttachment('docs.google.com/document/d/abc/edit').name, 'docs.google.com', 'never "edit"');
+  assert.equal(linkAttachment('www.figma.com/file/x', '  Design  ').name, 'Design');
+  for (const bad of ['', 'not a link', 'ftp://files.test/x', 'javascript:alert(1)', 'localhost']) {
+    assert.equal(linkAttachment(bad), null, `refuses ${JSON.stringify(bad)}`);
+  }
 });

@@ -15226,3 +15226,23 @@ a:hover { text-decoration: underline; }
 .m-pe-phase { display: flex; align-items: center; gap: 10px; background: var(--m-card); border: 1px solid var(--m-line); border-radius: 14px; padding: 4px 6px 4px 10px; }
 .m-pe-phase-n { width: 26px; height: 26px; border-radius: 8px; background: var(--m-rule); display: grid; place-items: center; font-size: 12px; font-weight: 800; flex: none; }
 .m-pe-phase input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 14.5px; font-weight: 700; color: var(--m-ink); padding: 9px 0; }
+
+/* ── File links and the project's Edit ─────────────────────────────────── */
+.m-push-edit {
+  margin-left: auto; flex: none; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 12px;
+  border-radius: 14px; border: 1px solid var(--m-line); background: var(--m-card); color: var(--m-ink);
+  font-size: 13.5px; font-weight: 800; cursor: pointer; box-shadow: var(--m-shadow);
+}
+.m-caption.is-err { color: var(--m-red-ink); font-weight: 700; }
+.m-linkrow { display: flex; align-items: center; gap: 10px; background: var(--m-card); border: 1px solid var(--m-line); border-radius: 14px; padding: 8px 6px 8px 10px; flex: none; }
+.m-linkrow-type { width: 36px; height: 36px; border-radius: 10px; background: #16324d; color: #f0a94f; display: grid; place-items: center; font-size: 9.5px; font-weight: 800; flex: none; }
+.m-linkrow-main { flex: 1; min-width: 0; }
+.m-linkrow-name, .m-linkrow-url { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-linkrow-name { font-size: 13.5px; font-weight: 800; }
+.m-linkrow-url { font-size: 11.5px; font-weight: 600; color: var(--m-ink-2); margin-top: 1px; }
+.m-act-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.m-act-file {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 12px; font-weight: 800; color: var(--m-ink);
+  background: var(--m-bg); border: 1px solid var(--m-line); border-radius: 999px; padding: 4px 10px; text-decoration: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

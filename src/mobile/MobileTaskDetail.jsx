@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import { useActivities, useTaskComments } from '../hooks/useTasks';
 import { useAiStatus } from '../hooks/useAiStatus';
-import { addTaskComment, updateTask } from '../services/firebase';
+import { addTaskComment, updateTask, addActivity } from '../services/firebase';
 import { generateClaudePrompt, generateSubtasks } from '../services/anthropic';
 import { buildFallbackPrompt } from '../services/dueAlerts';
 import { noticeWhen } from '../services/mentions';
@@ -124,6 +124,29 @@ export default function MobileTaskDetail() {
     } catch (err) { m.fail(err, 'Could not suggest sub-items.'); }
     setBusy(null);
   };
+  // A file link on the task is an activity entry carrying it — where the
+  // desktop keeps every file — so it shows in Log, in Files and in Reports.
+  const addFileLink = () => {
+    m.setPicker({
+      title: 'Add file link',
+      cta: 'Add to this task',
+      note: 'It is saved as a log entry with no hours, so it sits next to the work it belongs to.',
+      onAdd: async (att) => {
+        try {
+          await addActivity(m.userId, t, {
+            date: m.today,
+            hoursSpent: 0,
+            comment: `Added a file link: ${att.name}`,
+            attachments: [att],
+            bottleneckRemarks: '',
+            completionStatus: t.status === 'done' ? 'completed' : 'in-progress',
+          });
+          m.flash('Link added');
+        } catch (err) { m.fail(err, 'Could not add that link.'); }
+      },
+    });
+    m.setSheet('link');
+  };
   const copyPrompt = async () => {
     try { await navigator.clipboard.writeText(prompt.text); m.flash('Prompt copied'); }
     catch { m.flash('Copy is blocked here — select the text instead', { tone: 'err' }); }
@@ -183,6 +206,15 @@ export default function MobileTaskDetail() {
                   </div>
                   {a.comment && <div className="m-act-text">{a.comment}</div>}
                   {a.bottleneckRemarks?.trim() && <div className="m-act-bott">⚠ {a.bottleneckRemarks.trim()}</div>}
+                  {(a.attachments || []).length > 0 && (
+                    <div className="m-act-files">
+                      {a.attachments.map((f, i) => (
+                        <a key={`${f.url}:${i}`} className="m-act-file" href={f.url || undefined} target="_blank" rel="noreferrer">
+                          <Ico d={ICON.clip} size={13} stroke={2.4} />{f.name || 'File'}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               {sortedActs.length === 0 && <div className="m-quiet">No logs yet</div>}
@@ -233,6 +265,7 @@ export default function MobileTaskDetail() {
                 </a>
               ))}
               {files.length === 0 && <div className="m-quiet">No files yet</div>}
+              <button type="button" className="m-dashed-btn" onClick={addFileLink}>+ Add file link</button>
             </div>
           )}
 
@@ -280,7 +313,7 @@ export default function MobileTaskDetail() {
 
       <div className="m-detail-foot">
         <button type="button" className="m-foot-btn is-gold" onClick={() => m.setStatus(t, t.status === 'done' ? 'doing' : 'done')}>
-          {t.status === 'done' ? 'Reopen' : 'Done ✓'}
+          {t.status === 'done' ? 'Reopen' : 'Mark done'}
         </button>
         <button type="button" className="m-foot-btn is-orange" onClick={() => m.openLogFor(t.id)}>Log time</button>
       </div>

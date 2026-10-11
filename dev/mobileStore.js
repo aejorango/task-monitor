@@ -202,6 +202,7 @@ const CALLS = {
     set((s) => ({ ...s, projects: [...s.projects, { ...project, id, userId, members: [userId], acl: { [userId]: 'admin' }, archived: false, deleted: false }] }));
     return { id };
   },
+  async updateProject(id, updates) { set((s) => ({ ...s, projects: s.projects.map((x) => (x.id === id ? { ...x, ...updates } : x)) })); },
   async addSegmentToWorkspace(wsId, name) {
     set((s) => ({ ...s, workspaces: s.workspaces.map((w) => (w.id === wsId ? { ...w, segments: [...(w.segments || []), { id: nid('sg'), name }] } : w)) }));
   },

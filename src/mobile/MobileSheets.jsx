@@ -2,9 +2,9 @@
 // New task, a picker (owner · project · date · task) and Filter. One sheet is
 // open at a time; the scrim behind it closes it.
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  M_STATUS, STATUS_SHEET_ORDER, mobileStatus, filterTasks, addDays, shortDate, dueChoices,
+  M_STATUS, STATUS_SHEET_ORDER, mobileStatus, filterTasks, addDays, shortDate, dueChoices, linkAttachment, fileType,
 } from '../services/mobileModel';
 import { useMobile, Ico, ICON, Face, SheetHead } from './mobileUi';
 
@@ -23,6 +23,7 @@ export default function MobileSheets() {
       {m.sheet === 'new' && m.nt && <NewSheet />}
       {m.sheet === 'pick' && m.picker && <PickSheet />}
       {m.sheet === 'filter' && <FilterSheet />}
+      {m.sheet === 'link' && m.picker && <LinkSheet />}
     </>
   );
 }
@@ -53,7 +54,6 @@ function StatusSheet() {
 
 function LogSheet() {
   const m = useMobile();
-  const fileRef = useRef(null);
   const { log, setLog } = m;
   const t = m.tasks.find((x) => x.id === log.taskId);
   const days = [0, 1, 2].map((n) => ({ n, label: n === 0 ? 'Today' : n === 1 ? 'Yesterday' : shortDate(addDays(m.today, -n), m.today) }));
@@ -66,8 +66,19 @@ function LogSheet() {
     });
     m.setSheet('pick');
   };
-  const canSave = !!t && (log.hours > 0 || log.bott !== 'None' || log.details.trim());
-  const files = log.attachments;
+  const canSave = !!t && (log.hours > 0 || log.bott !== 'None' || log.details.trim() || log.attachments.length > 0);
+  const links = log.attachments;
+  // A log carries LINKS (Drive, a doc, a ticket), not uploaded files: the
+  // file lives where it already lives, and the entry points at it.
+  const addLink = () => {
+    m.setPicker({
+      title: 'Add file link',
+      returnTo: 'log',
+      onAdd: (att) => setLog((l) => ({ ...l, attachments: [...l.attachments, att] })),
+    });
+    m.setSheet('link');
+  };
+  const dropLink = (i) => setLog((l) => ({ ...l, attachments: l.attachments.filter((_, j) => j !== i) }));
 
   return (
     <Sheet label="Log time">
@@ -98,13 +109,19 @@ function LogSheet() {
       <textarea className="m-textarea" value={log.details} placeholder="What changed?" aria-label="What changed?"
         onChange={(e) => setLog((l) => ({ ...l, details: e.target.value }))} />
 
-      <input ref={fileRef} type="file" multiple hidden onChange={(e) => { m.attachFiles([...(e.target.files || [])]); e.target.value = ''; }} />
-      <button type="button" className={`m-attach${files.length ? ' is-on' : ''}`} disabled={!t || log.uploading}
-        onClick={() => fileRef.current?.click()}>
+      {links.map((f, i) => (
+        <div key={`${f.url}:${i}`} className="m-linkrow">
+          <span className="m-linkrow-type">{fileType(f)}</span>
+          <span className="m-linkrow-main">
+            <span className="m-linkrow-name">{f.name}</span>
+            <span className="m-linkrow-url">{f.url}</span>
+          </span>
+          <button type="button" className="m-pri-x is-ink" onClick={() => dropLink(i)} aria-label={`Remove ${f.name}`}>✕</button>
+        </div>
+      ))}
+      <button type="button" className="m-attach" disabled={!t} onClick={addLink}>
         <Ico d={ICON.clip} size={18} />
-        <span className="m-attach-text">
-          {log.uploading ? 'Uploading…' : files.length ? `${files.map((f) => f.name).join(', ')} ✓` : 'Files & links'}
-        </span>
+        <span className="m-attach-text">{links.length ? 'Add another file link' : 'Add file link'}</span>
       </button>
 
       <div className="m-wrap-row">
@@ -116,7 +133,7 @@ function LogSheet() {
         ))}
       </div>
 
-      <button type="button" className={`m-primary${canSave ? '' : ' is-off'}`} disabled={!canSave || log.uploading} onClick={m.saveLog}>
+      <button type="button" className={`m-primary${canSave ? '' : ' is-off'}`} disabled={!canSave} onClick={m.saveLog}>
         Save {log.hours}h
       </button>
     </Sheet>
@@ -259,6 +276,36 @@ function FilterSheet() {
         ))}
       </div>
       <button type="button" className="m-primary is-navy-solid" onClick={() => m.setSheet(null)}>Show {result} tasks</button>
+    </Sheet>
+  );
+}
+
+/** Paste a link: the URL, and optionally what to call it. */
+function LinkSheet() {
+  const m = useMobile();
+  const p = m.picker;
+  const [url, setUrl] = useState('');
+  const [name, setName] = useState('');
+  const [tried, setTried] = useState(false);
+  const att = linkAttachment(url, name);
+  const done = () => { m.setPicker(null); m.setSheet(p.returnTo || null); };
+  const add = async () => {
+    setTried(true);
+    if (!att) return;
+    await p.onAdd(att);
+    done();
+  };
+  return (
+    <Sheet label={p.title}>
+      <SheetHead title={p.title} onClose={done} />
+      <input className="m-input" type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+        autoFocus value={url} placeholder="Paste a link — Drive, Docs, Figma…" aria-label="Link"
+        onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+      <input className="m-input" value={name} placeholder={att ? `Name (optional) — ${att.name}` : 'Name (optional)'} aria-label="Name"
+        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+      {tried && url.trim() && !att && <div className="m-caption is-err">That is not a web link. It should look like drive.google.com/… or https://…</div>}
+      {p.note && <div className="m-caption">{p.note}</div>}
+      <button type="button" className={`m-primary${att ? '' : ' is-off'}`} onClick={add}>{p.cta || 'Add link'}</button>
     </Sheet>
   );
 }

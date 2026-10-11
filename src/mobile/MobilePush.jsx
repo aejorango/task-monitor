@@ -48,7 +48,7 @@ export default function MobilePush() {
   // The minutes editor is a full screen of its own, with its own Back: it
   // has to ask before throwing away a half-written meeting.
   if (p.kind === 'minute') return <MobileMinuteEditor />;
-  if (p.kind === 'project-new') return <MobileProjectEditor />;
+  if (p.kind === 'project-new' || p.kind === 'project-edit') return <MobileProjectEditor />;
   const project = p.kind === 'project' ? m.projectById[p.projectId] : null;
   const title = p.kind === 'project' ? (project?.name || 'Project') : p.kind === 'embed' ? p.title : TITLE[p.kind];
   const back = () => m.setPush(p.from || null);
@@ -79,6 +79,12 @@ export default function MobilePush() {
               <Ico d={ICON.plus} size={20} stroke={2.6} />
             </button>
           </div>
+        )}
+        {p.kind === 'project' && project && (
+          <button type="button" className="m-push-edit" aria-label={`Edit ${project.name}`}
+            onClick={() => m.setPush({ kind: 'project-edit', projectId: project.id, project, from: p })}>
+            <Ico d={ICON.edit} size={16} stroke={2.4} /><span>Edit</span>
+          </button>
         )}
         {p.kind === 'minutes' && (
           <button type="button" className="m-push-add" aria-label="New minutes"

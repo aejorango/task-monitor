@@ -102,7 +102,7 @@ test('Stuck is never written as a status — it opens the log with the blocker c
 
 test('the phone writes through the same functions the desktop does', () => {
   assert.doesNotMatch(allMobile, /from 'firebase\//, 'no direct Firestore access');
-  for (const fn of ['addTask', 'updateTask', 'setTaskStatus', 'addActivity', 'uploadFile', 'notifyAssignment']) {
+  for (const fn of ['addTask', 'updateTask', 'setTaskStatus', 'addActivity', 'notifyAssignment']) {
     assert.match(sources['MobileApp.jsx'], new RegExp(`\\b${fn}\\b`), `${fn} is the write path`);
   }
   assert.match(sources['MobileTaskDetail.jsx'], /addTaskComment\(/);
@@ -160,10 +160,10 @@ test('Projects can be searched, sorted, divided by segment and added to', () => 
   assert.match(push, /aria-label="New project"/);
   assert.match(push, /bySegment\(sortProjects\(searchProjects\(rated, p\.q\), sort\), segments\)/);
   assert.match(push, /className="m-seg-divider"/);
-  assert.match(push, /if \(p\.kind === 'project-new'\) return <MobileProjectEditor \/>/);
+  assert.match(push, /if \(p\.kind === 'project-new' \|\| p\.kind === 'project-edit'\) return <MobileProjectEditor \/>/);
   // A new project is the desktop's document, made by the desktop's call.
   const ed = sources['MobileProjectEditor.jsx'];
-  assert.match(ed, /addProject\(m\.userId, \{\s*workspaceId: m\.workspaceId/);
+  assert.match(ed, /addProject\(m\.userId, \{ workspaceId: m\.workspaceId, \.\.\.fields/);
   assert.match(ed, /addSegmentToWorkspace\(/);
 });
 
@@ -173,4 +173,25 @@ test('Tasks: every group starts folded, and the week strip scrolls', () => {
   assert.match(tasks, /weekStrip\(visible, m\.today, \{ before: STRIP_BEFORE, after: STRIP_AFTER \}\)/);
   assert.match(tasks, /const goToday = /);
   assert.match(css, /\.m-strip \{[^}]*overflow-x: auto/);
+});
+
+test('a log carries file LINKS, as the desktop logger does — never an upload', () => {
+  const sheets = sources['MobileSheets.jsx'];
+  assert.doesNotMatch(sheets, /type="file"/, 'no file picker on the Log sheet');
+  assert.doesNotMatch(sources['MobileApp.jsx'], /uploadFile/);
+  assert.match(sheets, /function LinkSheet\(\)/);
+  assert.match(sheets, /linkAttachment\(url, name\)/);
+  // The Files tab adds a link as a 0h log entry carrying it, with a dashed button.
+  const detail = sources['MobileTaskDetail.jsx'];
+  assert.match(detail, /className="m-dashed-btn" onClick=\{addFileLink\}>\+ Add file link</);
+  assert.match(detail, /hoursSpent: 0,[\s\S]*?attachments: \[att\]/);
+  assert.match(detail, /'Reopen' : 'Mark done'/);
+});
+
+test('a project can be edited from its own screen, through updateProject', () => {
+  assert.match(sources['MobilePush.jsx'], /className="m-push-edit"/);
+  const ed = sources['MobileProjectEditor.jsx'];
+  assert.match(ed, /updateProject\(project\.id, \{ \.\.\.fields/);
+  // Removing a phase that still has tasks asks first.
+  assert.match(ed, /Remove a phase that has/);
 });
