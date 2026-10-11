@@ -17,7 +17,7 @@ import { useDialog } from '../components/Dialog';
 import {
   updateMinute, addWorkspace, inviteToWorkspaceByEmail, updateWorkspaceMemberRole, addTask, notifyAssignment,
 } from '../services/firebase';
-import { setActiveWorkspaceId } from '../hooks/useWorkspace';
+import { setActiveWorkspaceId, setAllWorkspaces } from '../hooks/useWorkspace';
 import { rateProjects } from '../services/portfolio';
 import { taskPct } from '../services/goalProgress';
 import { noticeWhen } from '../services/mentions';
@@ -179,8 +179,10 @@ function MinutesScreen() {
     setBusy(it.id);
     try {
       const owner = uidFor(it.owner);
+      // The minute's own workspace — in All workspaces it need not be the active one.
+      const ws = min.workspaceId || m.workspaceId;
       const ref = await addTask(m.userId, {
-        workspaceId: m.workspaceId,
+        workspaceId: ws,
         title: it.text.trim(),
         projectId: min.projectId || null,
         description: `From minutes: ${min.title || 'Untitled meeting'}`,
@@ -191,7 +193,7 @@ function MinutesScreen() {
       await updateMinute(min.id, { actionItems: (min.actionItems || []).map((x) => (x.id === it.id ? { ...x, taskId: ref.id } : x)) });
       if (owner && owner !== m.userId) {
         await notifyAssignment({
-          task: { id: ref.id, workspaceId: m.workspaceId, projectId: min.projectId || null, title: it.text.trim() },
+          task: { id: ref.id, workspaceId: ws, projectId: min.projectId || null, title: it.text.trim() },
           before: [], after: [owner], byUserId: m.userId, byName: m.nameOf(m.userId),
         });
       }
@@ -582,6 +584,7 @@ function SettingsScreen() {
   const myRole = ws?.acl?.[m.userId];
   const canManage = myRole === 'owner' || myRole === 'admin';
   const embed = (title) => m.setPush({ kind: 'embed', section: 'ai-data', title, from: { kind: 'settings' } });
+  const liveWs = m.workspaces.filter((w) => !w.deleted && !w.archived);
 
   const addWs = async () => {
     const name = await ask.prompt({ title: 'New workspace', label: 'Name', placeholder: 'e.g. Client work', confirmLabel: 'Create' });
@@ -620,11 +623,22 @@ function SettingsScreen() {
           <button type="button" className="m-link" onClick={addWs}>+ New</button>
         </div>
         <div className="m-list">
-          {m.workspaces.filter((w) => !w.deleted && !w.archived).map((w) => {
-            const on = w.id === m.workspaceId;
+          {liveWs.length > 1 && (
+            <button type="button" className={`m-list-row is-btn${m.allWorkspaces ? ' is-on' : ''}`}
+              onClick={() => { setAllWorkspaces(true); m.flash('Showing all workspaces'); }}>
+              <span className="m-ws-dot is-all" aria-hidden="true"><span /><span /><span /><span /></span>
+              <span className="m-list-main">
+                <span className="m-list-name is-bold">All workspaces</span>
+                <span className="m-list-sub">Every workspace's tasks together · new items go to {m.workspace?.name || 'the active one'}</span>
+              </span>
+              {m.allWorkspaces && <span className="m-active-chip">ON</span>}
+            </button>
+          )}
+          {liveWs.map((w) => {
+            const on = !m.allWorkspaces && w.id === m.workspaceId;
             return (
               <button key={w.id} type="button" className={`m-list-row is-btn${on ? ' is-on' : ''}`}
-                onClick={() => { setActiveWorkspaceId(w.id); m.flash(`${String(w.name || 'Workspace').split(' ')[0]} active`); }}>
+                onClick={() => { setAllWorkspaces(false); setActiveWorkspaceId(w.id); m.flash(`${String(w.name || 'Workspace').split(' ')[0]} active`); }}>
                 <span className="m-ws-dot" style={{ background: w.color || 'var(--m-navy)' }}>{String(w.name || '?').charAt(0)}</span>
                 <span className="m-list-main">
                   <span className="m-list-name is-bold">{w.name || 'Workspace'}</span>
@@ -640,11 +654,13 @@ function SettingsScreen() {
       {ws && (
         <div>
           <div className="m-kicker-row">
-            <span className="m-kicker">MEMBERS</span>
+            <span className="m-kicker">MEMBERS{m.allWorkspaces ? ` · ${String(ws.name || '').toUpperCase()}` : ''}</span>
             {canManage && <button type="button" className="m-link" onClick={invite}>+ Invite</button>}
           </div>
           <div className="m-list">
-            {m.members.map((uid) => {
+            {/* The active workspace's own members — roles belong to one workspace,
+                whatever the screens are showing. */}
+            {(ws.members || []).map((uid) => {
               const r = ws.acl?.[uid] || 'viewer';
               return (
                 <button key={uid} type="button" className="m-list-row is-btn" onClick={() => cycle(uid)}>

@@ -185,6 +185,31 @@ nobody can reach:
 and still tested, but **nothing mounts them**. They are the previous homes of
 three of those rows.
 
+**"All workspaces" is a view, not a workspace.** The switcher's first item
+shows every workspace you belong to at once — the Calendar, Kanban, Gantt,
+Dashboard, Reports and the phone app all read every workspace's tasks,
+projects, activities, goals and minutes. It is a **flag beside** the active
+workspace (`setAllWorkspaces`, per device in `task-monitor.allWorkspaces.v1`),
+never a value of it: the active workspace stays real, because dozens of write
+paths read it, and a sentinel id would have been written into documents.
+So writes keep a real home — an edit goes to the item's own workspace (it
+always did), a new task goes to its **project's** workspace (shared projects
+already required that), and anything else new lands in the active one, which
+the switcher names ("new in BRIDGED Q3"; "new items go here" on its row).
+Picking a workspace turns All off. The rules are pure, in
+`services/activeWorkspace.js` (`scopeWorkspaceIds`, `mergedMemberProfiles`,
+`viewWorkspace`); every data hook in `useTasks.js` reads through
+`useScopeWorkspaceIds()`, one listener per workspace on the same shared cache
+the single view uses, so no index or rule changed. Four things had to follow:
+a task's own log is asked of **its** workspace (`useActivities(id,
+task.workspaceId)` — under any other the query is refused); names come from
+every workspace (`useMemberProfiles()`), so a card from another one is not a
+uid; an existing task's Project list is limited to its own workspace's
+projects, since moving it to another's would change its project but not its
+workspace; and activity paging pages each workspace from its own oldest row.
+Settings, Members, Automations, Webhooks, Trash and Chat still manage the
+active workspace. `tests/ui/allWorkspaces.test.mjs` guards it.
+
 **The page chrome** is `components/PageHeader.jsx`, drawn once by `AppShell`:
 a navy breadcrumb strip (`Workspaces › workspace › hub › page`), a white title
 block, and the tab strip. The **title is the hub's** and the **tab names the
@@ -963,6 +988,11 @@ npx vite --config dev/mobile.vite.config.js --port 5176
                      # every write applied in memory and logged. Its own server
                      # because its Firestore stubs must not leak into the app
                      # (launch.json: "mobile-harness"). View it at 375px.
+HARNESS=desktop npx vite --config dev/mobile.vite.config.js --port 5178
+                     # dev/desktop.html — the REAL desktop app over the same
+                     # store, with ONLY services/firebase.js swapped, so every
+                     # hook runs for real; two sample workspaces, signed in as
+                     # a superadmin (launch.json: "desktop-harness").
 npm run build        # produces dist/
 npm run deploy       # builds + deploys dist/ to Firebase Hosting
 npm run deploy:rules # Firestore + Storage rules

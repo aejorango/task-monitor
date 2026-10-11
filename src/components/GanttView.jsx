@@ -6,7 +6,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useMemberProfiles } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
 import TaskEditor, { newTaskDraft } from './TaskEditor';
 import { friendlyError } from '../services/access';
@@ -202,11 +202,7 @@ export default function GanttView({ projectFilter, initialTagFilter, route = {} 
   const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
   const { projects, byId: projectById } = useProjects();
   const activeWorkspaceId = useActiveWorkspaceId();
-  const { workspaces } = useWorkspaces();
-  const memberProfiles = useMemo(
-    () => workspaces.find((w) => w.id === activeWorkspaceId)?.memberProfiles || {},
-    [workspaces, activeWorkspaceId],
-  );
+  const memberProfiles = useMemberProfiles();
   // The track column's width, measured — the chart has no fixed pixels-per-day
   // any more, so the whole geometry is derived from this one number.
   //

@@ -71,12 +71,16 @@ test('the paging copy explains itself without jargon', () => {
   assert.doesNotMatch(block, /cursor|pagination|limit\(|query/i);
 });
 
-test('switching workspace drops the pages fetched for the previous one', () => {
+test('switching workspace — or to all of them — drops the pages fetched before', () => {
   const src = fs.readFileSync(path.join(root, 'src', 'hooks', 'useTasks.js'), 'utf8');
   const hook = src.slice(src.indexOf('export function useAllActivities'));
-  assert.match(hook, /seenWorkspace/, 'otherwise another workspace’s history bleeds in');
-  assert.doesNotMatch(hook, /seenWorkspace\.current/, 'refs must not be read during render');
-  assert.match(hook, /setOlderActivities\(\[\]\)/);
+  // The "scope" is the set of workspaces in view, so one rule covers both a
+  // switch and turning All workspaces on or off.
+  assert.match(hook, /seenScope/, 'otherwise another workspace’s history bleeds in');
+  assert.doesNotMatch(hook, /seenScope\.current/, 'refs must not be read during render');
+  assert.match(hook, /setOlder\(\{\}\)/);
+  // Each workspace pages from ITS OWN oldest row: one shared cursor would skip entries.
+  assert.match(hook, /loadMoreActivities\(ws, oldest\)/);
 });
 
 test('the merged list stays newest-first after pages are appended', () => {

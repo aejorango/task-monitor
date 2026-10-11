@@ -23,7 +23,7 @@
 
 import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
-import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useMemberProfiles } from '../hooks/useWorkspace';
 import { todayLocal } from '../services/firebase';
 import { scopeTasks, scopeOf, blockedTaskIds, displayStatus } from '../services/boardScope';
 import TaskEditor, { newTaskDraft } from './TaskEditor';
@@ -68,7 +68,6 @@ export default function WBSView({ projectFilter, route = {} }) {
   const { projects, loading: projectsLoading } = useProjects();
   const { activities } = useAllActivities();
   const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
-  const { workspaces } = useWorkspaces();
   const activeWs = useActiveWorkspaceId();
 
   // Tasks with an activity logged TODAY. A green tick beside one is the only
@@ -88,7 +87,7 @@ export default function WBSView({ projectFilter, route = {} }) {
   const [editingTask, setEditingTask] = useState(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
-  const memberProfiles = workspaces.find((w) => w.id === activeWs)?.memberProfiles || {};
+  const memberProfiles = useMemberProfiles();
 
   const resourceOf = (t) =>
     t.requestedBy?.trim()

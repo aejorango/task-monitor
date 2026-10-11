@@ -13,7 +13,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import {
+  useActiveWorkspaceId, useWorkspaces, useAllWorkspaces, useMemberProfiles, useViewWorkspace,
+} from '../hooks/useWorkspace';
 import {
   addTask, updateTask, setTaskStatus, addActivity, notifyAssignment, todayLocal,
 } from '../services/firebase';
@@ -44,13 +46,18 @@ export default function MobileApp({ userId, profile, route }) {
   const { activities } = useAllActivities();
   const { workspaces } = useWorkspaces();
   const workspaceId = useActiveWorkspaceId();
+  // `workspace` stays the REAL active one: Settings manages it and new items
+  // land in it. What the screens SHOW — names, faces, the team — comes from
+  // the workspaces in view, which in "All workspaces" is every one.
   const workspace = workspaces.find((w) => w.id === workspaceId) || null;
-  const profiles = useMemo(() => workspace?.memberProfiles || {}, [workspace]);
+  const allWorkspaces = useAllWorkspaces();
+  const viewWs = useViewWorkspace();
+  const profiles = useMemberProfiles();
   const members = useMemo(() => {
-    const ids = workspace?.members || [];
+    const ids = viewWs?.members || [];
     // You first — your own face is the one you look for.
     return [...ids].sort((a, b) => (a === userId ? -1 : b === userId ? 1 : 0));
-  }, [workspace, userId]);
+  }, [viewWs, userId]);
   const today = todayLocal();
   const tasks = useMemo(() => allTasks.filter((t) => !t.deleted && !t.archived), [allTasks]);
   const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
@@ -195,8 +202,11 @@ export default function MobileApp({ userId, profile, route }) {
     if (!nt?.title.trim()) { flash('Add a title', { tone: 'err' }); return; }
     const p = projectById[nt.projectId];
     try {
+      // The project's workspace, as the desktop's create paths do — in All
+      // workspaces the project may belong to any of them.
+      const target = p?.workspaceId || workspaceId;
       const ref = await addTask(userId, {
-        workspaceId,
+        workspaceId: target,
         title: nt.title.trim(),
         description: '',
         projectId: nt.projectId || null,
@@ -209,7 +219,7 @@ export default function MobileApp({ userId, profile, route }) {
       });
       if (nt.owner && nt.owner !== userId) {
         await notifyAssignment({
-          task: { id: ref?.id, workspaceId, projectId: nt.projectId || null, title: nt.title.trim() },
+          task: { id: ref?.id, workspaceId: target, projectId: nt.projectId || null, title: nt.title.trim() },
           before: [], after: [nt.owner], byUserId: userId, byName: nameOf(userId),
         });
       }
@@ -253,7 +263,7 @@ export default function MobileApp({ userId, profile, route }) {
   }, [tv.sel, tasks, userId, patchTv, flash, fail]);
 
   const ctx = {
-    userId, profile, workspace, workspaceId, workspaces, members, profiles, projects: sortedProjects, projectById,
+    userId, profile, workspace, workspaceId, workspaces, allWorkspaces, members, profiles, projects: sortedProjects, projectById,
     tasks, activities, blockedIds, today,
     nameOf, firstOf, photoOf,
     tab, setTab, push, setPush, task, openTask, closeTask: () => setTaskId(null), dtab, setDtab,

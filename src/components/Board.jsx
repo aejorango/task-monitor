@@ -15,7 +15,7 @@ import {
   DragOverlay,
 } from '@dnd-kit/core';
 import { useTasks, useProjects, useActivities, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useViewWorkspace, useMemberProfiles } from '../hooks/useWorkspace';
 import { useTimer } from '../hooks/useTimer';
 import { auth } from '../services/firebase';
 import { taskChips } from '../services/customFields';
@@ -58,9 +58,8 @@ export default function Board({ projectFilter, initialTagFilter, initialStatusFi
   const { tasks, loading, userId } = useTasks();
   const { activities: allActivities } = useAllActivities();
   const { projects, byId: projectById } = useProjects();
-  const activeWorkspaceId = useActiveWorkspaceId();
-  const { workspaces } = useWorkspaces();
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
+  // The workspace in view — the active one, or all of them combined.
+  const activeWorkspace = useViewWorkspace();
   const [editingTask, setEditingTask]   = useState(null);
   const [editingActivity, setEditingActivity] = useState(null);
   const [loggingTask, setLoggingTask]   = useState(null);
@@ -683,14 +682,14 @@ export function CardBody({ task, project, expanded, onToggleExpand, onLog, onEdi
         >Edit</button>
       </div>
 
-      {expanded && <ActivityListInline taskId={task.id} onEditActivity={onEditActivity} />}
+      {expanded && <ActivityListInline taskId={task.id} workspaceId={task.workspaceId} onEditActivity={onEditActivity} />}
     </div>
   );
 }
 
-function ActivityListInline({ taskId, onEditActivity }) {
+function ActivityListInline({ taskId, workspaceId, onEditActivity }) {
   const ask = useDialog();
-  const { activities, loading } = useActivities(taskId);
+  const { activities, loading } = useActivities(taskId, workspaceId);
   if (loading) return <p className="muted small">Loading log…</p>;
   if (activities.length === 0)
     return <p className="muted small" style={{ marginTop: 8 }}>No activity logged yet.</p>;
@@ -756,10 +755,9 @@ function ActivityListInline({ taskId, onEditActivity }) {
 // A hook rather than a component because the footer needs the NAMES too, at
 // the other end of the row: one lookup, two places.
 function useAssignees(assignedTo = [], assignedToExternal = []) {
-  const activeWsId = useActiveWorkspaceId();
-  const { workspaces } = useWorkspaces();
-  const ws = workspaces.find((w) => w.id === activeWsId);
-  const memberProfiles = ws?.memberProfiles || {};
+  // Every workspace's names: a card from another workspace (All workspaces,
+  // a shared project) must still show its owner's name, not a uid.
+  const memberProfiles = useMemberProfiles();
   const me = auth.currentUser;
 
   const labelFor = (uid) => {

@@ -306,7 +306,8 @@ function MinuteCard({ minute, project, tasksById = {}, projects = [], userId, on
     setBusyId(it.id);
     try {
       const ref = await addTask(userId, {
-        workspaceId,
+        // The minute's own workspace: with All workspaces on, it need not be the active one.
+        workspaceId: minute.workspaceId || workspaceId,
         title: it.text.trim(),
         projectId: minute.projectId || null,
         description: `From minutes: ${minute.title || 'Untitled meeting'}`,

@@ -13,7 +13,7 @@
 
 import { useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities, useSavedViews } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useWorkspaces, useViewWorkspace } from '../hooks/useWorkspace';
 import { softDeleteSavedView } from '../services/firebase';
 import { buildStatusReport, statusReportFileBase } from '../services/statusReport';
 import { buildDigest } from '../services/askAiCore';
@@ -43,7 +43,7 @@ export default function LibraryView({ navigate }) {
   const views = useMemo(() => allViews.filter((v) => isKnownView(v.view)), [allViews]);
   const { workspaces } = useWorkspaces();
   const activeWsId = useActiveWorkspaceId();
-  const workspace = workspaces.find((w) => w.id === activeWsId);
+  const workspace = useViewWorkspace();
   const ask = useDialog();
   const toast = useToast();
 

@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useTasks, useProjects, useAuth } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useViewWorkspace } from '../hooks/useWorkspace';
 import TaskQuickAdd from './TaskQuickAdd';
 import TaskActivitiesModal from './TaskActivitiesModal';
 import ActivityLogger from './ActivityLogger';
@@ -24,9 +24,7 @@ export default function WbsModal({ project, tasks: tasksProp, projects: projects
   // Callers may pass tasks explicitly (e.g. Goals links a project from another
   // workspace, whose tasks aren't in the active-workspace useTasks()).
   const tasks = tasksProp || wsTasks;
-  const activeWorkspaceId = useActiveWorkspaceId();
-  const { workspaces } = useWorkspaces();
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
+  const activeWorkspace = useViewWorkspace();
   const projects = projectsProp || wsProjects;
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);

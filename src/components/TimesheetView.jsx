@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { useAllActivities, useProjects, useTasks } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useMemberProfiles } from '../hooks/useWorkspace';
 import { useSettings } from '../hooks/useSettings';
 import { todayLocal } from '../services/firebase';
 import {
@@ -22,13 +22,8 @@ export default function TimesheetView({ projectFilter = 'all' }) {
   const { tasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { settings } = useSettings();
-  const workspaceId = useActiveWorkspaceId();
-  const { workspaces } = useWorkspaces();
 
-  const memberProfiles = useMemo(
-    () => workspaces.find((w) => w.id === workspaceId)?.memberProfiles || {},
-    [workspaces, workspaceId],
-  );
+  const memberProfiles = useMemberProfiles();
 
   const [anchor, setAnchor] = useState(() => todayLocal());
   const [project, setProject] = useState(projectFilter);

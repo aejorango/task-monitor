@@ -17,7 +17,7 @@ import { useModalDialog } from '../hooks/useModalDialog';
 export default function TaskActivitiesModal({ task, onClose, onEditTask, userId }) {
   const modal = useModalDialog({ onClose });
   const toast = useToast();
-  const { activities, loading } = useActivities(task.id);
+  const { activities, loading } = useActivities(task.id, task.workspaceId);
   const { byId: projectById } = useProjects();
   const [editingActivity, setEditingActivity] = useState(null);
   const [loggingNew, setLoggingNew] = useState(false);

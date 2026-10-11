@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react';
 import { PageActions, PageSubtitle } from './PageHeader';
 import { useAllActivities, useProjects, useTasks } from '../hooks/useTasks';
-import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useViewWorkspace } from '../hooks/useWorkspace';
 import AddToNotebookButton from './AddToNotebookButton';
 
 const COLUMNS = [
@@ -18,9 +18,7 @@ const COLUMNS = [
 export default function ArtifactsView({ projectFilter }) {
   const { activities, loading } = useAllActivities();
   const { byId: projectById } = useProjects();
-  const { workspaces } = useWorkspaces();
-  const activeWorkspaceId = useActiveWorkspaceId();
-  const workspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
+  const workspace = useViewWorkspace();
   const { tasks } = useTasks();
   const taskById = useMemo(() => {
     const m = {}; tasks.forEach((t) => { m[t.id] = t; }); return m;

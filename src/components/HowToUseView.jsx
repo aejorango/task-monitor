@@ -36,7 +36,7 @@ import { PageSubtitle } from './PageHeader';
 import { startTutorial } from '../services/tutorials';
 import { fmtDay } from './ActivityTimeline';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useViewWorkspace } from '../hooks/useWorkspace';
 import { STATUS_TEXT } from '../services/boardScope';
 
 // ─── Icon set ────────────────────────────────────────────────
@@ -297,9 +297,7 @@ export default function HowToUseView({ navigate }) {
   const { tasks } = useTasks();
   const { projects } = useProjects();
   const { activities } = useAllActivities();
-  const { workspaces } = useWorkspaces();
-  const activeWs = useActiveWorkspaceId();
-  const workspace = workspaces.find((w) => w.id === activeWs) || null;
+  const workspace = useViewWorkspace();
 
   // `workspace?.memberProfiles || {}` OUTSIDE the memo would be a fresh object
   // on every render while no workspace is loaded, which makes the memo run on

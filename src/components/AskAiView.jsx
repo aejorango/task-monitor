@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useAllActivities, useAllWorkspaceProjects, useAllWorkspaceTasks } from '../hooks/useTasks';
-import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
+import { useWorkspaces, useActiveWorkspaceId, useViewWorkspace } from '../hooks/useWorkspace';
 import { auth } from '../services/firebase';
 import Markdown from './Markdown';
 import NotebookPicker from './NotebookPicker';
@@ -51,10 +51,7 @@ export default function AskAiView() {
   // instead of starting a fresh one (which would also DELETE the old one).
   const convoRef = useRef({});
 
-  const activeWorkspace = useMemo(
-    () => workspaces.find((w) => w.id === activeWorkspaceId) || null,
-    [workspaces, activeWorkspaceId],
-  );
+  const activeWorkspace = useViewWorkspace();
   // Memoised: it feeds the digest's dependency array, and a fresh {} every
   // render would rebuild the whole digest on every keystroke.
   const memberProfiles = useMemo(

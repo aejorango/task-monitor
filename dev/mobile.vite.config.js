@@ -9,9 +9,13 @@
 //   npx vite --config dev/mobile.vite.config.js --port 5176
 //   open http://localhost:5176/dev/mobile.html
 //
+//   HARNESS=desktop npx vite --config dev/mobile.vite.config.js --port 5178
+//   open http://localhost:5178/dev/desktop.html     (the desktop app)
+//
 // It is a separate config because a stub in the main one would replace
 // Firestore for the whole app.
 
+/* global process */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,14 +23,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const STUBBED = [
-  'src/services/firebase.js',
-  'src/services/aiProxyClient.js',
-  'src/hooks/useTasks.js',
-  'src/hooks/useWorkspace.js',
-  'src/hooks/useInbox.js',
-  'src/hooks/useAiStatus.js',
-].map((p) => path.join(root, p));
+// HARNESS=desktop swaps ONLY Firebase itself, so the real hooks — the
+// workspace scoping, the merging, the shared listeners — run against the
+// store; dev/desktop.html renders the whole desktop app that way.
+const DESKTOP = process.env.HARNESS === 'desktop';
+const STUBBED = (DESKTOP
+  ? ['src/services/firebase.js', 'src/services/aiProxyClient.js']
+  : [
+    'src/services/firebase.js',
+    'src/services/aiProxyClient.js',
+    'src/hooks/useTasks.js',
+    'src/hooks/useWorkspace.js',
+    'src/hooks/useInbox.js',
+    'src/hooks/useAiStatus.js',
+  ]).map((p) => path.join(root, p));
 const PREFIX = '\0mobile-stub:';
 
 /** Every name a module exports, and whether it is a function or a value. */

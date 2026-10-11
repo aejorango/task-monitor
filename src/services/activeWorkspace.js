@@ -61,3 +61,59 @@ export function nextActiveWorkspaceId(workspaces, current = null) {
 export function isResolvingWorkspace({ ready, userId, workspaceId }) {
   return Boolean(ready && userId && !workspaceId);
 }
+
+// ── "All workspaces": a VIEW of every workspace at once ─────────────────────
+//
+// The active workspace stays a real workspace. "All workspaces" is a separate
+// flag that widens what the pages READ — tasks, projects, activities, goals,
+// minutes from every workspace you belong to — while everything that WRITES
+// keeps a real home: an edit goes to the item's own workspace (it always
+// did), a new task goes to its project's workspace (shared projects already
+// required that), and anything else new lands in the active workspace, which
+// the switcher names as where new items go. A sentinel id in place of the
+// active one would have leaked into every one of those writes instead.
+
+/** The workspace ids a page should read. Archived and deleted ones are left out. */
+export function scopeWorkspaceIds({ all, activeId, workspaces = [] }) {
+  if (!all) return activeId ? [activeId] : [];
+  const ids = workspaces.filter((w) => w && w.id && !w.deleted && !w.archived).map((w) => w.id);
+  // The active one first, so a merged list's ties break the way a single one did.
+  return activeId && ids.includes(activeId) ? [activeId, ...ids.filter((id) => id !== activeId)] : ids;
+}
+
+/**
+ * Every member's profile across the given workspaces, keyed by uid. A person
+ * is the same person in every workspace, so the union is safe — and it is what
+ * lets a task from another workspace show its owner's name, not a uid.
+ */
+export function mergedMemberProfiles(workspaces = []) {
+  const out = {};
+  workspaces.forEach((w) => {
+    Object.entries(w?.memberProfiles || {}).forEach(([uid, p]) => {
+      out[uid] = { ...(p || {}), ...(out[uid] || {}) };
+    });
+  });
+  return out;
+}
+
+/**
+ * The workspace a page is looking at: the active one, or — across all of
+ * them — a combined stand-in with every member and every profile. `id` stays
+ * the ACTIVE workspace's, because that is where anything new is written.
+ */
+export function viewWorkspace({ all, activeId, workspaces = [] }) {
+  const active = workspaces.find((w) => w.id === activeId) || null;
+  if (!all) return active;
+  const live = workspaces.filter((w) => w && !w.deleted && !w.archived);
+  const members = [...new Set(live.flatMap((w) => w.members || []))];
+  return {
+    ...(active || {}),
+    id: activeId,
+    name: 'All workspaces',
+    all: true,
+    home: active,
+    count: live.length,
+    members,
+    memberProfiles: mergedMemberProfiles(live),
+  };
+}

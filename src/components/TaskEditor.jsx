@@ -119,7 +119,7 @@ export default function TaskEditor({ task, projects, onClose }) {
   const toast = useToast();
   const { tasks: allTasks } = useTasks();
   const { userId } = useAuth();
-  const { activities } = useActivities(task.id);
+  const { activities } = useActivities(task.id, task.workspaceId);
   const activeWorkspaceId = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
   const workspace = workspaces.find((w) => w.id === (task.workspaceId || activeWorkspaceId));
@@ -170,6 +170,14 @@ export default function TaskEditor({ task, projects, onClose }) {
   const [editingActivity, setEditingActivity] = useState(null);
 
   const selectedProject = projects.find((p) => p.id === projectId);
+  // An existing task can only move to a project in ITS OWN workspace: a
+  // project from another one would change which project owns it but not
+  // which workspace, and the task would sit in neither properly. "All
+  // workspaces" lists every project, so the list is narrowed here. A NEW task
+  // may take any project — it is created in that project's workspace.
+  const projectChoices = isNew || !task.workspaceId
+    ? projects
+    : projects.filter((p) => !p.workspaceId || p.workspaceId === task.workspaceId || p.id === projectId);
   const selectedPhase   = selectedProject?.phases?.find((ph) => ph.id === phaseId);
   const accent = selectedProject?.color || 'var(--c-accent)';
 
@@ -986,6 +994,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                 <div className="te-pop">
                   <TaskAssigneeSection
                     project={selectedProject}
+                    workspaceId={task.workspaceId}
                     assignedTo={assignedTo}
                     assignedToExternal={assignedToExternal}
                     onChange={({ assignedTo: a, assignedToExternal: e }) => {
@@ -1044,7 +1053,7 @@ export default function TaskEditor({ task, projects, onClose }) {
                 aria-label="Project"
               >
                 <option value="">— none —</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {projectChoices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </label>
           </div>
@@ -1215,10 +1224,13 @@ function LogComposer({ userId, task }) {
 // pulls candidate UIDs from the project's ACL (preferred) or the active
 // workspace's member list (when no project is selected), and resolves
 // display names via the workspace's memberProfiles map.
-function TaskAssigneeSection({ project, assignedTo, assignedToExternal, onChange }) {
+function TaskAssigneeSection({ project, workspaceId, assignedTo, assignedToExternal, onChange }) {
   const activeWorkspaceId = useActiveWorkspaceId();
   const { workspaces } = useWorkspaces();
-  const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+  // The TASK's workspace — its project's, then its own — not the active one:
+  // in All workspaces the task may belong anywhere, and only its own
+  // workspace's members can be given it.
+  const ws = workspaces.find((w) => w.id === (project?.workspaceId || workspaceId || activeWorkspaceId));
   const memberProfiles = ws?.memberProfiles || {};
 
   // Candidates: workspace members ∪ project members (deduped). Falling back

@@ -10,9 +10,11 @@
 //   3. First workspace the user is a member of
 //   4. null → triggers default-workspace creation in migration
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createSharedSubscription } from '../services/sharedSubscription';
-import { nextActiveWorkspaceId } from '../services/activeWorkspace';
+import {
+  nextActiveWorkspaceId, scopeWorkspaceIds, mergedMemberProfiles, viewWorkspace,
+} from '../services/activeWorkspace';
 import {
   onAuthChange,
   subscribeToWorkspaces,
@@ -58,6 +60,38 @@ export function useActiveWorkspaceId() {
     return () => _activeSubs.delete(cb);
   }, []);
   return ws;
+}
+
+// ─── All workspaces (a view, not a workspace) ──────────────────────────────
+// See services/activeWorkspace.js for why this is a flag beside the active
+// workspace rather than a value of it. Per device, like the active workspace.
+
+const ALL_STORAGE_KEY = 'task-monitor.allWorkspaces.v1';
+let _allWorkspaces = false;
+try { _allWorkspaces = localStorage.getItem(ALL_STORAGE_KEY) === '1'; } catch {/* ignored */}
+const _allSubs = new Set();
+
+export function getAllWorkspaces() {
+  return _allWorkspaces;
+}
+
+export function setAllWorkspaces(on) {
+  const next = !!on;
+  if (_allWorkspaces === next) return;
+  _allWorkspaces = next;
+  try { next ? localStorage.setItem(ALL_STORAGE_KEY, '1') : localStorage.removeItem(ALL_STORAGE_KEY); }
+  catch {/* ignored */}
+  _allSubs.forEach((cb) => { try { cb(next); } catch {/* ignored */} });
+}
+
+export function useAllWorkspaces() {
+  const [on, setOn] = useState(_allWorkspaces);
+  useEffect(() => {
+    const cb = (v) => setOn(v);
+    _allSubs.add(cb);
+    return () => _allSubs.delete(cb);
+  }, []);
+  return on;
 }
 
 // ─── useWorkspaces ──────────────────────────────────────────────────────────
@@ -178,4 +212,36 @@ export function useSyncMyMemberProfile(workspaces) {
       });
     });
   }, [workspaces]);
+}
+
+// ─── The view's workspaces ────────────────────────────────────────────────
+
+/**
+ * The workspace ids pages READ: the active one, or every one in "All
+ * workspaces". `pending` is true while the list it depends on is loading,
+ * so a page shows a spinner instead of an empty answer.
+ */
+export function useScopeWorkspaceIds() {
+  const activeId = useActiveWorkspaceId();
+  const all = useAllWorkspaces();
+  const { workspaces, loading } = useWorkspaces();
+  const ids = scopeWorkspaceIds({ all, activeId, workspaces });
+  const key = ids.join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stable = useMemo(() => ids, [key]);
+  return { ids: stable, all, activeId, pending: all && loading };
+}
+
+/** Every member's name and photo across your workspaces, keyed by uid. */
+export function useMemberProfiles() {
+  const { workspaces } = useWorkspaces();
+  return useMemo(() => mergedMemberProfiles(workspaces), [workspaces]);
+}
+
+/** The workspace a page is looking at — the active one, or all of them combined. */
+export function useViewWorkspace() {
+  const activeId = useActiveWorkspaceId();
+  const all = useAllWorkspaces();
+  const { workspaces } = useWorkspaces();
+  return useMemo(() => viewWorkspace({ all, activeId, workspaces }), [all, activeId, workspaces]);
 }

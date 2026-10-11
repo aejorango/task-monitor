@@ -9,6 +9,7 @@
 import { useSyncExternalStore } from 'react';
 import { todayLocal, addDaysISO } from '../src/services/recurrence.js';
 import { statusStamps } from '../src/services/taskStatus.js';
+import { scopeWorkspaceIds, mergedMemberProfiles, viewWorkspace } from '../src/services/activeWorkspace.js';
 
 const T = todayLocal();
 const at = (n) => addDaysISO(T, n);
@@ -45,6 +46,7 @@ let state = {
       phases: [{ id: 'ph-1', name: 'Discovery', order: 0 }, { id: 'ph-2', name: 'Build', order: 1 }, { id: 'ph-3', name: 'Launch', order: 2 }] },
     { id: 'p-api', workspaceId: 'ws-1', name: 'Partner API', segment: 'Lending', color: '#e2892e', userId: 'u-mia', members: [ME, 'u-raf'], phases: [] },
     { id: 'p-mkt', workspaceId: 'ws-1', name: 'Marketplace', segment: 'Growth', color: '#7B2D8F', userId: ME, members: ['u-jen'], phases: [] },
+    { id: 'p-home', workspaceId: 'ws-2', name: 'Home admin', color: '#137a36', userId: ME, members: [], phases: [] },
     { id: 'p-comp', workspaceId: 'ws-1', name: 'Compliance', color: '#137a36', userId: 'u-raf', members: [ME], phases: [] },
   ],
   tasks: [
@@ -64,6 +66,10 @@ let state = {
     task({ id: 't-11', title: 'Someday: marketplace analytics', projectId: 'p-mkt', plan: {} }),
     task({ id: 't-12', title: 'Kick-off deck', projectId: 'p-sblaf', phaseId: 'ph-1', status: 'done', plan: { endDate: at(-6) }, actual: { startDate: at(-8), endDate: at(-5) }, estimateHours: 4, totalHoursLogged: 3.5 }),
     task({ id: 't-13', title: 'API key rotation', projectId: 'p-api', status: 'done', assignedTo: ['u-raf'], plan: { endDate: at(-2) }, actual: { startDate: at(-3), endDate: at(-2) } }),
+    // ── Personal (ws-2): what "All workspaces" adds to the same days ──
+    task({ id: 'h-1', workspaceId: 'ws-2', projectId: 'p-home', title: 'Renew car registration', priority: 'high', plan: { endDate: at(0) }, estimateHours: 1 }),
+    task({ id: 'h-2', workspaceId: 'ws-2', projectId: 'p-home', title: 'Book the dentist', plan: { endDate: at(2) } }),
+    task({ id: 'h-3', workspaceId: 'ws-2', projectId: 'p-home', title: 'File the tax return', status: 'doing', plan: { startDate: at(-3), endDate: at(4) }, estimateHours: 3, totalHoursLogged: 1 }),
     task({ id: 't-14', title: 'Borrower portal SSO', projectId: 'p-sblaf', phaseId: 'ph-3', status: 'doing', assignedTo: ['u-mia'], plan: { startDate: at(-5), endDate: at(1) }, estimateHours: 9, totalHoursLogged: 6 }),
   ],
   activities: [
@@ -101,6 +107,10 @@ let state = {
   ],
 };
 
+// Activities carry their workspace, as the real documents do.
+state.activities = state.activities.map((a) => ({ workspaceId: state.tasks.find((t) => t.id === a.taskId)?.workspaceId || 'ws-1', ...a }));
+state.all = false;
+
 let version = 0;
 const listeners = new Set();
 const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -123,7 +133,10 @@ function patch(obj, updates) {
   return out;
 }
 const live = (t) => !t.deleted && !t.archived;
-const inWs = (x) => x.workspaceId === state.workspaceId || (!x.workspaceId && state.workspaceId === 'ws-1');
+const wsOf = (x) => x.workspaceId || 'ws-1';
+// The workspaces in view — the real rule, from services/activeWorkspace.js.
+const scope = () => scopeWorkspaceIds({ all: state.all, activeId: state.workspaceId, workspaces: state.workspaces });
+const inWs = (x) => scope().includes(wsOf(x));
 
 const HOOKS = {
   useAuth: () => ({ userId: ME, ready: true }),
@@ -141,12 +154,10 @@ const HOOKS = {
   useActivities: (taskId) => ({ activities: state.activities.filter((a) => a.taskId === taskId), loading: false }),
   useTaskComments: (_ws, taskId) => ({ comments: state.comments.filter((c) => c.taskId === taskId), loading: false }),
   useMinutes: () => ({
-    minutes: state.workspaceId === 'ws-1'
-      ? state.minutes.filter((x) => !x.deleted).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-      : [],
+    minutes: state.minutes.filter((x) => !x.deleted && inWs(x)).sort((a, b) => String(b.date).localeCompare(String(a.date))),
     loading: false,
   }),
-  useGoals: () => ({ goals: state.workspaceId === 'ws-1' ? state.goals : [], loading: false }),
+  useGoals: () => ({ goals: state.goals.filter(inWs), loading: false }),
   useAllWorkspaceProjects: () => ({ projects: state.projects, loading: false }),
   useAllWorkspaceTasks: () => ({ tasks: state.tasks.filter(live), loading: false }),
   useWebhooks: () => ({ hooks: [{ id: 'w1', url: 'https://hooks.example.test/tm' }], loading: false, userId: ME, workspaceId: state.workspaceId }),
@@ -155,6 +166,10 @@ const HOOKS = {
   useMyTasksAcrossWorkspaces: () => ({ tasks: [], loading: false }),
   useRecentActivities: () => ({ activities: [], byDay: {}, totalHours: 0, loading: false }),
   useActiveWorkspaceId: () => state.workspaceId,
+  useAllWorkspaces: () => state.all,
+  useMemberProfiles: () => mergedMemberProfiles(state.workspaces),
+  useViewWorkspace: () => viewWorkspace({ all: state.all, activeId: state.workspaceId, workspaces: state.workspaces }),
+  useScopeWorkspaceIds: () => ({ ids: scope(), all: state.all, activeId: state.workspaceId, pending: false }),
   useWorkspaces: () => ({ workspaces: state.workspaces, loading: false }),
   useSyncMyMemberProfile: () => undefined,
   useInbox: () => ({
@@ -172,6 +187,8 @@ const VALUES = {
 
 const CALLS = {
   getActiveWorkspaceId: () => state.workspaceId,
+  getAllWorkspaces: () => state.all,
+  setAllWorkspaces: (on) => set((s) => ({ ...s, all: !!on })),
   setActiveWorkspaceId: (id) => set((s) => ({ ...s, workspaceId: id })),
   peekAuthState: () => ({ userId: ME, ready: true }),
   uid: () => nid('id'),
@@ -230,6 +247,31 @@ const CALLS = {
   async signOutUser() {},
 };
 
+// ── Firebase's own subscribe* calls, answered live ─────────────────────────
+// With HARNESS=desktop only firebase.js is stubbed, so the REAL hooks run and
+// call these. Each answer is recomputed and re-sent whenever the store changes.
+const inOne = (ws) => (x) => wsOf(x) === ws;
+const SUBS = {
+  onAuthChange: () => ({ uid: ME, isAnonymous: false, displayName: 'Ace Jorango', email: 'ace@example.test', photoURL: null, providerData: [] }),
+  subscribeToUserProfile: () => ({ uid: ME, role: 'superadmin', status: 'approved', displayName: 'Ace Jorango', email: 'ace@example.test' }),
+  subscribeToWorkspaces: () => state.workspaces,
+  subscribeToTasks: (ws) => state.tasks.filter((t) => inOne(ws)(t) && !t.deleted),
+  subscribeToProjects: (ws) => state.projects.filter((p) => inOne(ws)(p) && !p.deleted),
+  subscribeToSharedProjects: () => [],
+  subscribeToAllActivities: (ws) => state.activities.filter(inOne(ws)),
+  subscribeToRecentActivities: (ws, since) => state.activities.filter((a) => inOne(ws)(a) && a.date >= since),
+  subscribeToActivities: (ws, taskId) => state.activities.filter((a) => inOne(ws)(a) && a.taskId === taskId),
+  subscribeToGoals: (ws) => state.goals.filter(inOne(ws)),
+  subscribeToMinutes: (ws) => state.minutes.filter((x) => inOne(ws)(x) && !x.deleted),
+  subscribeToTemplates: () => [],
+  subscribeToTaskComments: (_ws, taskId) => state.comments.filter((c) => c.taskId === taskId),
+  subscribeToTasksAcrossWorkspaces: (ids) => state.tasks.filter((t) => ids.includes(wsOf(t)) && !t.deleted),
+  subscribeToProjectsAcrossWorkspaces: (ids) => state.projects.filter((p) => ids.includes(wsOf(p))),
+  subscribeToMyTasksAcrossWorkspaces: (ids, uid) => state.tasks.filter((t) => ids.includes(wsOf(t)) && (t.assignedTo || []).includes(uid)),
+  subscribeToActivitiesAcrossWorkspaces: (ids, since) => state.activities.filter((a) => ids.includes(wsOf(a)) && (!since || a.date >= since)),
+  subscribeToMyNotifications: () => state.notices,
+};
+
 // One answer per hook per store version, so a re-render that changed nothing
 // hands back the same arrays — as a Firestore listener does.
 const cache = new Map();
@@ -247,10 +289,15 @@ export const h = {
   call(name, args) {
     log(name, args);
     if (CALLS[name]) return CALLS[name](...args);
-    if (name.startsWith('subscribe')) {
+    if (name.startsWith('subscribe') || name === 'onAuthChange') {
       const cb = [...args].reverse().find((x) => typeof x === 'function');
-      cb?.(name === 'subscribeToUserProfile' ? { role: 'member', status: 'approved', displayName: 'Ace Jorango' } : []);
-      return () => {};
+      const rest = args.filter((x) => typeof x !== 'function');
+      const answer = SUBS[name] ? () => SUBS[name](...rest) : () => [];
+      // A listener answers asynchronously, as Firestore's does.
+      let alive = true;
+      queueMicrotask(() => { if (alive) cb?.(answer()); });
+      const off = SUBS[name] ? subscribe(() => { if (alive) cb?.(answer()); }) : () => {};
+      return () => { alive = false; off(); };
     }
     return Promise.resolve(undefined);
   },

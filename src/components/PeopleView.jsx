@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { useTasks, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useViewWorkspace } from '../hooks/useWorkspace';
 import { todayLocal } from '../services/firebase';
 import { addDaysISO } from '../services/dueAlerts';
 import { PageActions, PageSubtitle } from './PageHeader';
@@ -45,9 +45,7 @@ function avatarColorFor(uid) {
 export default function PeopleView() {
   const { tasks, loading: tasksLoading } = useTasks();
   const { activities, loading: actsLoading } = useAllActivities();
-  const { workspaces } = useWorkspaces();
-  const activeWsId = useActiveWorkspaceId();
-  const workspace = workspaces.find((w) => w.id === activeWsId);
+  const workspace = useViewWorkspace();
   const [rangeId, setRangeId] = useState('7');
   const range = RANGES.find((r) => r.id === rangeId);
 

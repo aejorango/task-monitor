@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTasks, useAllActivities, useProjects } from '../hooks/useTasks';
-import { useActiveWorkspaceId, setActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import {
+  useActiveWorkspaceId, setActiveWorkspaceId, useWorkspaces, useAllWorkspaces, setAllWorkspaces,
+} from '../hooks/useWorkspace';
 import { useOnline } from '../hooks/useOnline';
 import { addSavedView, auth, onAuthChange, todayLocal } from '../services/firebase';
 import { blockedTaskIds, isStuck } from '../services/boardScope';
@@ -148,6 +150,9 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
   // that could disagree with the route.
   const activeHub = hubForView(route.view);
   const activeWorkspace = workspaces.find((w) => w.id === activeWs) || null;
+  // "All workspaces" is a view over every workspace; the active one stays
+  // real (it is where new items go). See services/activeWorkspace.js.
+  const allWorkspaces = useAllWorkspaces();
   // Stable, so FindItem's debounce effect is not torn down on every render of
   // the shell. `navigate` is a fresh arrow each render (useRoute builds it
   // from the current route), so it goes in a ref the handler reads when it
@@ -209,7 +214,9 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
           <WorkspaceSwitcher
             workspaces={workspaces}
             activeId={activeWs}
-            onSwitch={(id) => navigateAndClose({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null })}
+            allOn={allWorkspaces}
+            onAll={() => { setAllWorkspaces(true); navigateAndClose({ projectFilter: 'all', savedViewId: null, tagFilter: null }); }}
+            onSwitch={(id) => { setAllWorkspaces(false); navigateAndClose({ workspaceId: id, projectFilter: 'all', savedViewId: null, tagFilter: null }); }}
             onManage={() => navigateAndClose({ view: 'workspaces', savedViewId: null, tagFilter: null })}
           />
         </div>
@@ -274,7 +281,7 @@ export default function AppShell({ userId, ready, projects, route, navigate, chi
         ) : null}
         pageLabel={current.label}
         pageIcon={current.icon}
-        workspaceName={activeWorkspace?.name}
+        workspaceName={allWorkspaces ? 'All workspaces' : activeWorkspace?.name}
         status={<>
           {/* The Board Explorer's crumb strip carries the one number worth
               interrupting for, then the connection. Online, the right-hand end

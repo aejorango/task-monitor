@@ -97,7 +97,8 @@ export default function DueTaskAlertModal({ navigate }) {
   const live = current ? `Next due task: ${current.title}` : '';
 
   const project = current ? byId[current.projectId] : null;
-  const workspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
+  // The TASK's workspace: in All workspaces it may not be the active one.
+  const workspace = workspaces.find((w) => w.id === (current?.workspaceId || activeWorkspaceId)) || null;
 
   const onSnooze = useCallback((minutes) => {
     const r = snooze(minutes);

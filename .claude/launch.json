@@ -45,6 +45,21 @@
         "--strictPort"
       ],
       "port": 5176
+    },
+    {
+      "name": "desktop-harness",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "HARNESS=desktop",
+        "npx",
+        "vite",
+        "--config",
+        "dev/mobile.vite.config.js",
+        "--port",
+        "5178",
+        "--strictPort"
+      ],
+      "port": 5178
     }
   ]
 }

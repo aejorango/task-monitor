@@ -19,9 +19,11 @@
 export function mergeProjectLists(workspaceProjects = [], sharedProjects = [], workspaceId = null) {
   const map = new Map();
   workspaceProjects.forEach((p) => map.set(p.id, p));
+  // One workspace, or — with "All workspaces" on — the list of them in view.
+  const inView = new Set(Array.isArray(workspaceId) ? workspaceId : [workspaceId]);
 
   sharedProjects.forEach((p) => {
-    if (p.workspaceId === workspaceId && !map.has(p.id)) {
+    if (inView.has(p.workspaceId) && !map.has(p.id)) {
       map.set(p.id, { ...p, _shared: true });
     }
   });

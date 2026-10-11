@@ -591,6 +591,15 @@ a:hover { text-decoration: underline; }
 }
 .ws-icon-sm  { width: 24px; height: 24px; font-size: 12px; border-radius: 5px; }
 .ws-icon-empty { background: var(--c-surface-2); color: var(--c-text-3); border: 1px dashed var(--c-border); }
+/* "All workspaces": four tiles in the workspace tile's place, in the
+   accent and its tint — a set, not one more workspace. */
+.ws-icon.ws-icon-all {
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; padding: 5px;
+  place-items: stretch; background: var(--c-accent-soft);
+}
+.ws-icon.ws-icon-all.ws-icon-sm { padding: 4px; gap: 2px; }
+.ws-icon-all > span { border-radius: 2px; background: var(--c-accent); }
+.ws-icon-all > span:nth-child(2), .ws-icon-all > span:nth-child(3) { opacity: .55; }
 .ws-info { flex: 1; overflow: hidden; }
 .ws-name {
   font-weight: 600;
@@ -15246,3 +15255,6 @@ a:hover { text-decoration: underline; }
   background: var(--m-bg); border: 1px solid var(--m-line); border-radius: 999px; padding: 4px 10px; text-decoration: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.m-ws-dot.is-all { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 7px; place-items: stretch; background: var(--m-orange-tint); }
+.m-ws-dot.is-all > span { border-radius: 2px; background: var(--m-orange); }
+.m-ws-dot.is-all > span:nth-child(2), .m-ws-dot.is-all > span:nth-child(3) { opacity: .55; }

@@ -24,7 +24,7 @@
 
 import { useMemo } from 'react';
 import { useProjects, useTasks, useAuth, useAllActivities } from '../hooks/useTasks';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useViewWorkspace } from '../hooks/useWorkspace';
 import { memberLabel } from '../services/invites';
 import { todayLocal } from '../services/recurrence';
 import { DEFAULT_CAPACITY_HOURS, HOURS_PER_TASK, taskHours } from '../services/workload';
@@ -38,10 +38,8 @@ export default function WorkloadView({ projectFilter = 'all', route = {}, naviga
   const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
   const { byId: projectById } = useProjects();
   const { userId } = useAuth();
-  const workspaceId = useActiveWorkspaceId();
-  const { workspaces } = useWorkspaces();
 
-  const workspace = workspaces.find((w) => w.id === workspaceId);
+  const workspace = useViewWorkspace();
   const members = useMemo(() => workspace?.members || [], [workspace]);
   const memberProfiles = useMemo(() => workspace?.memberProfiles || {}, [workspace]);
 

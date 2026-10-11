@@ -21,7 +21,7 @@ const LINK_REL = { 'related-to': 'RELATED TO', 'duplicate-of': 'DUPLICATE OF', b
 export default function MobileTaskDetail() {
   const m = useMobile();
   const t = m.task;
-  const { activities: acts } = useActivities(t.id);
+  const { activities: acts } = useActivities(t.id, t.workspaceId);
   const { comments } = useTaskComments(t.workspaceId, t.id);
   const ai = useAiStatus();
   const [comment, setComment] = useState('');
@@ -58,7 +58,8 @@ export default function MobileTaskDetail() {
     ...m.members.map((uid) => ({ value: uid, label: m.nameOf(uid), uid, on: owner?.uid === uid })),
     { value: '', label: 'Unassigned', on: !owner },
   ], (v) => m.setTaskField(t, 'owner', v));
-  const pickProject = () => pick('Project', m.projects.map((p) => ({
+  // Only projects in the task's own workspace (see TaskEditor's projectChoices).
+  const pickProject = () => pick('Project', m.projects.filter((p) => !p.workspaceId || p.workspaceId === t.workspaceId).map((p) => ({
     value: p.id, label: p.name, color: p.color, on: p.id === t.projectId,
   })), (v) => m.setTaskField(t, 'project', v));
   const pickDate = (field, title) => {

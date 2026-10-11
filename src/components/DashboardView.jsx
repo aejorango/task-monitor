@@ -12,7 +12,7 @@
 import { useState, useMemo } from 'react';
 import { useTasks, useProjects, useAllActivities, useAuth } from '../hooks/useTasks';
 import { displayStatus } from '../services/boardScope';
-import { useActiveWorkspaceId, useWorkspaces } from '../hooks/useWorkspace';
+import { useActiveWorkspaceId, useWorkspaces, useViewWorkspace } from '../hooks/useWorkspace';
 import { todayLocal, auth } from '../services/firebase';
 import { suggestNextTask } from '../services/anthropic';
 import { topThemes } from '../services/askAi';
@@ -117,7 +117,7 @@ export default function DashboardView({ projectFilter, navigate }) {
   const { activities, loading: actsLoading } = useAllActivities();
   const activeWorkspaceId = useActiveWorkspaceId();
   const { workspaces, loading: wsLoading } = useWorkspaces();
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const activeWorkspace = useViewWorkspace();
   const { available: aiAvailable } = useAiStatus();
 
   // The one document a manager asks for. Built on demand from the same digest
