@@ -36,14 +36,15 @@ let state = {
     {
       id: 'ws-1', name: 'BRIDGED Q3', color: '#0051BA', members: Object.keys(PROFILES), memberProfiles: PROFILES,
       acl: { 'u-ace': 'owner', 'u-mia': 'admin', 'u-raf': 'editor', 'u-jen': 'viewer' },
+      segments: [{ id: 'sg-1', name: 'Lending' }, { id: 'sg-2', name: 'Growth' }],
     },
     { id: 'ws-2', name: 'Personal', color: '#137a36', members: [ME], memberProfiles: { [ME]: PROFILES[ME] }, acl: { [ME]: 'owner' } },
   ],
   projects: [
-    { id: 'p-sblaf', workspaceId: 'ws-1', name: 'SBLAF onboarding', color: '#0051BA', userId: ME, members: ['u-mia', 'u-raf'],
+    { id: 'p-sblaf', workspaceId: 'ws-1', name: 'SBLAF onboarding', segment: 'Lending', color: '#0051BA', userId: ME, members: ['u-mia', 'u-raf'],
       phases: [{ id: 'ph-1', name: 'Discovery', order: 0 }, { id: 'ph-2', name: 'Build', order: 1 }, { id: 'ph-3', name: 'Launch', order: 2 }] },
-    { id: 'p-api', workspaceId: 'ws-1', name: 'Partner API', color: '#e2892e', userId: 'u-mia', members: [ME, 'u-raf'], phases: [] },
-    { id: 'p-mkt', workspaceId: 'ws-1', name: 'Marketplace', color: '#7B2D8F', userId: ME, members: ['u-jen'], phases: [] },
+    { id: 'p-api', workspaceId: 'ws-1', name: 'Partner API', segment: 'Lending', color: '#e2892e', userId: 'u-mia', members: [ME, 'u-raf'], phases: [] },
+    { id: 'p-mkt', workspaceId: 'ws-1', name: 'Marketplace', segment: 'Growth', color: '#7B2D8F', userId: ME, members: ['u-jen'], phases: [] },
     { id: 'p-comp', workspaceId: 'ws-1', name: 'Compliance', color: '#137a36', userId: 'u-raf', members: [ME], phases: [] },
   ],
   tasks: [
@@ -196,6 +197,14 @@ const CALLS = {
   },
   async uploadFile({ file }) { return { name: file.name, url: URL.createObjectURL(file), type: file.type, size: file.size }; },
   async addTaskComment(userId, t, body) { set((s) => ({ ...s, comments: [...s.comments, { id: nid('c'), taskId: t.id, userId, body, createdAt: secsAgo(0) }] })); },
+  async addProject(userId, project) {
+    const id = nid('p');
+    set((s) => ({ ...s, projects: [...s.projects, { ...project, id, userId, members: [userId], acl: { [userId]: 'admin' }, archived: false, deleted: false }] }));
+    return { id };
+  },
+  async addSegmentToWorkspace(wsId, name) {
+    set((s) => ({ ...s, workspaces: s.workspaces.map((w) => (w.id === wsId ? { ...w, segments: [...(w.segments || []), { id: nid('sg'), name }] } : w)) }));
+  },
   async addMinute(userId, minute) {
     const id = nid('m');
     set((s) => ({ ...s, minutes: [{ ...minute, id, userId, deleted: false }, ...s.minutes] }));

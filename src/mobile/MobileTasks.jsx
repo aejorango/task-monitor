@@ -3,7 +3,7 @@
 // Search, the filter sheet, the project menu and multi-select all narrow the
 // same list, through `filterTasks` in services/mobileModel.js.
 
-import { useMemo } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useMobile, Ico, ICON, Face } from './mobileUi';
 import { TaskRow, TaskCard } from './MobileRows';
 import {
@@ -191,24 +191,50 @@ function GroupIcon({ g }) {
   return <span className={`m-group-icon m-tone-${b.tone}`}>{b.icon}</span>;
 }
 
+// Five weeks back and thirteen on: enough to look at last month and the
+// quarter ahead without the strip turning into a calendar.
+const STRIP_BEFORE = 35;
+const STRIP_AFTER = 90;
+
 function WeekView({ visible }) {
   const m = useMobile();
-  const strip = useMemo(() => weekStrip(visible, m.today), [visible, m.today]);
+  const strip = useMemo(() => weekStrip(visible, m.today, { before: STRIP_BEFORE, after: STRIP_AFTER }), [visible, m.today]);
   const day = strip.some((d) => d.ymd === m.tv.wday) ? m.tv.wday : m.today;
   const due = visible.filter((t) => t.status !== 'done' && t.plan?.endDate === day);
+  const rail = useRef(null);
+
+  // Bring a day into the middle of the strip: the chosen one when the view
+  // opens, today when "Today" is pressed.
+  const centre = useCallback((ymd, smooth) => {
+    const el = rail.current?.querySelector(`[data-ymd="${ymd}"]`);
+    if (!el) return;
+    const left = el.offsetLeft - (rail.current.clientWidth - el.offsetWidth) / 2;
+    rail.current.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+  // Once, on open — not on every selection, or a tap would yank the strip.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { centre(day, false); }, [centre]);
+
+  const goToday = () => { m.patchTv({ wday: m.today }); centre(m.today, true); };
+
   return (
     <div className="m-stack is-14">
-      <div className="m-strip">
+      <div className="m-strip" ref={rail} role="listbox" aria-label="Days">
         {strip.map((d) => (
-          <button key={d.ymd} type="button" className={`m-strip-day${day === d.ymd ? ' is-on' : ''}`}
-            aria-pressed={day === d.ymd} onClick={() => m.patchTv({ wday: d.ymd })}>
+          <button key={d.ymd} type="button" data-ymd={d.ymd} role="option" aria-selected={day === d.ymd}
+            className={`m-strip-day${day === d.ymd ? ' is-on' : ''}${d.ymd === m.today ? ' is-today' : ''}${d.ymd < m.today ? ' is-past' : ''}`}
+            onClick={() => m.patchTv({ wday: d.ymd })}>
+            <span className="m-strip-month">{d.month || ''}</span>
             <span className="m-strip-dow">{d.dow}</span>
             <span className="m-strip-n">{d.n}</span>
             <span className={`m-strip-cnt${d.count ? ' has' : ''}`}>{d.count || ''}</span>
           </button>
         ))}
       </div>
-      <div className="m-kicker">{weekDayLabel(day, m.today)}</div>
+      <div className="m-kicker-row is-flush">
+        <span className="m-kicker">{weekDayLabel(day, m.today)}</span>
+        {day !== m.today && <button type="button" className="m-link" onClick={goToday}>Today</button>}
+      </div>
       <div className="m-stack is-9">
         {due.map((t) => <TaskCard key={t.id} task={t} />)}
         {due.length === 0 && <div className="m-quiet">Nothing due this day</div>}

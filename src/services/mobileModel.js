@@ -239,7 +239,9 @@ export function groupTasks(tasks = [], {
       return {
         ...g,
         items,
-        defaultOpen: g.key !== 'later' && g.key !== 'done',
+        // Every group starts folded: the heads are the overview (a count and
+        // the hours in each), and a tap opens the one you want.
+        defaultOpen: false,
         hoursLabel: `${Math.round(hours * 10) / 10}h${isDone ? '' : ' left'}`,
       };
     });
@@ -250,16 +252,27 @@ export const GROUP_LABEL = { due: 'Due', project: 'Project', owner: 'Owner' };
 
 // ── the Week view ───────────────────────────────────────────────────────────
 
-/** Seven days from today, each with how many open tasks are due on it. */
-export function weekStrip(tasks = [], today) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const ymd = addDays(today, i);
+/**
+ * The Week strip: `before` days back and `after` days on from today, each with
+ * how many open tasks are due on it. The strip scrolls sideways, so it is a
+ * run of weeks rather than one; 0 / 6 is the original seven days.
+ */
+export function weekStrip(tasks = [], today, { before = 0, after = 6 } = {}) {
+  const due = {};
+  tasks.forEach((t) => {
+    if (live(t) && t.status !== 'done' && t.plan?.endDate) due[t.plan.endDate] = (due[t.plan.endDate] || 0) + 1;
+  });
+  return Array.from({ length: before + after + 1 }, (_, i) => {
+    const ymd = addDays(today, i - before);
     const d = dateOf(ymd);
     return {
       ymd,
       dow: d.toLocaleDateString('en', { weekday: 'short' }).toUpperCase(),
       n: d.getDate(),
-      count: tasks.filter((t) => live(t) && t.status !== 'done' && t.plan?.endDate === ymd).length,
+      // The month, on the 1st and on the strip's first day, so a scroll that
+      // crosses into another month says so.
+      month: d.getDate() === 1 || i === 0 ? d.toLocaleDateString('en', { month: 'short' }).toUpperCase() : null,
+      count: due[ymd] || 0,
     };
   });
 }
@@ -513,3 +526,54 @@ export function minutePayload(form) {
 export function minuteChanged(a, b) {
   return JSON.stringify(minutePayload(a)) !== JSON.stringify(minutePayload(b));
 }
+
+// ── Projects: segments, sort, search ───────────────────────────────────────
+
+export const NO_SEGMENT = 'Uncategorized';
+
+/**
+ * The segments to divide the list by: the workspace's own, plus any a project
+ * still carries from before it was defined, Uncategorized last — the order
+ * the desktop Portfolio uses.
+ */
+export function segmentNames(workspace, projects = []) {
+  const set = new Set((workspace?.segments || []).map((s) => s.name).filter(Boolean));
+  projects.forEach((p) => set.add(p.segment || NO_SEGMENT));
+  return [...set].sort((a, b) => (a === NO_SEGMENT) - (b === NO_SEGMENT) || a.localeCompare(b));
+}
+
+/** How the Projects list can be sorted. Health is the desktop's own ranking. */
+export const PROJECT_SORTS = {
+  health: 'Health — worst first',
+  name: 'Name',
+  progress: 'Progress — least first',
+  due: 'Finish date — soonest first',
+};
+
+/** Sort rated rows (from rateProjects, already in health order). */
+export function sortProjects(rows = [], by = 'health') {
+  const name = (r) => String(r.project?.name || '');
+  const out = [...rows];
+  if (by === 'name') out.sort((a, b) => name(a).localeCompare(name(b)));
+  else if (by === 'progress') out.sort((a, b) => a.pct - b.pct || name(a).localeCompare(name(b)));
+  // A project with no finish date has said nothing about when: last, not first.
+  else if (by === 'due') out.sort((a, b) => String(a.end || '9999').localeCompare(String(b.end || '9999')) || name(a).localeCompare(name(b)));
+  return out;
+}
+
+export function searchProjects(rows = [], q = '') {
+  const n = String(q || '').trim().toLowerCase();
+  if (!n) return rows;
+  return rows.filter((r) => `${r.project?.name || ''} ${r.project?.description || ''} ${r.project?.segment || ''}`.toLowerCase().includes(n));
+}
+
+/** Rows divided into segments, in segment order; empty segments are left out. */
+export function bySegment(rows = [], segments = []) {
+  const order = segments.length ? segments : [NO_SEGMENT];
+  return order
+    .map((seg) => ({ segment: seg, rows: rows.filter((r) => (r.project?.segment || NO_SEGMENT) === seg) }))
+    .filter((g) => g.rows.length);
+}
+
+/** The colours a new project can take — the desktop editor's own swatches. */
+export const PROJECT_SWATCHES = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];

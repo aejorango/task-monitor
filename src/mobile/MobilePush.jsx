@@ -26,12 +26,13 @@ import { readDone, markDone, markUndone } from '../services/tutorialProgress';
 import { exportDocument, heading, keyValues, table, paragraph } from '../services/exporters';
 import {
   RAG_WORD, reportFor, workLogDays, attachmentsOf, goalBreakdown, weightLabel, shortDate,
-  fileSize, mobileStatus,
+  fileSize, mobileStatus, segmentNames, bySegment, sortProjects, searchProjects, PROJECT_SORTS,
 } from '../services/mobileModel';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { useMobile, Ico, ICON, Face } from './mobileUi';
 import { TaskCard } from './MobileRows';
 import MobileMinuteEditor from './MobileMinuteEditor';
+import MobileProjectEditor from './MobileProjectEditor';
 
 const SettingsView = lazy(() => import('../components/SettingsView'));
 const GoalsView = lazy(() => import('../components/GoalsView'));
@@ -47,6 +48,7 @@ export default function MobilePush() {
   // The minutes editor is a full screen of its own, with its own Back: it
   // has to ask before throwing away a half-written meeting.
   if (p.kind === 'minute') return <MobileMinuteEditor />;
+  if (p.kind === 'project-new') return <MobileProjectEditor />;
   const project = p.kind === 'project' ? m.projectById[p.projectId] : null;
   const title = p.kind === 'project' ? (project?.name || 'Project') : p.kind === 'embed' ? p.title : TITLE[p.kind];
   const back = () => m.setPush(p.from || null);
@@ -55,6 +57,29 @@ export default function MobilePush() {
       <div className="m-push-top">
         <button type="button" className="m-back" onClick={back} aria-label="Back"><Ico d={ICON.back} stroke={2.6} /></button>
         <span className="m-push-title">{title}</span>
+        {p.kind === 'projects' && (
+          <div className="m-push-tools">
+            <button type="button" className={`m-icon-btn${p.searchOpen || p.q ? ' is-on' : ''}`} aria-label="Search projects"
+              aria-pressed={!!p.searchOpen} onClick={() => m.setPush({ ...p, searchOpen: !p.searchOpen, q: p.searchOpen ? '' : p.q })}>
+              <Ico d={ICON.search} size={19} stroke={2.3} />
+            </button>
+            <button type="button" className={`m-icon-btn${p.sort && p.sort !== 'health' ? ' is-on' : ''}`} aria-label="Sort projects"
+              onClick={() => {
+                m.setPicker({
+                  title: 'Sort by',
+                  options: Object.entries(PROJECT_SORTS).map(([k, label]) => ({ value: k, label, on: (p.sort || 'health') === k })),
+                  onPick: (v) => m.setPush({ ...p, sort: v }),
+                });
+                m.setSheet('pick');
+              }}>
+              <Ico d={ICON.updown} size={19} stroke={2.3} />
+            </button>
+            <button type="button" className="m-push-add is-icon" aria-label="New project"
+              onClick={() => m.setPush({ kind: 'project-new', from: { kind: 'projects', q: p.q, searchOpen: p.searchOpen, sort: p.sort } })}>
+              <Ico d={ICON.plus} size={20} stroke={2.6} />
+            </button>
+          </div>
+        )}
         {p.kind === 'minutes' && (
           <button type="button" className="m-push-add" aria-label="New minutes"
             onClick={() => m.setPush({
@@ -281,28 +306,71 @@ function teamOf(project, tasks) {
 
 function ProjectsScreen() {
   const m = useMobile();
+  const p = m.push;
+  const sort = p.sort || 'health';
   const rated = useMemo(() => rateProjects(m.projects, m.tasks, m.today), [m.projects, m.tasks, m.today]);
-  if (!rated.length) return <div className="m-quiet">No projects yet.</div>;
+  const segments = useMemo(() => segmentNames(m.workspace, m.projects), [m.workspace, m.projects]);
+  const groups = useMemo(
+    () => bySegment(sortProjects(searchProjects(rated, p.q), sort), segments),
+    [rated, p.q, sort, segments],
+  );
+  const shown = groups.reduce((n, g) => n + g.rows.length, 0);
+  // The list's own state rides on the push, so opening a project and coming
+  // Back finds the same search, sort and scroll of segments.
+  const here = { kind: 'projects', q: p.q, searchOpen: p.searchOpen, sort };
+
+  if (!rated.length) {
+    return (
+      <div className="m-nothing">
+        <div className="m-nothing-title">No projects yet</div>
+        <button type="button" className="m-pill-btn" onClick={() => m.setPush({ kind: 'project-new', from: here })}>Create the first one</button>
+      </div>
+    );
+  }
   return (
     <div className="m-stack is-12">
-      {rated.map((h) => (
-        <button key={h.project.id} type="button" className="m-pcard"
-          style={{ '--m-proj': h.project.color || 'var(--m-faint)' }}
-          onClick={() => m.setPush({ kind: 'project', projectId: h.project.id, from: { kind: 'projects' } })}>
-          <div className="m-pcard-top">
-            <span className="m-pcard-name">{h.project.name}</span>
-            <span className="m-pcard-rag">{RAG_WORD[h.rag]}</span>
+      {p.searchOpen && (
+        <div className="m-search">
+          <Ico d={ICON.search} size={16} stroke={2.6} className="m-ink-2" />
+          <input autoFocus value={p.q || ''} placeholder={`Search ${rated.length} projects`} aria-label="Search projects"
+            onChange={(e) => m.setPush({ ...p, q: e.target.value })} />
+        </div>
+      )}
+      {sort !== 'health' && (
+        <div className="m-chips">
+          <button type="button" className="m-fchip" onClick={() => m.setPush({ ...p, sort: 'health' })} aria-label="Back to sorting by health">
+            Sorted by {PROJECT_SORTS[sort].split(' — ')[0].toLowerCase()}<span className="m-fchip-x">✕</span>
+          </button>
+        </div>
+      )}
+      {groups.map((g) => (
+        <div key={g.segment} className="m-stack is-12">
+          <div className="m-seg-divider">
+            <span className="m-seg-divider-name">{g.segment.toUpperCase()}</span>
+            <span className="m-seg-divider-n">{g.rows.length}</span>
+            <span className="m-seg-divider-rule" aria-hidden="true" />
           </div>
-          <div className="m-pcard-mid">
-            <span className="m-pcard-pct">{h.pct}%</span>
-            <span className="m-pcard-tasks">{h.done}/{h.total} tasks</span>
-            <span className="m-stackfaces is-right">
-              {teamOf(h.project, m.tasks).slice(0, 3).map((uid) => <Face key={uid} uid={uid} size={30} className="is-stacked" />)}
-            </span>
-          </div>
-          <div className="m-pcard-track"><span style={{ width: `${h.pct}%` }} /></div>
-        </button>
+          {g.rows.map((h) => (
+            <button key={h.project.id} type="button" className="m-pcard"
+              style={{ '--m-proj': h.project.color || 'var(--m-faint)' }}
+              onClick={() => m.setPush({ kind: 'project', projectId: h.project.id, from: here })}>
+              <div className="m-pcard-top">
+                <span className="m-pcard-name">{h.project.name}</span>
+                <span className="m-pcard-rag">{RAG_WORD[h.rag]}</span>
+              </div>
+              <div className="m-pcard-mid">
+                <span className="m-pcard-pct">{h.pct}%</span>
+                <span className="m-pcard-tasks">{h.done}/{h.total} tasks{sort === 'due' && h.end ? ` · ends ${shortDate(h.end, m.today)}` : ''}</span>
+                <span className="m-stackfaces is-right">
+                  {teamOf(h.project, m.tasks).slice(0, 3).map((uid) => <Face key={uid} uid={uid} size={30} className="is-stacked" />)}
+                </span>
+              </div>
+              <div className="m-pcard-track"><span style={{ width: `${h.pct}%` }} /></div>
+            </button>
+          ))}
+        </div>
       ))}
+      {shown === 0 && <div className="m-quiet">No project matches “{p.q}”.</div>}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   hoursLeft, hoursLabel, filterTasks, groupTasks, weekStrip, workloadRows, reportFor,
   workLogDays, attachmentsOf, goalBreakdown, weightLabel, shiftPlan, taskCode, fileType,
   splitNames, joinNames, pastChoices, minuteDraft, minutePayload, minuteChanged,
+  segmentNames, sortProjects, searchProjects, bySegment, NO_SEGMENT,
 } from './mobileModel.js';
 import { goalProgress } from './goalProgress.js';
 
@@ -78,7 +79,7 @@ test('filters combine, and the Stuck filter finds what the list calls Stuck', ()
   assert.deepEqual(ids({ q: 'deck' }), ['b']);
 });
 
-test('the List groups: buckets in order, empty ones dropped, Later and Done start shut', () => {
+test('the List groups: buckets in order, empty ones dropped, every one starts folded', () => {
   const tasks = [
     task({ id: 'x', plan: { endDate: at(-1) }, estimateHours: 4, totalHoursLogged: 1 }),
     task({ id: 'y', plan: {} }),
@@ -86,7 +87,7 @@ test('the List groups: buckets in order, empty ones dropped, Later and Done star
   ];
   const g = groupTasks(tasks, { by: 'due', blockedIds: NONE, today: TODAY });
   assert.deepEqual(g.map((x) => x.key), ['over', 'later', 'done']);
-  assert.deepEqual(g.map((x) => x.defaultOpen), [true, false, false]);
+  assert.deepEqual(g.map((x) => x.defaultOpen), [false, false, false]);
   assert.equal(g[0].hoursLabel, '3h left');
   assert.equal(g[2].hoursLabel, '2h', 'Done counts what was logged');
 
@@ -94,11 +95,20 @@ test('the List groups: buckets in order, empty ones dropped, Later and Done star
   assert.equal(byOwner[0].key, 'w_none', 'someone outside the workspace still lands somewhere');
 });
 
-test('the Week strip is seven days from today, counting open work due on each', () => {
-  const strip = weekStrip([task({ plan: { endDate: at(1) } }), task({ status: 'done', plan: { endDate: at(1) } })], TODAY);
-  assert.equal(strip.length, 7);
-  assert.equal(strip[0].ymd, TODAY);
-  assert.equal(strip[1].count, 1);
+test('the Week strip runs either side of today, counting open work due on each', () => {
+  const tasks = [task({ plan: { endDate: at(1) } }), task({ status: 'done', plan: { endDate: at(1) } }), task({ plan: { endDate: at(-3) } })];
+  const week = weekStrip(tasks, TODAY);
+  assert.equal(week.length, 7, 'the default is still seven days from today');
+  assert.equal(week[0].ymd, TODAY);
+  assert.equal(week[1].count, 1, 'done work is not counted');
+
+  const wide = weekStrip(tasks, TODAY, { before: 10, after: 20 });
+  assert.equal(wide.length, 31);
+  assert.equal(wide[10].ymd, TODAY);
+  assert.equal(wide[7].count, 1, 'a day before today counts too');
+  assert.equal(wide[0].month, 'JUL', 'the first day names its month');
+  assert.equal(wide.find((d) => d.ymd === '2026-08-01').month, 'AUG', 'and so does the 1st');
+  assert.equal(wide[11].month, null);
 });
 
 test('Team load counts the work nobody estimated instead of hiding it', () => {
@@ -199,4 +209,29 @@ test('the phone editor keeps the desktop shape, both ways', () => {
 
   assert.equal(minuteChanged(fresh, { ...fresh }), false);
   assert.equal(minuteChanged(fresh, { ...fresh, title: 'x' }), true);
+});
+
+test('projects divide into the workspace\'s segments, Uncategorized last', () => {
+  const ws = { segments: [{ name: 'Sales' }, { name: 'Finance' }] };
+  const projects = [{ id: 'a', segment: 'Finance' }, { id: 'b' }, { id: 'c', segment: 'Legacy' }];
+  const names = segmentNames(ws, projects);
+  assert.deepEqual(names, ['Finance', 'Legacy', 'Sales', NO_SEGMENT], 'a segment only a project carries still shows');
+  const rows = projects.map((project) => ({ project, pct: 0 }));
+  assert.deepEqual(bySegment(rows, names).map((g) => [g.segment, g.rows.length]), [['Finance', 1], ['Legacy', 1], [NO_SEGMENT, 1]],
+    'an empty segment is not drawn');
+});
+
+test('the Projects sort and search', () => {
+  const rows = [
+    { project: { name: 'Beta', description: 'payments' }, pct: 50, end: '2026-09-01' },
+    { project: { name: 'alpha' }, pct: 10, end: null },
+    { project: { name: 'Gamma' }, pct: 10, end: '2026-08-01' },
+  ];
+  const names = (r) => r.map((x) => x.project.name);
+  assert.deepEqual(names(sortProjects(rows, 'health')), ['Beta', 'alpha', 'Gamma'], 'health keeps the rated order');
+  assert.deepEqual(names(sortProjects(rows, 'name')), ['alpha', 'Beta', 'Gamma']);
+  assert.deepEqual(names(sortProjects(rows, 'progress')), ['alpha', 'Gamma', 'Beta']);
+  assert.deepEqual(names(sortProjects(rows, 'due')), ['Gamma', 'Beta', 'alpha'], 'no finish date goes last');
+  assert.deepEqual(names(searchProjects(rows, 'PAY')), ['Beta'], 'search reads the description too');
+  assert.equal(searchProjects(rows, '  ').length, 3);
 });

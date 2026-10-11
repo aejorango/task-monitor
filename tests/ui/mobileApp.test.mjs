@@ -152,3 +152,25 @@ test('Minutes has its filter, its + New and its editor, and asks before discardi
   assert.match(push, /assignedTo: owner \? \[owner\] : \[\]/);
   assert.match(sources['MobileMinuteEditor.jsx'], /minuteChanged\(form, initial\)[\s\S]*?ask\.confirm/);
 });
+
+test('Projects can be searched, sorted, divided by segment and added to', () => {
+  const push = sources['MobilePush.jsx'];
+  assert.match(push, /aria-label="Search projects"/);
+  assert.match(push, /aria-label="Sort projects"/);
+  assert.match(push, /aria-label="New project"/);
+  assert.match(push, /bySegment\(sortProjects\(searchProjects\(rated, p\.q\), sort\), segments\)/);
+  assert.match(push, /className="m-seg-divider"/);
+  assert.match(push, /if \(p\.kind === 'project-new'\) return <MobileProjectEditor \/>/);
+  // A new project is the desktop's document, made by the desktop's call.
+  const ed = sources['MobileProjectEditor.jsx'];
+  assert.match(ed, /addProject\(m\.userId, \{\s*workspaceId: m\.workspaceId/);
+  assert.match(ed, /addSegmentToWorkspace\(/);
+});
+
+test('Tasks: every group starts folded, and the week strip scrolls', () => {
+  assert.match(read('src/services/mobileModel.js'), /defaultOpen: false,/);
+  const tasks = sources['MobileTasks.jsx'];
+  assert.match(tasks, /weekStrip\(visible, m\.today, \{ before: STRIP_BEFORE, after: STRIP_AFTER \}\)/);
+  assert.match(tasks, /const goToday = /);
+  assert.match(css, /\.m-strip \{[^}]*overflow-x: auto/);
+});

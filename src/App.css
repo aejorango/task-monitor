@@ -14641,7 +14641,19 @@ a:hover { text-decoration: underline; }
 .m-nothing { text-align: center; padding: 36px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .m-nothing-title { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--m-ink-2); }
 .m-pill-btn { height: 42px; padding: 0 18px; border-radius: 999px; border: none; background: var(--m-navy); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; }
-.m-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+/* The strip scrolls sideways through weeks; seven days fill the width, as
+   the mockup's fixed strip did. The padding is room for the chosen day's
+   shadow, which a scroller would otherwise clip. */
+.m-strip {
+  display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain; margin: -4px -16px -12px; padding: 4px 16px 12px; scroll-padding: 0 16px;
+}
+.m-strip-day { flex: 0 0 calc((100% - 30px) / 7); scroll-snap-align: start; }
+.m-strip-day.is-past:not(.is-on) { opacity: .62; }
+.m-strip-day.is-today:not(.is-on) { box-shadow: inset 0 0 0 2px var(--m-orange); }
+.m-strip-month { font-size: 8.5px; font-weight: 800; letter-spacing: .08em; color: var(--m-orange-ink); height: 10px; line-height: 10px; }
+.m-strip-day.is-on .m-strip-month { color: #f0a94f; }
+.m-kicker-row.is-flush { margin-bottom: 0; }
 .m-strip-day {
   display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 0; border-radius: 14px; border: none;
   cursor: pointer; background: var(--m-card); color: var(--m-ink); box-shadow: inset 0 0 0 1px var(--m-line);
@@ -15191,3 +15203,26 @@ a:hover { text-decoration: underline; }
 .m-foot-btn.is-danger { background: var(--m-red-tint); color: var(--m-red-ink) !important; }
 .m-foot-btn.is-save { background: var(--m-navy); color: #f0a94f !important; font-size: 15px; }
 .m-foot-btn.is-off { background: var(--m-disabled); color: var(--m-ink-2) !important; box-shadow: none; cursor: default; }
+
+/* ── Projects: tools, segment dividers, and the new-project screen ─────── */
+.m-push-tools { margin-left: auto; display: flex; gap: 6px; flex: none; }
+.m-push-tools .m-push-add { margin-left: 0; }
+.m-push-add.is-icon { width: 42px; height: 42px; padding: 0; justify-content: center; border-radius: 50%; }
+.m-push-title { flex: 1 1 auto; }
+.m-seg-divider { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.m-stack > .m-stack:first-child .m-seg-divider, .m-search + .m-stack .m-seg-divider { margin-top: 0; }
+.m-seg-divider-name { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; color: var(--m-orange-ink); white-space: nowrap; }
+.m-seg-divider-n { font-size: 11px; font-weight: 800; color: var(--m-ink-2); background: var(--m-rule); border-radius: 999px; padding: 1px 8px; }
+.m-seg-divider-rule { flex: 1; height: 1px; background: var(--m-line); }
+.m-pe-head { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.m-pe-head .m-title-input { margin-top: 0; flex: 1; min-width: 0; }
+.m-pe-tile {
+  width: 44px; height: 44px; border-radius: 13px; flex: none; display: grid; place-items: center;
+  font-family: var(--font-display); font-size: 21px; font-weight: 800; color: #fff;
+}
+.m-swatches { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.m-swatch { width: 32px; height: 32px; border-radius: 50%; border: none; cursor: pointer; padding: 0; }
+.m-swatch.is-on { box-shadow: 0 0 0 3px var(--m-bg), 0 0 0 5px var(--m-ink); }
+.m-pe-phase { display: flex; align-items: center; gap: 10px; background: var(--m-card); border: 1px solid var(--m-line); border-radius: 14px; padding: 4px 6px 4px 10px; }
+.m-pe-phase-n { width: 26px; height: 26px; border-radius: 8px; background: var(--m-rule); display: grid; place-items: center; font-size: 12px; font-weight: 800; flex: none; }
+.m-pe-phase input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 14.5px; font-weight: 700; color: var(--m-ink); padding: 9px 0; }
