@@ -18,12 +18,14 @@ import {
 } from '../hooks/useWorkspace';
 import {
   addTask, updateTask, setTaskStatus, addActivity, notifyAssignment, todayLocal,
+  editActivity, deleteActivity, softDeleteTask, restoreDeleted,
 } from '../services/firebase';
 import { blockedTaskIds } from '../services/boardScope';
 import { memberLabel } from '../services/invites';
 import { friendlyError } from '../services/access';
 import { OPEN_TASK_EVENT } from '../services/openTask';
-import { addDays, shiftPlan, M_STATUS } from '../services/mobileModel';
+import { shiftPlan, M_STATUS, shortDate, logDraftFrom, logUpdates } from '../services/mobileModel';
+import { useDialog } from '../components/Dialog';
 import { MobileCtx, Ico, ICON, useMobile } from './mobileUi';
 import MobileHome from './MobileHome';
 import MobileTasks from './MobileTasks';
@@ -38,9 +40,12 @@ const TABS = [
 ];
 
 // `attachments` are LINKS ({ name, url, type }), as the desktop logger takes them.
-const EMPTY_LOG = { taskId: null, hours: 1, details: '', bott: 'None', day: 0, attachments: [] };
+// `date` is a picked date (over the day chips); `editing` is the entry being
+// edited, when the sheet was opened on one (see logDraftFrom).
+const EMPTY_LOG = { taskId: null, hours: 1, details: '', bott: 'None', bottText: '', day: 0, date: null, attachments: [], editing: null };
 
 export default function MobileApp({ userId, profile, route }) {
+  const ask = useDialog();
   const { tasks: allTasks } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { activities } = useAllActivities();
@@ -163,22 +168,62 @@ export default function MobileApp({ userId, profile, route }) {
   const saveLog = useCallback(async () => {
     const t = tasks.find((x) => x.id === log.taskId);
     if (!t) { flash('Pick a task first', { tone: 'err' }); return; }
-    const blocker = log.bott === 'None' ? '' : log.bott;
-    if (!log.hours && !blocker && !log.details.trim() && !log.attachments.length) return;
+    const updates = logUpdates(log, t, today);
     try {
-      await addActivity(userId, t, {
-        date: addDays(today, -log.day),
-        comment: log.details.trim(),
-        hoursSpent: log.hours,
-        attachments: log.attachments,
-        bottleneckRemarks: blocker,
-        completionStatus: blocker ? 'blocked' : t.status === 'done' ? 'completed' : 'in-progress',
-      });
+      if (log.editing) {
+        // editActivity, not a raw update: it moves the task's hours and
+        // attachment counters by the difference, in the same batch.
+        await editActivity(log.editing, updates);
+        setSheet(null);
+        setLog(EMPTY_LOG);
+        flash('Log updated');
+        return;
+      }
+      if (!updates.hoursSpent && !updates.bottleneckRemarks && !updates.comment && !updates.attachments.length) return;
+      await addActivity(userId, t, updates);
       setSheet(null);
       setLog(EMPTY_LOG);
-      flash(log.hours ? `Logged ${log.hours}h` : log.attachments.length ? 'Link added' : 'Logged');
-    } catch (err) { fail(err, 'Could not log that time.'); }
+      flash(updates.hoursSpent ? `Logged ${updates.hoursSpent}h` : updates.attachments.length ? 'Link added' : 'Logged');
+    } catch (err) { fail(err, log.editing ? 'Could not save that change.' : 'Could not log that time.'); }
   }, [tasks, log, userId, today, flash, fail]);
+
+  // An existing entry opens the same sheet, filled in.
+  const editLog = useCallback((activity) => {
+    setLog({ ...EMPTY_LOG, ...logDraftFrom(activity, today) });
+    setSheet('log');
+  }, [today]);
+
+  // A log entry is deleted for good — it has no Trash — so this asks first,
+  // as the desktop's does. Its counters and its files go with it.
+  const deleteLog = useCallback(async () => {
+    const a = log.editing;
+    if (!a) return;
+    const ok = await ask.confirm({
+      title: 'Delete this log entry?',
+      // Named as it is SAVED, not as the half-edited form says.
+      message: `${Number(a.hoursSpent) || 0}h on ${shortDate(a.date, today)}. Log entries do not go to Trash, so this cannot be undone.`,
+      confirmLabel: 'Delete', danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteActivity(a);
+      setSheet(null);
+      setLog(EMPTY_LOG);
+      flash('Log entry deleted');
+    } catch (err) { fail(err, 'Could not delete that entry.'); }
+  }, [log, today, ask, flash, fail]);
+
+  // A task goes to Trash, so this is the desktop editor's way: delete now,
+  // offer Undo, no dialog in between.
+  const deleteTask = useCallback(async (t) => {
+    try {
+      await softDeleteTask(t.id);
+      setTaskId(null);
+      flash(`“${t.title || 'Task'}” deleted`, {
+        undo: () => restoreDeleted('task', t.id).then(() => flash('Restored')).catch((err) => fail(err, 'Could not bring it back.')),
+      });
+    } catch (err) { fail(err, 'Could not delete that task.'); }
+  }, [flash, fail]);
 
   const setTaskField = useCallback(async (t, field, value) => {
     try {
@@ -269,7 +314,7 @@ export default function MobileApp({ userId, profile, route }) {
     tab, setTab, push, setPush, task, openTask, closeTask: () => setTaskId(null), dtab, setDtab,
     sheet, setSheet, picker, setPicker, flash, fail,
     tv, patchTv, log, setLog, nt, setNt, chat, setChat,
-    setStatus, quickDone, openLogFor, saveLog, setTaskField, createTask, bulk,
+    setStatus, quickDone, openLogFor, saveLog, editLog, deleteLog, deleteTask, setTaskField, createTask, bulk,
     setCelebrate,
   };
 

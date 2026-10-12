@@ -38,6 +38,7 @@ export const ICON = {
   updown: 'M7 15l5 5 5-5M7 9l5-5 5 5',
   check:  'M5 12l5 5L20 7',
   edit:   'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  trash:  'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   // The Home triage tiles.
   overdue: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18z',
   sun:     'M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',

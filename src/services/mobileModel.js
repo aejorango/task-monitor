@@ -606,3 +606,71 @@ export function bySegment(rows = [], segments = []) {
 
 /** The colours a new project can take — the desktop editor's own swatches. */
 export const PROJECT_SWATCHES = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#3b82f6'];
+
+// ── Who may change what (mirrors firestore.rules) ─────────────────────────
+// A button the server would refuse is worse than no button. These say what
+// the rules for tasks and activities say, so the phone offers exactly that.
+
+const EDIT_ROLES = ['owner', 'admin', 'editor'];
+const roles = (uid, workspace, project) => ({ ws: workspace?.acl?.[uid], pr: project?.acl?.[uid] });
+
+/** tasks: update (and so soft delete) = author, or a workspace or project editor. */
+export function taskRights(task, { uid, workspace, project } = {}) {
+  const { ws, pr } = roles(uid, workspace, project);
+  return { canEdit: !!task && (task.userId === uid || EDIT_ROLES.includes(ws) || EDIT_ROLES.includes(pr)) };
+}
+
+/** activities: update = author or editor; delete = author or an ADMIN only. */
+export function activityRights(activity, { uid, workspace, project } = {}) {
+  const { ws, pr } = roles(uid, workspace, project);
+  const mine = !!activity && activity.userId === uid;
+  return {
+    canEdit: mine || EDIT_ROLES.includes(ws) || EDIT_ROLES.includes(pr),
+    canDelete: mine || ws === 'owner' || ws === 'admin' || pr === 'admin',
+  };
+}
+
+// ── The Log sheet: new entry or an existing one ─────────────────────────────
+
+/** The blocker words the Log sheet offers; anything else written is kept as typed. */
+export const LOG_BLOCKERS = ['None', 'Waiting', 'Blocked', 'Unclear'];
+
+/** The date a log is for: a picked date, else today minus the chip's offset. */
+export function logDate(log, today) {
+  return log.date || addDays(today, -(log.day || 0));
+}
+
+/**
+ * The Log sheet's working copy of an existing entry. A date within the last
+ * three days lights its chip; an older one is carried as a picked date. A
+ * blocker written in words of its own (on the desktop, say) is kept as
+ * `Custom`, so editing the hours does not overwrite what somebody wrote.
+ */
+export function logDraftFrom(activity, today) {
+  const remarks = String(activity?.bottleneckRemarks || '').trim();
+  const day = [0, 1, 2].find((n) => addDays(today, -n) === activity?.date);
+  return {
+    taskId: activity?.taskId || null,
+    hours: Number(activity?.hoursSpent) || 0,
+    details: activity?.comment || '',
+    bott: !remarks ? 'None' : LOG_BLOCKERS.includes(remarks) ? remarks : 'Custom',
+    bottText: remarks,
+    day: day ?? 0,
+    date: day === undefined ? (activity?.date || null) : null,
+    attachments: [...(activity?.attachments || [])],
+    editing: activity || null,
+  };
+}
+
+/** What an edit writes, through editActivity (which keeps the task's counters in step). */
+export function logUpdates(log, task, today) {
+  const blocker = log.bott === 'None' ? '' : log.bott === 'Custom' ? (log.bottText || '').trim() : log.bott;
+  return {
+    date: logDate(log, today),
+    comment: String(log.details || '').trim(),
+    hoursSpent: Number(log.hours) || 0,
+    attachments: log.attachments || [],
+    bottleneckRemarks: blocker,
+    completionStatus: blocker ? 'blocked' : task?.status === 'done' ? 'completed' : 'in-progress',
+  };
+}

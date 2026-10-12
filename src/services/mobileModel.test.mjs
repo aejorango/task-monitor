@@ -8,6 +8,7 @@ import {
   workLogDays, attachmentsOf, goalBreakdown, weightLabel, shiftPlan, taskCode, fileType,
   splitNames, joinNames, pastChoices, minuteDraft, minutePayload, minuteChanged,
   segmentNames, sortProjects, searchProjects, bySegment, NO_SEGMENT, linkAttachment,
+  taskRights, activityRights, logDraftFrom, logUpdates, logDate,
 } from './mobileModel.js';
 import { goalProgress } from './goalProgress.js';
 
@@ -247,4 +248,48 @@ test('a pasted link becomes the desktop logger\'s attachment, or nothing', () =>
   for (const bad of ['', 'not a link', 'ftp://files.test/x', 'javascript:alert(1)', 'localhost']) {
     assert.equal(linkAttachment(bad), null, `refuses ${JSON.stringify(bad)}`);
   }
+});
+
+test('who may edit or delete follows firestore.rules', () => {
+  const ws = (role) => ({ acl: { me: role } });
+  const task = { userId: 'someone' };
+  assert.equal(taskRights(task, { uid: 'me', workspace: ws('viewer') }).canEdit, false, 'a viewer edits nothing');
+  assert.equal(taskRights(task, { uid: 'me', workspace: ws('editor') }).canEdit, true);
+  assert.equal(taskRights({ userId: 'me' }, { uid: 'me', workspace: ws('viewer') }).canEdit, true, 'an author may');
+  assert.equal(taskRights(task, { uid: 'me', workspace: ws('viewer'), project: { acl: { me: 'editor' } } }).canEdit, true, 'a project editor may');
+
+  const entry = { userId: 'someone' };
+  assert.deepEqual(activityRights(entry, { uid: 'me', workspace: ws('editor') }), { canEdit: true, canDelete: false },
+    'an editor may change an entry but only an admin may delete it');
+  assert.deepEqual(activityRights(entry, { uid: 'me', workspace: ws('admin') }), { canEdit: true, canDelete: true });
+  assert.deepEqual(activityRights({ userId: 'me' }, { uid: 'me', workspace: ws('viewer') }), { canEdit: true, canDelete: true });
+  assert.deepEqual(activityRights(entry, { uid: 'me', workspace: ws('viewer') }), { canEdit: false, canDelete: false });
+});
+
+test('an existing log entry opens in the Log sheet as it was saved', () => {
+  const entry = { id: 'a', taskId: 't', date: at(-1), hoursSpent: 2.5, comment: 'Mapped IDs', bottleneckRemarks: 'Waiting on the vendor', attachments: [{ name: 'x', url: 'u' }] };
+  const d = logDraftFrom(entry, TODAY);
+  assert.equal(d.day, 1, 'yesterday lights its chip');
+  assert.equal(d.date, null);
+  assert.equal(d.bott, 'Custom', 'a blocker in words of its own is kept as written');
+  assert.equal(d.bottText, 'Waiting on the vendor');
+  assert.equal(d.editing, entry);
+  assert.notEqual(d.attachments, entry.attachments, 'the links are a copy, not the saved array');
+
+  const old = logDraftFrom({ ...entry, date: '2026-06-01', bottleneckRemarks: 'Blocked' }, TODAY);
+  assert.equal(old.date, '2026-06-01', 'an older date is carried as a picked date');
+  assert.equal(old.bott, 'Blocked');
+  assert.equal(logDate(old, TODAY), '2026-06-01');
+  assert.equal(logDraftFrom({ ...entry, bottleneckRemarks: '' }, TODAY).bott, 'None');
+});
+
+test('an edit writes the desktop activity fields, blocker and status included', () => {
+  const d = logDraftFrom({ id: 'a', taskId: 't', date: TODAY, hoursSpent: 1, comment: ' x ', bottleneckRemarks: 'Waiting on the vendor' }, TODAY);
+  assert.deepEqual(logUpdates({ ...d, hours: 3 }, { status: 'doing' }, TODAY), {
+    date: TODAY, comment: 'x', hoursSpent: 3, attachments: [], bottleneckRemarks: 'Waiting on the vendor', completionStatus: 'blocked',
+  });
+  const cleared = logUpdates({ ...d, bott: 'None' }, { status: 'done' }, TODAY);
+  assert.equal(cleared.bottleneckRemarks, '');
+  assert.equal(cleared.completionStatus, 'completed');
+  assert.equal(logUpdates({ ...d, day: 2, date: null }, {}, TODAY).date, at(-2));
 });

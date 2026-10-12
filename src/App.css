@@ -15258,3 +15258,29 @@ a:hover { text-decoration: underline; }
 .m-ws-dot.is-all { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 7px; place-items: stretch; background: var(--m-orange-tint); }
 .m-ws-dot.is-all > span { border-radius: 2px; background: var(--m-orange); }
 .m-ws-dot.is-all > span:nth-child(2), .m-ws-dot.is-all > span:nth-child(3) { opacity: .55; }
+
+/* ── Task screen: edit in place, delete, editable log entries ─────────── */
+.m-detail-del {
+  width: 36px; height: 36px; border-radius: 12px; border: 1px solid var(--m-line); background: var(--m-card);
+  color: var(--m-red-ink); display: grid; place-items: center; cursor: pointer; flex: none;
+}
+.m-detail-title.is-editable, .m-detail-desc.is-editable { cursor: text; border-radius: 10px; margin-left: -6px; margin-right: -6px; padding-left: 6px; padding-right: 6px; }
+.m-detail-title.is-editable:active, .m-detail-desc.is-editable:active { background: var(--m-rule); }
+.m-detail-desc.is-empty { color: var(--m-ink-2); font-style: italic; }
+.m-detail-title.is-editing, .m-detail-desc.is-editing {
+  display: block; width: 100%; resize: none; overflow: hidden; outline: none; color: var(--m-ink);
+  background: var(--m-card); border: 1.5px solid var(--m-orange); border-radius: 12px; padding: 8px 10px; margin-left: 0;
+}
+.m-detail-title.is-editing { font-family: var(--font-display); font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; }
+.m-detail-desc.is-editing { font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 1.6; min-height: 96px; }
+.m-act.is-editable { cursor: pointer; }
+.m-act.is-editable:active { background: var(--m-bg); }
+.m-act-edit { color: var(--m-ink-2); flex: none; }
+.m-field-btn.is-fixed { cursor: default; background: var(--m-bg); }
+.m-day.is-other { flex: 0.8; }
+.m-day-row { position: relative; }
+.m-day-input { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.m-chip-btn.is-custom { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-sheet-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; flex: none; }
+.m-sheet-actions.is-one { grid-template-columns: 1fr; }
+.m-sheet-actions .m-foot-btn { height: 56px; }

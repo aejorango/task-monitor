@@ -204,6 +204,23 @@ const CALLS = {
     const st = statusStamps(next, { today: T, current: { ...cur.actual, progress: cur.progress } });
     set((s) => ({ ...s, tasks: s.tasks.map((x) => (x.id === t.id ? { ...x, status: next, progress: st.progress, actual: { startDate: st.actualStartDate, endDate: st.actualEndDate } } : x)) }));
   },
+  // The counters move as firebase.js moves them: by the difference.
+  async editActivity(old, updates) {
+    const dh = (updates.hoursSpent !== undefined ? Number(updates.hoursSpent) || 0 : Number(old.hoursSpent) || 0) - (Number(old.hoursSpent) || 0);
+    set((s) => ({
+      ...s,
+      activities: s.activities.map((x) => (x.id === old.id ? { ...x, ...updates } : x)),
+      tasks: s.tasks.map((x) => (x.id === old.taskId ? { ...x, totalHoursLogged: (Number(x.totalHoursLogged) || 0) + dh } : x)),
+    }));
+  },
+  async deleteActivity(a) {
+    set((s) => ({
+      ...s,
+      activities: s.activities.filter((x) => x.id !== a.id),
+      tasks: s.tasks.map((x) => (x.id === a.taskId ? { ...x, totalHoursLogged: (Number(x.totalHoursLogged) || 0) - (Number(a.hoursSpent) || 0), activityCount: Math.max(0, (x.activityCount || 0) - 1) } : x)),
+    }));
+  },
+  async softDeleteTask(id) { set((s) => ({ ...s, tasks: s.tasks.map((x) => (x.id === id ? { ...x, deleted: true } : x)) })); },
   async addActivity(userId, t, a) {
     const act = { id: nid('a'), taskId: t.id, userId, projectId: t.projectId, taskTitle: t.title, attachments: [], ...a };
     set((s) => ({

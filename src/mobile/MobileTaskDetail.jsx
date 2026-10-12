@@ -2,8 +2,14 @@
 // four facts you change most (owner, project, start, due), the description,
 // and six tabs — Log · Chat · Sub-items · Files · Links · AI — over the same
 // records the desktop task editor reads and writes.
+//
+// The title and the description edit where they stand: tap, type, and it is
+// saved when you leave the field (Escape puts it back). A log entry opens the
+// Log sheet on itself. What is offered follows firestore.rules — see
+// taskRights / activityRights — so nobody is handed a button the server will
+// refuse.
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useActivities, useTaskComments } from '../hooks/useTasks';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { addTaskComment, updateTask, addActivity } from '../services/firebase';
@@ -12,8 +18,9 @@ import { buildFallbackPrompt } from '../services/dueAlerts';
 import { noticeWhen } from '../services/mentions';
 import {
   M_STATUS, mobileStatus, hoursLabel, ownerOf, shortDate, taskCode, dueChoices,
-  attachmentsOf, fileSize,
+  attachmentsOf, fileSize, taskRights, activityRights,
 } from '../services/mobileModel';
+import { activateProps } from '../hooks/useActivate';
 import { useMobile, Ico, ICON, Face, StatusPill } from './mobileUi';
 
 const LINK_REL = { 'related-to': 'RELATED TO', 'duplicate-of': 'DUPLICATE OF', blocks: 'BLOCKS', 'child-of': 'PART OF' };
@@ -27,10 +34,20 @@ export default function MobileTaskDetail() {
   const [comment, setComment] = useState('');
   const [prompt, setPrompt] = useState(null);
   const [busy, setBusy] = useState(null);
+  // Inline editing: which field is open ('title' | 'desc'), and what is in it.
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState('');
+  const field = useRef(null);
+  // Set by Escape: a browser may fire blur as the field goes away, and that
+  // blur must not save what Escape just threw out.
+  const cancelled = useRef(false);
 
   const st = mobileStatus(t, m.blockedIds, m.today);
   const owner = ownerOf(t);
   const project = m.projectById[t.projectId];
+  const workspace = m.workspaces.find((w) => w.id === t.workspaceId) || null;
+  const { canEdit } = taskRights(t, { uid: m.userId, workspace, project });
+  const rightsFor = (a) => activityRights(a, { uid: m.userId, workspace, project: m.projectById[a.projectId] });
   const subs = t.subtasks || [];
   const doneSubs = subs.filter((s) => s.done).length;
   const late = t.status !== 'done' && t.plan?.endDate && t.plan.endDate < m.today;
@@ -148,6 +165,45 @@ export default function MobileTaskDetail() {
     });
     m.setSheet('link');
   };
+  // ── inline title + description ───────────────────────────────────────────
+  const startEdit = (which) => {
+    if (!canEdit) return;
+    setDraft(which === 'title' ? (t.title || '') : (t.description || ''));
+    setEditing(which);
+  };
+  // Grow the box with its text, and put the caret at the end when it opens.
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft, editing]);
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el || !editing) return;
+    cancelled.current = false;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [editing]);
+  const commitEdit = async () => {
+    const which = editing;
+    if (!which || cancelled.current) return;
+    setEditing(null);
+    const value = which === 'title' ? draft.replace(/\s+/g, ' ').trim() : draft.trim();
+    const before = which === 'title' ? (t.title || '') : (t.description || '').trim();
+    if (value === before) return;
+    if (which === 'title' && !value) { m.flash('A task needs a title — it was kept', { tone: 'err' }); return; }
+    try {
+      await updateTask(t.id, which === 'title' ? { title: value } : { description: value });
+      m.flash(which === 'title' ? 'Title saved' : 'Description saved');
+    } catch (err) { m.fail(err, 'Could not save that change.'); }
+  };
+  const editKeys = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cancelled.current = true; setEditing(null); }
+    // Enter ends a title (it is one line); in a description it is a new line.
+    if (e.key === 'Enter' && editing === 'title') { e.preventDefault(); e.currentTarget.blur(); }
+  };
+
   const copyPrompt = async () => {
     try { await navigator.clipboard.writeText(prompt.text); m.flash('Prompt copied'); }
     catch { m.flash('Copy is blocked here — select the text instead', { tone: 'err' }); }
@@ -170,11 +226,25 @@ export default function MobileTaskDetail() {
         <button type="button" className="m-back" onClick={m.closeTask} aria-label="Back"><Ico d={ICON.back} stroke={2.6} /></button>
         <span className="m-detail-code">{taskCode(t)}</span>
         <span className="m-detail-hrs">{hoursLabel(t)}</span>
+        {canEdit && (
+          <button type="button" className="m-detail-del" onClick={() => m.deleteTask(t)}
+            aria-label={`Delete ${t.title || 'this task'}`} title="Delete task (it goes to Trash — Undo is offered)">
+            <Ico d={ICON.trash} size={18} stroke={2.2} />
+          </button>
+        )}
       </div>
 
       <div className="m-detail-body">
         <StatusPill status={st} big onClick={() => m.setSheet('status')} suffix=" ▾" />
-        <div className="m-detail-title">{t.title || 'Untitled task'}</div>
+        {editing === 'title' ? (
+          <textarea ref={field} className="m-detail-title is-editing" rows={1} value={draft} aria-label="Task title"
+            onChange={(e) => setDraft(e.target.value.replace(/\n/g, ' '))} onBlur={commitEdit} onKeyDown={editKeys} />
+        ) : (
+          <div className={`m-detail-title${canEdit ? ' is-editable' : ''}`}
+            {...(canEdit ? activateProps(() => startEdit('title'), { label: `Edit title: ${t.title || 'Untitled task'}` }) : {})}>
+            {t.title || 'Untitled task'}
+          </div>
+        )}
 
         <div className="m-tiles">
           {tile('OWNER', <>{owner ? <Face uid={owner.uid} name={owner.name || ''} size={26} /> : null}<span>{owner ? (owner.uid ? m.firstOf(owner.uid) : owner.name) : 'Nobody'}</span></>, pickOwner)}
@@ -183,7 +253,15 @@ export default function MobileTaskDetail() {
           {tile('DUE', <span className={late ? 'm-ink-late' : ''}>{t.plan?.endDate ? shortDate(t.plan.endDate, m.today) : '—'}</span>, () => pickDate('due', 'Due'))}
         </div>
 
-        <div className="m-detail-desc">{t.description?.trim() || 'No description yet.'}</div>
+        {editing === 'desc' ? (
+          <textarea ref={field} className="m-detail-desc is-editing" rows={3} value={draft} aria-label="Description"
+            placeholder="What is this task about?" onChange={(e) => setDraft(e.target.value)} onBlur={commitEdit} onKeyDown={editKeys} />
+        ) : (
+          <div className={`m-detail-desc${canEdit ? ' is-editable' : ''}${t.description?.trim() ? '' : ' is-empty'}`}
+            {...(canEdit ? activateProps(() => startEdit('desc'), { label: t.description?.trim() ? `Edit description: ${t.description.trim().slice(0, 140)}` : 'Add a description' }) : {})}>
+            {t.description?.trim() || (canEdit ? 'Add a description…' : 'No description yet.')}
+          </div>
+        )}
 
         <div className="m-dtabs" role="tablist">
           {tabs.map(([k, icon, label]) => (
@@ -197,27 +275,33 @@ export default function MobileTaskDetail() {
         <div className="m-dpanel">
           {m.dtab === 'act' && (
             <div className="m-stack is-10">
-              {sortedActs.map((a) => (
-                <div key={a.id} className="m-act">
+              {sortedActs.map((a) => {
+                const may = rightsFor(a).canEdit;
+                return (
+                <div key={a.id} className={`m-act${may ? ' is-editable' : ''}`}
+                  {...(may ? activateProps(() => m.editLog(a), { label: `Edit log entry: ${m.firstOf(a.userId)}, ${Number(a.hoursSpent) || 0}h, ${shortDate(a.date, m.today)}${a.comment ? ` — ${a.comment.slice(0, 120)}` : ''}` }) : {})}>
                   <div className="m-act-head">
                     <Face uid={a.userId} size={28} />
                     <span className="m-act-who">{m.firstOf(a.userId)}</span>
                     {(Number(a.hoursSpent) || 0) > 0 && <span className="m-act-h">{Number(a.hoursSpent)}h</span>}
                     <span className="m-act-when">{shortDate(a.date, m.today)}</span>
+                    {may && <Ico d={ICON.edit} size={14} stroke={2.4} className="m-act-edit" />}
                   </div>
                   {a.comment && <div className="m-act-text">{a.comment}</div>}
                   {a.bottleneckRemarks?.trim() && <div className="m-act-bott">⚠ {a.bottleneckRemarks.trim()}</div>}
                   {(a.attachments || []).length > 0 && (
                     <div className="m-act-files">
                       {a.attachments.map((f, i) => (
-                        <a key={`${f.url}:${i}`} className="m-act-file" href={f.url || undefined} target="_blank" rel="noreferrer">
+                        <a key={`${f.url}:${i}`} className="m-act-file" href={f.url || undefined} target="_blank" rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                           <Ico d={ICON.clip} size={13} stroke={2.4} />{f.name || 'File'}
                         </a>
                       ))}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {sortedActs.length === 0 && <div className="m-quiet">No logs yet</div>}
             </div>
           )}

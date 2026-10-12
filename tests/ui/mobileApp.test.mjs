@@ -195,3 +195,30 @@ test('a project can be edited from its own screen, through updateProject', () =>
   // Removing a phase that still has tasks asks first.
   assert.match(ed, /Remove a phase that has/);
 });
+
+test('the task screen edits in place, deletes to Trash, and edits its log', () => {
+  const detail = sources['MobileTaskDetail.jsx'];
+  // Title and description: tap to edit, saved on leaving, Escape discards.
+  assert.match(detail, /startEdit\('title'\)/);
+  assert.match(detail, /startEdit\('desc'\)/);
+  assert.match(detail, /onBlur=\{commitEdit\}/);
+  assert.match(detail, /cancelled\.current = true/, 'Escape must not be saved by the blur that follows it');
+  assert.match(detail, /A task needs a title/);
+  // Delete sits beside the hours chip, and only for whoever may edit the task.
+  assert.match(detail, /m-detail-hrs[\s\S]{0,120}\{canEdit && \(\s*<button type="button" className="m-detail-del"/);
+  // A log entry opens the Log sheet on itself.
+  assert.match(detail, /m\.editLog\(a\)/);
+
+  const app = sources['MobileApp.jsx'];
+  // A task goes to Trash with Undo, as the desktop editor does.
+  assert.match(app, /softDeleteTask\(t\.id\)[\s\S]*?restoreDeleted\('task', t\.id\)/);
+  // An edit keeps the task's counters in step; a raw update would not.
+  assert.match(app, /await editActivity\(log\.editing, updates\)/);
+  assert.doesNotMatch(app, /updateActivity\(/);
+  // An entry has no Trash, so its delete asks first.
+  assert.match(app, /Delete this log entry\?[\s\S]*?await deleteActivity\(a\)/);
+
+  const sheets = sources['MobileSheets.jsx'];
+  assert.match(sheets, /editing \? 'Edit log' : 'Log time'/);
+  assert.match(sheets, /rights\?\.canDelete && \(\s*<button type="button" className="m-foot-btn is-danger" onClick=\{m\.deleteLog\}>Delete<\/button>/);
+});

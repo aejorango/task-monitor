@@ -2,13 +2,13 @@
 // New task, a picker (owner · project · date · task) and Filter. One sheet is
 // open at a time; the scrim behind it closes it.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   M_STATUS, STATUS_SHEET_ORDER, mobileStatus, filterTasks, addDays, shortDate, dueChoices, linkAttachment, fileType,
+  LOG_BLOCKERS, logDate, activityRights,
 } from '../services/mobileModel';
 import { useMobile, Ico, ICON, Face, SheetHead } from './mobileUi';
 
-const BLOCKERS = ['None', 'Waiting', 'Blocked', 'Unclear'];
 
 export default function MobileSheets() {
   const m = useMobile();
@@ -55,8 +55,21 @@ function StatusSheet() {
 function LogSheet() {
   const m = useMobile();
   const { log, setLog } = m;
+  const dateRef = useRef(null);
   const t = m.tasks.find((x) => x.id === log.taskId);
+  const editing = log.editing;
   const days = [0, 1, 2].map((n) => ({ n, label: n === 0 ? 'Today' : n === 1 ? 'Yesterday' : shortDate(addDays(m.today, -n), m.today) }));
+  const when = logDate(log, m.today);
+  const whenLabel = log.date ? shortDate(log.date, m.today) : days[log.day].label;
+  // Delete is offered only to whoever the rules let delete (author or admin).
+  const rights = editing
+    ? activityRights(editing, { uid: m.userId, workspace: m.workspaces.find((w) => w.id === editing.workspaceId), project: m.projectById[editing.projectId] })
+    : null;
+  const pickOtherDate = () => {
+    const el = dateRef.current;
+    if (!el) return;
+    try { el.showPicker(); } catch { el.focus(); el.click(); }
+  };
   const pickTask = () => {
     m.setPicker({
       title: 'Which task?',
@@ -66,6 +79,8 @@ function LogSheet() {
     });
     m.setSheet('pick');
   };
+  // A new entry needs something in it. So does an edited one: an entry with
+  // nothing left is a Delete, and the button for that is right beside Save.
   const canSave = !!t && (log.hours > 0 || log.bott !== 'None' || log.details.trim() || log.attachments.length > 0);
   const links = log.attachments;
   // A log carries LINKS (Drive, a doc, a ticket), not uploaded files: the
@@ -81,23 +96,41 @@ function LogSheet() {
   const dropLink = (i) => setLog((l) => ({ ...l, attachments: l.attachments.filter((_, j) => j !== i) }));
 
   return (
-    <Sheet label="Log time">
-      <SheetHead title="Log time" onClose={() => m.setSheet(null)} />
-      <button type="button" className="m-field-btn" onClick={pickTask}>
-        <span className="m-field-btn-text">{t ? t.title : 'Pick a task'}</span>
-        <Ico d={ICON.updown} size={16} stroke={2.6} />
-      </button>
+    <Sheet label={editing ? 'Edit log' : 'Log time'}>
+      <SheetHead title={editing ? 'Edit log' : 'Log time'} onClose={() => { m.setSheet(null); if (editing) setLog((l) => ({ ...l, editing: null })); }} />
+      {editing ? (
+        // An entry stays on its task: moving it would have to move hours
+        // between two tasks' counters, which editActivity does not do.
+        <div className="m-field-btn is-fixed">
+          <span className="m-field-btn-text">{t ? t.title : (editing.taskTitle || 'Task')}</span>
+        </div>
+      ) : (
+        <button type="button" className="m-field-btn" onClick={pickTask}>
+          <span className="m-field-btn-text">{t ? t.title : 'Pick a task'}</span>
+          <Ico d={ICON.updown} size={16} stroke={2.6} />
+        </button>
+      )}
 
       <div className="m-day-row">
         {days.map((d) => (
-          <button key={d.n} type="button" className={`m-day${log.day === d.n ? ' is-on' : ''}`}
-            aria-pressed={log.day === d.n} onClick={() => setLog((l) => ({ ...l, day: d.n }))}>{d.label}</button>
+          <button key={d.n} type="button" className={`m-day${!log.date && log.day === d.n ? ' is-on' : ''}`}
+            aria-pressed={!log.date && log.day === d.n} onClick={() => setLog((l) => ({ ...l, day: d.n, date: null }))}>{d.label}</button>
         ))}
+        <button type="button" className={`m-day is-other${log.date ? ' is-on' : ''}`} aria-pressed={!!log.date} onClick={pickOtherDate}>
+          {log.date ? shortDate(log.date, m.today) : 'Other'}
+        </button>
+        <input ref={dateRef} type="date" className="m-day-input" tabIndex={-1} aria-hidden="true" max={m.today} value={when}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            const n = [0, 1, 2].find((k) => addDays(m.today, -k) === v);
+            setLog((l) => (n === undefined ? { ...l, date: v } : { ...l, day: n, date: null }));
+          }} />
       </div>
 
       <div className="m-hours">
         <div className="m-hours-text">
-          <div className="m-hours-day">{days[log.day].label.toUpperCase()}</div>
+          <div className="m-hours-day">{whenLabel.toUpperCase()}</div>
           <div className="m-hours-n">{log.hours}h</div>
         </div>
         <button type="button" className="m-hours-btn is-down" aria-label="Less"
@@ -125,7 +158,14 @@ function LogSheet() {
       </button>
 
       <div className="m-wrap-row">
-        {BLOCKERS.map((b) => (
+        {log.bott === 'Custom' && (
+          // A blocker written in words of its own stays as written until
+          // another chip is chosen.
+          <button type="button" className="m-chip-btn is-red is-custom" aria-pressed="true" title={log.bottText}>
+            ⚠ {log.bottText}
+          </button>
+        )}
+        {LOG_BLOCKERS.map((b) => (
           <button key={b} type="button" className={`m-chip-btn${log.bott === b ? (b === 'None' ? ' is-gold' : ' is-red') : ''}`}
             aria-pressed={log.bott === b} onClick={() => setLog((l) => ({ ...l, bott: b }))}>
             {b === 'None' ? 'No blocker' : b}
@@ -133,9 +173,20 @@ function LogSheet() {
         ))}
       </div>
 
-      <button type="button" className={`m-primary${canSave ? '' : ' is-off'}`} disabled={!canSave} onClick={m.saveLog}>
-        Save {log.hours}h
-      </button>
+      {editing ? (
+        <div className={`m-sheet-actions${rights?.canDelete ? '' : ' is-one'}`}>
+          {rights?.canDelete && (
+            <button type="button" className="m-foot-btn is-danger" onClick={m.deleteLog}>Delete</button>
+          )}
+          <button type="button" className={`m-primary${canSave ? '' : ' is-off'}`} disabled={!canSave} onClick={m.saveLog}>
+            Save changes
+          </button>
+        </div>
+      ) : (
+        <button type="button" className={`m-primary${canSave ? '' : ' is-off'}`} disabled={!canSave} onClick={m.saveLog}>
+          Save {log.hours}h
+        </button>
+      )}
     </Sheet>
   );
 }
