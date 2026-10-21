@@ -2,12 +2,13 @@
 // the tasks it waits on, leads to, is part of or relates to.
 //
 // Read left to right, the way work flows: a task sits one column after the
-// furthest thing it waits on. The solid lines are what the tasks say —
-// `dependsOn` and the editor's Dependencies & relations. "Auto-connect by
-// date" (on by default, remembered per device) adds dotted lines that READ
-// the plan — inside a project, a task follows the ones dated before it — so
-// the sequence shows before anybody has wired a dependency. Those are drawn
-// differently, never stored, and can be saved as a real "comes before".
+// furthest thing it waits on. The lines are what the tasks say — `dependsOn`
+// and the editor's Dependencies & relations — so the picture is the
+// connections somebody chose. "Auto-connect by date" is a switch, OFF unless
+// turned on (remembered per device): it adds dotted lines that READ the plan
+// — inside a project, a task follows the ones dated before it — as a guide
+// to wiring the ones that matter. They are drawn differently, never stored,
+// and one can be saved as a real "comes before".
 //
 // CONNECTING BY HAND: hover a task and a dot appears on each side. Drag the
 // right-hand dot onto another task ("this comes first") or the left-hand one
@@ -97,8 +98,8 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   const [hideLoose, setHideLoose] = useDeviceToggle(HIDE_KEY, false);
   const showLoose = !hideLoose;
   const setShowLoose = useCallback((v) => setHideLoose((cur) => !(typeof v === 'function' ? v(!cur) : v)), [setHideLoose]);
-  // The dotted date-order lines: on unless somebody turned them off here.
-  const [autoConnect, setAutoConnect] = useDeviceToggle(AUTO_KEY, true);
+  // The dotted date-order lines: a guide, off unless somebody switches it on here.
+  const [autoConnect, setAutoConnect] = useDeviceToggle(AUTO_KEY, false);
   // How wide the card is, so the grid of unconnected tasks fills it.
   const [canvasW, setCanvasW] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -280,9 +281,11 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
         {graph.contextCount > 0 && <> · {graph.contextCount} outside your filter, shown faded</>}
       </PageSubtitle>
       <PageActions>
-        <button type="button" className={`cmd${autoConnect ? ' is-on' : ''}`} aria-pressed={autoConnect}
+        <button type="button" role="switch" aria-checked={autoConnect}
+          className={`nd-switch${autoConnect ? ' is-on' : ''}`}
           title="Draw dotted lines between the tasks of a project in the order their dates put them. Nothing is saved."
           onClick={() => setAutoConnect((v) => !v)}>
+          <span className="nd-switch-track" aria-hidden="true"><span className="nd-switch-knob" /></span>
           Auto-connect by date
         </button>
         {graph.unlinkedCount > 0 && (

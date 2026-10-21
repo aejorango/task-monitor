@@ -592,8 +592,11 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    count), open work first by due date and finished work last. **Hide
    unconnected** folds them away, and that choice is remembered per device
    (`task-monitor.node.hideUnconnected.v1`) — never the default.
-   **Auto-connect by date** (on by default, off remembered per device in
-   `task-monitor.node.autoConnect.v1`) adds a fifth kind, `sequence`: inside
+   **Auto-connect by date** is a **switch, off by default** (on request: the
+   graph is the connections the user chose, and the date order is a guide to
+   wiring the ones that matter, not the main picture); turning it on is
+   remembered per device in `task-monitor.node.autoConnect.v1`. It adds a
+   fifth kind, `sequence`: inside
    one project, each task follows the ones planned at the date before it
    (`plan.startDate`, else the due date). It is the only **inferred** line —
    thinner, dotted, in info blue, "(auto)" in the legend, and **never
