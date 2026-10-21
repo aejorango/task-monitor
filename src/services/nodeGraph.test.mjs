@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   wrapLabel, edgesOf, buildGraph, rankNodes, layoutGraph, neighbourhood, groupsOf,
+  sequenceEdges, connectionUpdate, disconnectUpdates,
   LABEL_CHARS, LABEL_LINES, NODE_W,
 } from './nodeGraph.js';
 
@@ -136,4 +137,78 @@ test('every task is on the page: the unconnected are filed by project, open work
   const byReading = [...x].sort((p, q) => p.y - q.y || p.x - q.x).map((n) => n.id);
   assert.deepEqual(byReading, ['x3', 'x1', 'x2'], 'soonest due first, finished last');
   assert.ok(layout.headings[0].kind === 'section');
+});
+
+const D = (id, date, o = {}) => T(id, { projectId: 'p', plan: { startDate: date }, ...o });
+const key = (e) => `${e.from}>${e.to}`;
+
+test('auto-connect: inside a project, each date follows the one before; one date is one column', () => {
+  const tasks = [D('a', '2026-10-01'), D('b', '2026-10-03'), D('c', '2026-10-03'), D('d', '2026-10-09'),
+    T('nodate', { projectId: 'p' }), D('other', '2026-10-02', { projectId: 'q' })];
+  const seq = sequenceEdges(tasks, []);
+  assert.deepEqual(seq.map(key).sort(), ['a>b', 'a>c', 'b>d', 'c>d']);
+  assert.ok(seq.every((e) => e.kind === 'sequence'));
+  assert.ok(!seq.some((e) => e.from === 'other' || e.to === 'other'), 'another project is its own sequence');
+  assert.ok(!seq.some((e) => e.to === 'nodate' || e.from === 'nodate'), 'no date, no guess');
+  const g = buildGraph(tasks, tasks, { autoConnect: true });
+  const { rank } = rankNodes(g.nodes, g.edges);
+  assert.equal(rank.get('b'), rank.get('c'), 'same date, same column');
+  assert.equal(rank.get('d'), 2);
+  assert.equal(buildGraph(tasks, tasks).sequenceCount, 0, 'off unless asked for');
+});
+
+test('auto-connect never contradicts or repeats what the tasks say', () => {
+  // b is dated after a, but the tasks say b comes BEFORE a: no line a→b (it would loop).
+  const tasks = [D('a', '2026-10-01', { dependsOn: ['b'] }), D('b', '2026-10-02'), D('c', '2026-10-05', { dependsOn: ['a'] })];
+  const stated = edgesOf(tasks, byId(tasks));
+  const seq = sequenceEdges(tasks, stated);
+  assert.ok(!seq.some((e) => key(e) === 'a>b'), 'against a stated dependency');
+  assert.ok(!seq.some((e) => key(e) === 'b>c'), 'already in order through a');
+  const layout = layoutGraph(buildGraph(tasks, tasks, { autoConnect: true }));
+  assert.equal(layout.edges.filter((e) => e.loop).length, 0);
+});
+
+test('a busy date is joined through its first task, not every pair', () => {
+  const tasks = [...'abc'].map((x) => D(x, '2026-10-01')).concat([...'xyz'].map((x) => D(x, '2026-10-02')));
+  assert.equal(sequenceEdges(tasks, []).length, 5, '3 into x, then a into y and z — not 9');
+});
+
+test('drawing a line writes what the task editor writes', () => {
+  const a = T('a', { workspaceId: 'w' });
+  const b = T('b', { workspaceId: 'w', dependsOn: ['z'] });
+  assert.deepEqual(connectionUpdate(a, b, 'depends', [a, b]),
+    { taskId: 'b', updates: { dependsOn: ['z', 'a'] }, undo: { dependsOn: ['z'] } });
+  assert.deepEqual(connectionUpdate(a, b, 'part', [a, b]).updates, { links: [{ targetId: 'a', type: 'child-of' }] });
+  const rel = connectionUpdate(a, b, 'related', [a, b]);
+  assert.equal(rel.taskId, 'a');
+  assert.deepEqual(rel.updates.links, [{ targetId: 'b', type: 'related-to' }]);
+  assert.equal(connectionUpdate(a, b, 'duplicate', [a, b]).updates.links[0].type, 'duplicate-of');
+  // The new line reads back as the edge the user drew.
+  const after = [a, { ...b, dependsOn: ['z', 'a'] }];
+  assert.ok(edgesOf(after, byId(after)).some((e) => e.kind === 'depends' && key(e) === 'a>b'));
+});
+
+test('a line that cannot be drawn says why, in a sentence', () => {
+  const a = T('a', { workspaceId: 'w', title: 'Alpha' });
+  const b = T('b', { workspaceId: 'w', title: 'Beta', dependsOn: ['a'] });
+  assert.match(connectionUpdate(a, a, 'depends').error, /itself/);
+  assert.match(connectionUpdate(a, b, 'related', [a, b]).error, /already connected/);
+  const c = T('c', { workspaceId: 'w', dependsOn: ['b'] });
+  assert.match(connectionUpdate(c, a, 'depends', [a, b, c]).error, /loop/);
+  assert.ok(!connectionUpdate(c, a, 'related', [a, b, c]).error, 'a relation orders nothing, so it cannot loop');
+  assert.match(connectionUpdate(a, T('x', { workspaceId: 'v' }), 'depends').error, /different workspaces/);
+});
+
+test('removing a line removes every statement behind it, and says how to undo', () => {
+  const a = T('a', { links: [{ type: 'blocks', targetId: 'b' }, { type: 'related-to', targetId: 'c' }] });
+  const b = T('b', { dependsOn: ['a', 'q'] });
+  const c = T('c', { links: [{ type: 'related-to', targetId: 'a' }] });
+  const ids = byId([a, b, c]);
+  const dep = disconnectUpdates({ from: 'a', to: 'b', kind: 'depends' }, ids);
+  assert.deepEqual(dep.map((w) => w.taskId).sort(), ['a', 'b']);
+  assert.deepEqual(dep.find((w) => w.taskId === 'b').updates.dependsOn, ['q']);
+  assert.deepEqual(dep.find((w) => w.taskId === 'a').updates.links, [{ type: 'related-to', targetId: 'c' }]);
+  const rel = disconnectUpdates({ from: 'a', to: 'c', kind: 'related' }, ids);
+  assert.equal(rel.length, 2, 'said from both ends, removed from both');
+  assert.deepEqual(disconnectUpdates({ from: 'a', to: 'b', kind: 'sequence' }, ids), [], 'an inferred line is not stored');
 });

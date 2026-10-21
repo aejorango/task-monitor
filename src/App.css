@@ -15307,7 +15307,7 @@ a:hover { text-decoration: underline; }
 .nd-zbtn:disabled { opacity: .45; cursor: default; }
 .nd-zval { min-width: 44px; text-align: center; font-size: 12px; font-weight: 700; color: var(--c-text-2); font-variant-numeric: tabular-nums; }
 .nd-canvas {
-  overflow: auto; max-height: calc(100vh - 250px); min-height: 320px;
+  position: relative; overflow: auto; max-height: calc(100vh - 250px); min-height: 320px;
   background-color: var(--c-surface-2);
   background-image: radial-gradient(circle, color-mix(in srgb, var(--c-border) 70%, transparent) 1px, transparent 1.2px);
   background-size: 20px 20px;
@@ -15322,10 +15322,27 @@ a:hover { text-decoration: underline; }
 .nd-edge.k-related   { stroke: var(--c-text-muted); stroke-dasharray: 6 5; }
 .nd-edge.k-duplicate { stroke: var(--c-text-muted); stroke-dasharray: 2 4; }
 .nd-edge.k-loop      { stroke: var(--c-danger); stroke-dasharray: 7 4; }
+/* Inferred from the dates, not stated: thinner, dotted, in the info blue. */
+.nd-edge.k-sequence  { stroke: var(--c-info); stroke-width: 1.6; stroke-dasharray: 1.5 5; stroke-linecap: round; }
+.nd-edge.k-draft     { stroke: var(--c-accent); stroke-width: 2.2; stroke-dasharray: 6 4; pointer-events: none; }
 .nd-arrow.k-depends   { fill: var(--c-accent); }
 .nd-arrow.k-part      { fill: var(--c-purple); }
 .nd-arrow.k-duplicate { fill: var(--c-text-muted); }
 .nd-arrow.k-loop      { fill: var(--c-danger); }
+.nd-arrow.k-sequence  { fill: var(--c-info); }
+.nd-arrow.k-draft     { fill: var(--c-accent); }
+/* The clickable twin of every line: wide, invisible, on top of the line. */
+.nd-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+.nd-edge-g:hover .nd-edge { stroke-width: 3.2; }
+.nd-edge-g:hover .nd-edge.k-sequence { stroke-width: 2.6; }
+.nd-svg.is-dragging, .nd-svg.is-dragging * { cursor: crosshair; user-select: none; }
+.nd-svg.is-dragging .nd-hit { pointer-events: none; }
+/* The connect dots on a hovered task. */
+.nd-handle { cursor: crosshair; }
+.nd-handle-hit { fill: transparent; }
+.nd-handle-dot { fill: var(--c-surface); stroke: var(--c-accent); stroke-width: 2.5; transition: r .1s; }
+.nd-handle:hover .nd-handle-dot { fill: var(--c-accent); r: 8; }
+.nd-node.is-target .nd-box { stroke: var(--c-accent); stroke-width: 3; fill: var(--c-accent-soft); }
 .nd-edge.is-lit { stroke-width: 3; }
 .nd-edge.is-dim { opacity: .14; }
 
@@ -15358,4 +15375,23 @@ a:hover { text-decoration: underline; }
 .nd-empty p { max-width: 520px; margin: 0; line-height: 1.55; }
 .nd-proj-head { font-size: 13px; font-weight: 800; fill: var(--c-text); }
 .nd-proj-count { font-size: 11.5px; font-weight: 700; fill: var(--c-text-2); }
+.nd-hint-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c-accent); background: var(--c-surface); vertical-align: -1px; }
+.nd-menu {
+  position: absolute; z-index: 5; width: 280px; padding: 6px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 30, 50, .18); display: flex; flex-direction: column; gap: 2px;
+}
+.nd-menu-title { padding: 6px 8px 6px; font-size: 12px; font-weight: 800; color: var(--c-text); line-height: 1.35; }
+.nd-menu-note { margin: 0; padding: 0 8px 6px; font-size: 12px; line-height: 1.45; color: var(--c-text-2); }
+.nd-menu-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 7px 9px; border: 0; border-radius: 8px; background: none; text-align: left;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--c-text); cursor: pointer; line-height: 1.35;
+}
+.nd-menu-item:hover:not(:disabled), .nd-menu-item:focus-visible { background: var(--c-surface-2); outline: none; }
+.nd-menu-item.is-first:not(:disabled) { color: var(--c-accent-ink, var(--c-accent)); }
+.nd-menu-item.is-danger:not(:disabled) { color: var(--c-danger-ink, var(--c-danger)); }
+.nd-menu-item.is-cancel { color: var(--c-text-2); border-top: 1px solid var(--c-border); border-radius: 0 0 8px 8px; margin-top: 2px; }
+.nd-menu-item:disabled { color: var(--c-text-muted); cursor: default; }
+.nd-menu-why { font-size: 11px; font-weight: 500; color: var(--c-text-muted); }
 .nd-hint { padding: 9px 14px; border-bottom: 1px solid var(--c-border); font-size: 12.5px; color: var(--c-text-2); background: var(--c-surface); }

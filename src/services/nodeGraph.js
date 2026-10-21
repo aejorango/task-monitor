@@ -3,7 +3,7 @@
 // Pure: no React, no Firebase. The page (components/NodeView.jsx) draws what
 // this returns, and tests/ui + nodeGraph.test.mjs pin the rules.
 //
-// WHAT AN EDGE IS — only what the task itself says, never a guess:
+// WHAT AN EDGE IS — what the task itself says:
 //   · `dependsOn: [id]`          → id ──▶ task   "comes before"   (kind 'depends')
 //   · link `blocks`   → target   → task ──▶ target                (kind 'depends')
 //     (both are the same claim — the second task waits on the first — so a
@@ -12,6 +12,13 @@
 //   · link `parent-of`→ child    → task ──▶ child                 (kind 'part')
 //   · link `related-to`          → task ─ ─ other, no direction   (kind 'related')
 //   · link `duplicate-of`        → task ─ ─▶ original              (kind 'duplicate')
+//
+// …and, only when the page's "Auto-connect by date" is on, ONE kind that is
+// inferred rather than stated, drawn differently and named as such:
+//   · 'sequence' — within one project, a task planned after another follows
+//     it (`sequenceEdges`). It is a reading of the plan's dates, not a claim
+//     anybody made, so it is never written unless somebody saves it as a
+//     real "comes before" — and it never contradicts a stated connection.
 //
 // LAYOUT — left to right, the way work flows. A task's column is one past the
 // furthest thing it waits on (the longest path in), so a chain reads in order
@@ -28,7 +35,11 @@ export const EDGE_KINDS = {
   part:      { label: 'Part of',       directed: true,  ranks: true },
   related:   { label: 'Related to',    directed: false, ranks: false },
   duplicate: { label: 'Duplicate of',  directed: true,  ranks: false },
+  sequence:  { label: 'Then, by date', directed: true,  ranks: true, inferred: true },
 };
+
+/** The kinds a person can draw between two tasks, in the order they are offered. */
+export const CONNECT_KINDS = ['depends', 'part', 'related', 'duplicate'];
 
 // Geometry, in SVG units. A node has a fixed WIDTH and a capped label, so a
 // long title wraps instead of stretching the graph — the user's requirement.
@@ -112,6 +123,76 @@ export function edgesOf(tasks = [], byId = {}) {
   return [...out.values()];
 }
 
+/** The date a task sits at in its project's sequence: its planned start, else its due date. */
+export const sequenceDate = (t) => t?.plan?.startDate || t?.plan?.endDate || null;
+
+// Does `from` already lead to `to` along the edges that order work?
+function makeReach(edges) {
+  const succ = new Map();
+  const link = (a, b) => { if (!succ.has(a)) succ.set(a, []); succ.get(a).push(b); };
+  edges.filter((e) => EDGE_KINDS[e.kind]?.ranks).forEach((e) => link(e.from, e.to));
+  const reaches = (from, to) => {
+    if (from === to) return true;
+    const seen = new Set([from]);
+    const stack = [from];
+    while (stack.length) {
+      for (const m of succ.get(stack.pop()) || []) {
+        if (m === to) return true;
+        if (!seen.has(m)) { seen.add(m); stack.push(m); }
+      }
+    }
+    return false;
+  };
+  return { reaches, link };
+}
+
+/**
+ * "Auto-connect by date": inside each project, every task with a date
+ * follows the tasks planned at the date before it. Tasks on the SAME date
+ * are parallel — they share a column rather than being chained in an order
+ * nobody chose. Between two small dates every pair is joined; between two
+ * busy ones (more than four pairs) the lines go through the first task of
+ * each, so a sprint of ten does not draw a hundred lines.
+ *
+ * Never against what the tasks say: a pair already connected — or already in
+ * order through other tasks — gets no extra line, and a line that would make
+ * a loop with a stated dependency is not drawn. A task with no date is not
+ * guessed into the sequence.
+ */
+export function sequenceEdges(tasks = [], stated = []) {
+  const joined = new Set(stated.flatMap((e) => [`${e.from}|${e.to}`, `${e.to}|${e.from}`]));
+  const { reaches, link } = makeReach(stated);
+  const files = new Map();
+  tasks.forEach((t) => {
+    const d = sequenceDate(t);
+    if (!t?.id || !d) return;
+    const key = `${t.workspaceId || ''}|${t.projectId || ''}`;
+    if (!files.has(key)) files.set(key, new Map());
+    const days = files.get(key);
+    if (!days.has(d)) days.set(d, []);
+    days.get(d).push(t);
+  });
+  const byTitle = (a, b) => String(a.title || '').localeCompare(String(b.title || '')) || a.id.localeCompare(b.id);
+  const out = [];
+  [...files.keys()].sort().forEach((key) => {
+    const days = files.get(key);
+    const levels = [...days.keys()].sort().map((d) => days.get(d).sort(byTitle));
+    for (let i = 1; i < levels.length; i += 1) {
+      const prev = levels[i - 1];
+      const next = levels[i];
+      const pairs = prev.length * next.length <= 4
+        ? prev.flatMap((a) => next.map((b) => [a, b]))
+        : [...prev.map((a) => [a, next[0]]), ...next.slice(1).map((b) => [prev[0], b])];
+      pairs.forEach(([a, b]) => {
+        if (joined.has(`${a.id}|${b.id}`) || reaches(a.id, b.id) || reaches(b.id, a.id)) return;
+        out.push({ id: `sequence:${a.id}>${b.id}`, from: a.id, to: b.id, kind: 'sequence' });
+        link(a.id, b.id);
+      });
+    }
+  });
+  return out;
+}
+
 /**
  * The graph for the tasks in view.
  *
@@ -119,16 +200,18 @@ export function edgesOf(tasks = [], byId = {}) {
  * task in the workspace(s). Edges are drawn between tasks in view — and to a
  * task one step OUTSIDE the filter, which is shown faded ("context"), because
  * hiding the other end of a dependency is hiding the reason a task is waiting.
- * Tasks with no connection at all are counted, and left out unless asked for:
- * the page is about connections.
+ * Tasks with no connection at all are counted, and left out unless asked for.
+ * `autoConnect` adds the inferred date-order lines between tasks in view.
  */
-export function buildGraph(inView = [], all = [], { includeUnlinked = false } = {}) {
+export function buildGraph(inView = [], all = [], { includeUnlinked = false, autoConnect = false } = {}) {
   const byId = Object.fromEntries(all.filter((t) => t && !t.deleted).map((t) => [t.id, t]));
   inView.forEach((t) => { if (t && !byId[t.id]) byId[t.id] = t; });
   const shown = new Set(inView.map((t) => t.id));
 
   // Edges where at least one end is in view.
-  const edges = edgesOf(Object.values(byId), byId).filter((e) => shown.has(e.from) || shown.has(e.to));
+  const stated = edgesOf(Object.values(byId), byId);
+  const sequence = autoConnect ? sequenceEdges(inView.filter((t) => t && !t.deleted), stated) : [];
+  const edges = [...stated.filter((e) => shown.has(e.from) || shown.has(e.to)), ...sequence];
   const linked = new Set(edges.flatMap((e) => [e.from, e.to]));
 
   const nodes = [];
@@ -142,6 +225,7 @@ export function buildGraph(inView = [], all = [], { includeUnlinked = false } = 
     unlinkedCount: unlinked.length,
     inViewCount: inView.length,
     contextCount: nodes.filter((n) => n.context).length,
+    sequenceCount: sequence.length,
   };
 }
 
@@ -387,4 +471,79 @@ export function neighbourhood(id, edges = []) {
     if (e.from === id || e.to === id) { ids.add(e.from); ids.add(e.to); edgeIds.add(e.id); }
   });
   return { ids, edgeIds };
+}
+
+// ── Drawing a connection by hand ────────────────────────────────────────────
+// Dragging from one task onto another writes the SAME fields the task
+// editor's Dependencies & relations writes, so a line drawn here is a line
+// everywhere — the Gantt's arrows, the editor, the Kanban's 🔗 badge.
+
+const stillJoined = (e, a, b) => (e.from === a && e.to === b) || (e.from === b && e.to === a);
+
+/**
+ * What connecting `first` → `second` as `kind` writes, or why it cannot:
+ *   depends   — "first comes before second": second.dependsOn += first
+ *   part      — "second is part of first":  second.links += child-of first
+ *   related   — first.links += related-to second
+ *   duplicate — "first is a duplicate of second": first.links += duplicate-of
+ * Returns { taskId, updates, undo } (undo restores the field as it was), or
+ * { error } with one plain sentence.
+ */
+export function connectionUpdate(first, second, kind, all = []) {
+  if (!first || !second) return { error: 'Pick two tasks to connect.' };
+  if (first.id === second.id) return { error: 'A task cannot be connected to itself.' };
+  if ((first.workspaceId || '') !== (second.workspaceId || '')) {
+    return { error: 'These two tasks are in different workspaces, so they cannot be connected.' };
+  }
+  if (!CONNECT_KINDS.includes(kind)) return { error: 'That is not a kind of connection.' };
+  const byId = Object.fromEntries([...all, first, second].filter(Boolean).map((t) => [t.id, t]));
+  const stated = edgesOf(Object.values(byId), byId);
+  if (stated.some((e) => stillJoined(e, first.id, second.id))) return { error: 'These two tasks are already connected.' };
+  if (EDGE_KINDS[kind].ranks && makeReach(stated).reaches(second.id, first.id)) {
+    return { error: `That would make a loop — “${second.title || 'that task'}” already leads to “${first.title || 'this one'}”.` };
+  }
+  const links = (t) => (Array.isArray(t.links) ? t.links : []);
+  if (kind === 'depends') {
+    const before = second.dependsOn || [];
+    return { taskId: second.id, updates: { dependsOn: [...before, first.id] }, undo: { dependsOn: before } };
+  }
+  if (kind === 'part') {
+    return { taskId: second.id, updates: { links: [...links(second), { targetId: first.id, type: 'child-of' }] }, undo: { links: links(second) } };
+  }
+  const type = kind === 'related' ? 'related-to' : 'duplicate-of';
+  return { taskId: first.id, updates: { links: [...links(first), { targetId: second.id, type }] }, undo: { links: links(first) } };
+}
+
+/**
+ * What removing a drawn line writes: every statement that produced it, on
+ * whichever task holds it (a dependency can be said as `dependsOn` on one end
+ * or as a `blocks` link on the other). Returns [{ taskId, updates, undo }].
+ * An inferred line has nothing to remove — it is not stored.
+ */
+export function disconnectUpdates(edge, byId = {}) {
+  if (!edge || EDGE_KINDS[edge.kind]?.inferred) return [];
+  const a = byId[edge.from];
+  const b = byId[edge.to];
+  if (!a || !b) return [];
+  const writes = [];
+  const dropLinks = (t, otherId, test) => {
+    const links = Array.isArray(t.links) ? t.links : [];
+    const kept = links.filter((l) => !(l?.targetId === otherId && test(l.type)));
+    if (kept.length !== links.length) writes.push({ taskId: t.id, updates: { links: kept }, undo: { links } });
+  };
+  const ordered = ['blocks', 'child-of', 'parent-of', 'duplicate-of'];
+  if (edge.kind === 'depends') {
+    const deps = b.dependsOn || [];
+    if (deps.includes(a.id)) writes.push({ taskId: b.id, updates: { dependsOn: deps.filter((id) => id !== a.id) }, undo: { dependsOn: deps } });
+    dropLinks(a, b.id, (type) => type === 'blocks');
+  } else if (edge.kind === 'part') {
+    dropLinks(b, a.id, (type) => type === 'child-of');
+    dropLinks(a, b.id, (type) => type === 'parent-of');
+  } else if (edge.kind === 'duplicate') {
+    dropLinks(a, b.id, (type) => type === 'duplicate-of');
+  } else {
+    dropLinks(a, b.id, (type) => !ordered.includes(type));
+    dropLinks(b, a.id, (type) => !ordered.includes(type));
+  }
+  return writes;
 }

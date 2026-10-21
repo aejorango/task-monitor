@@ -591,7 +591,28 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    another task", **filed by project** (A–Z, "No project" last, each with its
    count), open work first by due date and finished work last. **Hide
    unconnected** folds them away, and that choice is remembered per device
-   (`task-monitor.node.hideUnconnected.v1`) — never the default. It is a Board page: the
+   (`task-monitor.node.hideUnconnected.v1`) — never the default.
+   **Auto-connect by date** (on by default, off remembered per device in
+   `task-monitor.node.autoConnect.v1`) adds a fifth kind, `sequence`: inside
+   one project, each task follows the ones planned at the date before it
+   (`plan.startDate`, else the due date). It is the only **inferred** line —
+   thinner, dotted, in info blue, "(auto)" in the legend, and **never
+   stored**. Tasks on one date share a column instead of being chained in an
+   order nobody chose; a busy date pair (more than four pairs) is joined
+   through its first task; a pair already connected, or already in order
+   through other tasks, gets no extra line; and a line that would make a loop
+   with a stated dependency is not drawn. A task with no date is not guessed
+   in. **Connecting by hand**: hover a task and a dot appears on each side;
+   drag the right one onto the task that comes next (the left one onto the
+   task that comes first) and a menu offers comes before (either way round) ·
+   part of · related · duplicate of. It writes **the same fields the task
+   editor writes** (`connectionUpdate` in `nodeGraph.js`), so the line is real
+   on the Gantt and in the editor too; an option it cannot write says why —
+   already connected, a loop, two workspaces, a task you may only view
+   (`taskRights`) — instead of failing after the click. Clicking a line
+   removes it (`disconnectUpdates` drops every statement behind it, from
+   both ends) or, for a dotted one, **saves it as "comes before"** — the
+   only way an inferred line is ever written. Every write has an Undo. It is a Board page: the
    toolbar's Project · Status · person · Find narrow it through `scopeTasks`
    like every tab, and a task the filter left out that a shown task connects
    to is drawn **faded** rather than dropped — hiding the other end of a
