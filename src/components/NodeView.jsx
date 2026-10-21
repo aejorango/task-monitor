@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { useMemberProfiles } from '../hooks/useWorkspace';
-import { useWorkspaces } from '../hooks/useWorkspace';
+import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
 import { scopeTasks, scopeOf, blockedTaskIds, displayStatus } from '../services/boardScope';
 import {
@@ -43,7 +43,7 @@ import { friendlyError } from '../services/access';
 import { activateProps } from '../hooks/useActivate';
 import { useToast } from './Toast';
 import { avatarColor, avatarInitial } from './Avatar';
-import TaskEditor from './TaskEditor';
+import TaskEditor, { newTaskDraft } from './TaskEditor';
 import { PageActions, PageSubtitle } from './PageHeader';
 
 const ZOOMS = [0.5, 0.65, 0.8, 1, 1.2, 1.4];
@@ -92,7 +92,11 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   const today = todayLocal();
 
   const { workspaces } = useWorkspaces();
+  const activeWs = useActiveWorkspaceId();
   const toast = useToast();
+  // "New task" opens the editor on a task that does not exist yet, as on the
+  // WBS and the Gantt — creating one and editing one are one screen.
+  const [creating, setCreating] = useState(false);
 
   // Every task by default; hiding the unconnected is a choice, kept per device.
   const [hideLoose, setHideLoose] = useDeviceToggle(HIDE_KEY, false);
@@ -214,7 +218,9 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
     const minL = box.scrollLeft + 8;
     const maxL = box.scrollLeft + box.clientWidth - el.offsetWidth - 8;
     let top = menu.y * zoom + 10;
-    if (top + el.offsetHeight > box.scrollTop + box.clientHeight - 8) {
+    // The lower of the canvas's own edge and the window's, in canvas units.
+    const seen = Math.min(box.scrollTop + box.clientHeight, window.innerHeight - box.getBoundingClientRect().top + box.scrollTop);
+    if (top + el.offsetHeight > seen - 8) {
       top = Math.max(box.scrollTop + 8, menu.y * zoom - el.offsetHeight - 10);
     }
     el.style.left = `${Math.max(minL, Math.min(menu.x * zoom - 24, maxL))}px`;
@@ -288,6 +294,9 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
           <span className="nd-switch-track" aria-hidden="true"><span className="nd-switch-knob" /></span>
           Auto-connect by date
         </button>
+        <button type="button" className="cmd cmd-primary" onClick={() => setCreating(true)}>
+          <span className="cmd-icon">+</span>New task
+        </button>
         {graph.unlinkedCount > 0 && (
           <button type="button" className={`cmd${showLoose ? ' is-on' : ''}`} aria-pressed={showLoose}
             onClick={() => setShowLoose((v) => !v)}>
@@ -296,7 +305,8 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
         )}
       </PageActions>
 
-      <div className="bx-panel nd-panel">
+      {/* No card around it: the legend and the graph sit on the page itself. */}
+      <div className="nd-panel">
         <div className="nd-head">
           <div className="nd-legend" aria-label="What the lines mean">
             <span className="nd-key"><svg width="30" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="nd-edge k-depends" /><path d="M22 1 L30 5 L22 9 z" className="nd-arrow k-depends" /></svg>Comes before</span>
@@ -466,6 +476,13 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
 
       {editing && (
         <TaskEditor task={editing} projects={projects} onClose={() => setEditing(null)} />
+      )}
+      {creating && (
+        <TaskEditor
+          task={newTaskDraft({ workspaceId: activeWs, projectId: projectFilter })}
+          projects={projects}
+          onClose={() => setCreating(false)}
+        />
       )}
     </div>
   );

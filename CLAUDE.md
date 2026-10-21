@@ -584,7 +584,10 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    without ordering anything, *related* and *duplicate of*. A node is a
    **fixed 220 units wide** and its title wraps — at most three lines of
    ~28 characters, then "…" — so a long title can never stretch the graph
-   (`wrapLabel`). Separate groups stack as blocks. **Every task is on the
+   (`wrapLabel`). There is **no card around it** (on request): the legend,
+   the zoom and the graph sit straight on the page, and **+ New task** sits
+   beside the Auto-connect switch, opening the editor on a new task as the
+   WBS and Gantt do. Separate groups stack as blocks. **Every task is on the
    page by default**, connected or not: the page is for planning what to do
    next, and a graph that quietly drops two-thirds of the work cannot be
    planned from. The unconnected sit below the graph under "Not connected to

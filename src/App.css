@@ -15290,10 +15290,10 @@ a:hover { text-decoration: underline; }
    of stretching the graph. The lines say what the tasks say: solid = an
    order (comes before / part of), dashed = no order (related, duplicate). */
 .nd { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.nd-panel { padding: 0; overflow: hidden; }
+.nd-panel { padding: 0; }
 .nd-head {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between;
-  padding: 10px 14px; border-bottom: 1px solid var(--c-border);
+  padding: 2px 2px 10px;
 }
 .nd-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; font-weight: 600; color: var(--c-text-2); }
 .nd-key { display: inline-flex; align-items: center; gap: 7px; }
@@ -15306,12 +15306,7 @@ a:hover { text-decoration: underline; }
 .nd-zbtn.is-word { font-size: 12px; }
 .nd-zbtn:disabled { opacity: .45; cursor: default; }
 .nd-zval { min-width: 44px; text-align: center; font-size: 12px; font-weight: 700; color: var(--c-text-2); font-variant-numeric: tabular-nums; }
-.nd-canvas {
-  position: relative; overflow: auto; max-height: calc(100vh - 250px); min-height: 320px;
-  background-color: var(--c-surface-2);
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--c-border) 70%, transparent) 1px, transparent 1.2px);
-  background-size: 20px 20px;
-}
+.nd-canvas { position: relative; overflow-x: auto; overflow-y: hidden; min-height: 320px; }
 .nd-svg { display: block; }
 .nd-loose-label { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; fill: var(--c-text-2); }
 
@@ -15412,4 +15407,4 @@ a:hover { text-decoration: underline; }
 .nd-menu-item.is-cancel { color: var(--c-text-2); border-top: 1px solid var(--c-border); border-radius: 0 0 8px 8px; margin-top: 2px; }
 .nd-menu-item:disabled { color: var(--c-text-muted); cursor: default; }
 .nd-menu-why { font-size: 11px; font-weight: 500; color: var(--c-text-muted); }
-.nd-hint { padding: 9px 14px; border-bottom: 1px solid var(--c-border); font-size: 12.5px; color: var(--c-text-2); background: var(--c-surface); }
+.nd-hint { padding: 0 2px 6px; font-size: 12.5px; color: var(--c-text-2); }
