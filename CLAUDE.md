@@ -584,9 +584,14 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    without ordering anything, *related* and *duplicate of*. A node is a
    **fixed 220 units wide** and its title wraps — at most three lines of
    ~28 characters, then "…" — so a long title can never stretch the graph
-   (`wrapLabel`). Separate groups stack as blocks; tasks with no connection at
-   all are counted in the subtitle and hidden, with **Show unconnected**
-   laying them out as a grid under their own heading. It is a Board page: the
+   (`wrapLabel`). Separate groups stack as blocks. **Every task is on the
+   page by default**, connected or not: the page is for planning what to do
+   next, and a graph that quietly drops two-thirds of the work cannot be
+   planned from. The unconnected sit below the graph under "Not connected to
+   another task", **filed by project** (A–Z, "No project" last, each with its
+   count), open work first by due date and finished work last. **Hide
+   unconnected** folds them away, and that choice is remembered per device
+   (`task-monitor.node.hideUnconnected.v1`) — never the default. It is a Board page: the
    toolbar's Project · Status · person · Find narrow it through `scopeTasks`
    like every tab, and a task the filter left out that a shown task connects
    to is drawn **faded** rather than dropped — hiding the other end of a

@@ -213,7 +213,13 @@ const dueKey = (t) => t?.plan?.endDate || '9999-99-99';
  * of what feeds them (two passes), then by due date, then by title — so the
  * same data always draws the same picture.
  */
-export function layoutGraph(graph, { labelOf = (t) => t?.title } = {}) {
+export function layoutGraph(graph, {
+  labelOf = (t) => t?.title,
+  // What a task with no connection is filed under in the grid: its project.
+  groupOf = (t) => ({ key: t?.projectId || '', label: t?.projectId ? 'Project' : 'No project', color: null }),
+  // How many across the grid may go — the page passes what fits its width.
+  across: acrossWanted = 0,
+} = {}) {
   const { nodes, edges } = graph;
   const { rank, loopEdges } = rankNodes(nodes, edges);
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -278,25 +284,48 @@ export function layoutGraph(graph, { labelOf = (t) => t?.title } = {}) {
     top += groupH + GROUP_GAP;
   });
 
-  // The unconnected, as a grid as wide as the graph above it (at least three
-  // across), under their own heading so nobody reads them as a chain.
+  // Everything with no connection — the rest of the work, which a strategy
+  // still has to see — as a grid under the graph, filed by PROJECT so it can
+  // be read as "what is left in each", open work first by due date and the
+  // finished last. One heading for the section, one per project.
+  const headings = [];
   let looseTop = null;
   if (loose.length) {
     looseTop = top;
-    top += 26;
-    const across = Math.max(3, Math.round((width - PAD) / (NODE_W + GAP_X)) || 0);
-    const sorted = [...loose].sort((a, b) => dueKey(byId.get(a).task).localeCompare(dueKey(byId.get(b).task)) || a.localeCompare(b));
-    for (let i = 0; i < sorted.length; i += across) {
-      const row = sorted.slice(i, i + across);
-      const rowH = Math.max(...row.map((id) => nodeHeight(lines.get(id).length)));
-      row.forEach((id, j) => {
-        const x = PAD + j * (NODE_W + GAP_X / 2);
-        pos.set(id, { x, y: top, w: NODE_W, h: nodeHeight(lines.get(id).length), rank: null, lines: lines.get(id) });
-        width = Math.max(width, x + NODE_W + PAD);
-      });
-      top += rowH + GAP_Y;
-    }
-    top += GROUP_GAP - GAP_Y;
+    headings.push({ kind: 'section', y: top, label: linkedIds.size ? 'NOT CONNECTED TO ANOTHER TASK' : 'NO CONNECTIONS YET — EVERY TASK, BY PROJECT' });
+    top += 30;
+    const across = Math.max(3, acrossWanted || 0, Math.round((width - PAD) / (NODE_W + GAP_X / 2)) || 0);
+    const files = new Map();
+    loose.forEach((id) => {
+      const g = groupOf(byId.get(id).task) || { key: '', label: 'No project' };
+      if (!files.has(g.key)) files.set(g.key, { ...g, ids: [] });
+      files.get(g.key).ids.push(id);
+    });
+    const order = [...files.values()].sort((a, b) => (!a.key) - (!b.key) || String(a.label).localeCompare(String(b.label)));
+    const openFirst = (a, b) => {
+      const ta = byId.get(a).task; const tb = byId.get(b).task;
+      return (ta?.status === 'done') - (tb?.status === 'done')
+        || dueKey(ta).localeCompare(dueKey(tb))
+        || String(labelOf(ta) || '').localeCompare(String(labelOf(tb) || ''))
+        || a.localeCompare(b);
+    };
+    order.forEach((file) => {
+      headings.push({ kind: 'project', y: top, label: file.label, color: file.color, count: file.ids.length });
+      top += 24;
+      const sorted = [...file.ids].sort(openFirst);
+      for (let i = 0; i < sorted.length; i += across) {
+        const row = sorted.slice(i, i + across);
+        const rowH = Math.max(...row.map((id) => nodeHeight(lines.get(id).length)));
+        row.forEach((id, j) => {
+          const x = PAD + j * (NODE_W + GAP_X / 2);
+          pos.set(id, { x, y: top, w: NODE_W, h: nodeHeight(lines.get(id).length), rank: null, lines: lines.get(id) });
+          width = Math.max(width, x + NODE_W + PAD);
+        });
+        top += rowH + GAP_Y;
+      }
+      top += 14;
+    });
+    top += GROUP_GAP - GAP_Y - 14;
   }
 
   const paths = edges.map((e) => {
@@ -316,6 +345,7 @@ export function layoutGraph(graph, { labelOf = (t) => t?.title } = {}) {
     height: Math.max(top - GROUP_GAP + PAD, PAD * 2),
     groups: groups.length,
     looseTop,
+    headings,
   };
 }
 

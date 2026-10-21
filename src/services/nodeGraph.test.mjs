@@ -113,3 +113,27 @@ test('a line between two tasks in one column is not clipped at the canvas edge',
   assert.equal(a.x, b.x, 'both children sit in one column');
   assert.ok(layout.width >= a.x + a.w + 46, 'room for the bow to the right');
 });
+
+test('every task is on the page: the unconnected are filed by project, open work first', () => {
+  const tasks = [
+    T('a'), T('b', { dependsOn: ['a'] }),
+    T('x1', { projectId: 'px', title: 'Later one', plan: { endDate: '2026-12-01' } }),
+    T('x2', { projectId: 'px', title: 'Done one', status: 'done', plan: { endDate: '2026-01-01' } }),
+    T('x3', { projectId: 'px', title: 'Sooner one', plan: { endDate: '2026-11-01' } }),
+    T('y1', { projectId: 'py' }),
+    T('n1'),
+  ];
+  const g = buildGraph(tasks, tasks, { includeUnlinked: true });
+  assert.equal(g.nodes.length, tasks.length, 'no task is left out');
+  const names = { px: 'Alpha', py: 'Beta' };
+  const layout = layoutGraph(g, {
+    groupOf: (t) => (t.projectId ? { key: t.projectId, label: names[t.projectId] } : { key: '', label: 'No project' }),
+  });
+  const heads = layout.headings.filter((h) => h.kind === 'project');
+  assert.deepEqual(heads.map((h) => [h.label, h.count]), [['Alpha', 3], ['Beta', 1], ['No project', 1]],
+    'projects A–Z, "No project" last, each with its count');
+  const x = ['x1', 'x2', 'x3'].map((id) => layout.nodes.find((n) => n.id === id));
+  const byReading = [...x].sort((p, q) => p.y - q.y || p.x - q.x).map((n) => n.id);
+  assert.deepEqual(byReading, ['x3', 'x1', 'x2'], 'soonest due first, finished last');
+  assert.ok(layout.headings[0].kind === 'section');
+});

@@ -15356,3 +15356,6 @@ a:hover { text-decoration: underline; }
 .nd-empty { padding: 40px 24px; text-align: center; color: var(--c-text-2); display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .nd-empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--c-text); }
 .nd-empty p { max-width: 520px; margin: 0; line-height: 1.55; }
+.nd-proj-head { font-size: 13px; font-weight: 800; fill: var(--c-text); }
+.nd-proj-count { font-size: 11.5px; font-weight: 700; fill: var(--c-text-2); }
+.nd-hint { padding: 9px 14px; border-bottom: 1px solid var(--c-border); font-size: 12.5px; color: var(--c-text-2); background: var(--c-surface); }

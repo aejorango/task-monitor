@@ -7,18 +7,23 @@
 // geometry, the wrapping and the cycle-guarding are the pure
 // services/nodeGraph.js; this file draws them.
 //
+// EVERY task is on it (the toolbar's filters aside): the ones joined to
+// another form the graph, and the rest are filed by project in a grid below
+// it, because a plan has to see the work nobody has connected yet too.
+// "Hide unconnected" narrows it to the chains alone, remembered per device.
+//
 // It is a Board page, so the toolbar above it narrows it like every other tab
 // (Project · Status · person · Find, through `scopeTasks`). A task the filter
 // left out but that a shown task connects to is drawn FADED rather than
 // dropped: hiding the other end of a dependency hides the reason a task waits.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks, useProjects, useAllActivities } from '../hooks/useTasks';
 import { useMemberProfiles } from '../hooks/useWorkspace';
 import { todayLocal } from '../services/firebase';
 import { scopeTasks, scopeOf, blockedTaskIds, displayStatus } from '../services/boardScope';
 import {
-  buildGraph, layoutGraph, neighbourhood, EDGE_KINDS, LINE_H,
+  buildGraph, layoutGraph, neighbourhood, EDGE_KINDS, LINE_H, NODE_W, GAP_X, PAD,
 } from '../services/nodeGraph';
 import { activateProps } from '../hooks/useActivate';
 import { avatarColor, avatarInitial } from './Avatar';
@@ -26,6 +31,8 @@ import TaskEditor from './TaskEditor';
 import { PageActions, PageSubtitle } from './PageHeader';
 
 const ZOOMS = [0.5, 0.65, 0.8, 1, 1.2, 1.4];
+const HIDE_KEY = 'task-monitor.node.hideUnconnected.v1';
+const readHide = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
 
 function shortDue(ymd) {
   const [y, m, d] = String(ymd || '').split('-').map(Number);
@@ -42,11 +49,31 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   const blockedIds = useMemo(() => blockedTaskIds(activities), [activities]);
   const today = todayLocal();
 
-  const [showLoose, setShowLoose] = useState(false);
+  // Every task by default; hiding the unconnected is a choice, kept per device.
+  const [showLoose, setShowLooseState] = useState(() => !readHide());
+  const setShowLoose = useCallback((next) => {
+    setShowLooseState((cur) => {
+      const v = typeof next === 'function' ? next(cur) : next;
+      try { v ? localStorage.removeItem(HIDE_KEY) : localStorage.setItem(HIDE_KEY, '1'); } catch { /* private window */ }
+      return v;
+    });
+  }, []);
+  // How wide the card is, so the grid of unconnected tasks fills it.
+  const [canvasW, setCanvasW] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [focus, setFocus] = useState(null);     // the node hovered or focused
   const [editing, setEditing] = useState(null);
   const scroller = useRef(null);
+  // A callback ref: the canvas only exists once there is something to draw.
+  const observer = useRef(null);
+  const measure = useCallback((el) => {
+    scroller.current = el;
+    observer.current?.disconnect();
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    observer.current = new ResizeObserver(([entry]) => setCanvasW(Math.round(entry.contentRect.width)));
+    observer.current.observe(el);
+  }, []);
+  useEffect(() => () => observer.current?.disconnect(), []);
 
   // The toolbar's filters, exactly as every Board tab applies them.
   const inView = useMemo(
@@ -59,10 +86,17 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   const all = useMemo(() => tasks.filter((t) => !t.deleted && !t.archived), [tasks]);
 
   const graph = useMemo(() => buildGraph(inView, all, { includeUnlinked: showLoose }), [inView, all, showLoose]);
-  const layout = useMemo(() => layoutGraph(graph), [graph]);
+  const across = Math.max(3, Math.floor((canvasW - PAD) / (NODE_W + GAP_X / 2)) || 0);
+  const layout = useMemo(() => layoutGraph(graph, {
+    across,
+    groupOf: (t) => {
+      const p = projectById[t?.projectId];
+      return p ? { key: p.id, label: p.name, color: p.color } : { key: '', label: 'No project', color: null };
+    },
+  }), [graph, across, projectById]);
   const lit = useMemo(() => (focus ? neighbourhood(focus, layout.edges) : null), [focus, layout.edges]);
 
-  const linkedShown = graph.nodes.filter((n) => !n.context).length - (showLoose ? graph.unlinkedCount : 0);
+  const linkedShown = graph.inViewCount - graph.unlinkedCount;
 
   // Fit the whole graph to the card's width (never past 100%).
   const fit = useCallback(() => {
@@ -83,9 +117,11 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   return (
     <div className="nd">
       <PageSubtitle>
-        {plural(linkedShown, 'connected task')} · {plural(layout.edges.length, 'connection')}
+        {plural(graph.inViewCount, 'task')} · {linkedShown} connected by {plural(layout.edges.length, 'line')}
+        {graph.unlinkedCount > 0 && (showLoose
+          ? <> · {graph.unlinkedCount} not connected yet</>
+          : <> · {graph.unlinkedCount} not connected, hidden</>)}
         {graph.contextCount > 0 && <> · {graph.contextCount} outside your filter, shown faded</>}
-        {graph.unlinkedCount > 0 && !showLoose && <> · {plural(graph.unlinkedCount, 'task')} with no connection hidden</>}
       </PageSubtitle>
       <PageActions>
         {graph.unlinkedCount > 0 && (
@@ -114,6 +150,12 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
           </div>
         </div>
 
+        {layout.nodes.length > 0 && layout.edges.length === 0 && (
+          <div className="nd-hint">
+            No task here is connected to another yet. Open one, then <strong>Details → Dependencies &amp; relations</strong>,
+            to say what it waits on, blocks, is part of or relates to — each becomes a line.
+          </div>
+        )}
         {layout.nodes.length === 0 ? (
           <div className="nd-empty">
             <div className="nd-empty-title">
@@ -130,7 +172,7 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
             )}
           </div>
         ) : (
-          <div className="nd-canvas" ref={scroller}>
+          <div className="nd-canvas" ref={measure}>
             <svg
               className={`nd-svg${lit ? ' has-focus' : ''}`}
               width={layout.width * zoom}
@@ -148,9 +190,14 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
                 ))}
               </defs>
 
-              {layout.looseTop != null && (
-                <text x={28} y={layout.looseTop + 14} className="nd-loose-label">NOT CONNECTED TO ANYTHING</text>
-              )}
+              {layout.headings.map((hd) => (hd.kind === 'section' ? (
+                <text key={`s${hd.y}`} x={PAD} y={hd.y + 16} className="nd-loose-label">{hd.label}</text>
+              ) : (
+                <g key={`p${hd.y}`} transform={`translate(${PAD} ${hd.y})`}>
+                  <circle cx="5" cy="9" r="5" style={{ fill: hd.color || 'var(--c-text-muted)' }} />
+                  <text x="16" y="13" className="nd-proj-head">{hd.label}<tspan className="nd-proj-count" dx="8">{hd.count}</tspan></text>
+                </g>
+              )))}
 
               {/* Lines under the nodes. */}
               {layout.edges.map((e) => {
