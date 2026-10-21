@@ -47,7 +47,7 @@ test('a hub lands on its first tab', () => {
   // the point of `landing` is that the strip's ORDER cannot move the home.
   const board = HUBS.find((h) => h.id === 'board');
   assert.deepEqual(board.tabs.map((t) => t.view),
-    ['calendar', 'gantt', 'board', 'wbs', 'workload']);
+    ['calendar', 'gantt', 'board', 'wbs', 'workload', 'node']);
   assert.equal(hubLanding('board'), 'wbs',
     'reordering the strip must not move where the rail lands');
   // An id nobody has is not a crash — it is the Dashboard.

@@ -107,6 +107,21 @@ let state = {
   ],
 };
 
+// Dependencies and relations, so Board → Node has a graph to draw: two chains
+// across projects, a "part of" family, a related pair and a duplicate.
+const LINKS = {
+  't-1':  { dependsOn: ['t-12', 't-2'] },
+  't-14': { dependsOn: ['t-3'] },
+  't-6':  { links: [{ type: 'blocks', targetId: 't-14' }] },
+  't-5':  { dependsOn: ['t-4'], links: [{ type: 'related-to', targetId: 't-6' }] },
+  't-13': { links: [{ type: 'blocks', targetId: 't-4' }] },
+  't-10': { dependsOn: ['t-9'] },
+  't-9':  { links: [{ type: 'related-to', targetId: 't-2' }] },
+  't-7':  { links: [{ type: 'child-of', targetId: 't-11' }] },
+  't-8':  { links: [{ type: 'child-of', targetId: 't-11' }, { type: 'duplicate-of', targetId: 't-7' }] },
+};
+state.tasks = state.tasks.map((t) => (LINKS[t.id] ? { ...t, ...LINKS[t.id], dependsOn: [...(t.dependsOn || []), ...(LINKS[t.id].dependsOn || [])] } : t));
+
 // Activities carry their workspace, as the real documents do.
 state.activities = state.activities.map((a) => ({ workspaceId: state.tasks.find((t) => t.id === a.taskId)?.workspaceId || 'ws-1', ...a }));
 state.all = false;

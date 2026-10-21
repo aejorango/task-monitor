@@ -149,6 +149,14 @@ const ICON_PATHS = {
   message: (
     <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z" />
   ),
+  node: (
+    <>
+      <circle cx="5" cy="6" r="2.5" />
+      <circle cx="19" cy="6" r="2.5" />
+      <circle cx="12" cy="18" r="2.5" />
+      <path d="M7.5 6h9M6.3 8.2l4.4 7.6M17.7 8.2l-4.4 7.6" />
+    </>
+  ),
   wbs: (
     <>
       <rect x="9" y="3" width="6" height="4" rx="1" />
@@ -1112,6 +1120,7 @@ const VIEWS_GUIDE = [
   { icon: 'calendar',  name: 'Calendar',  text: 'Month grid by plan end date. Drag a task to reschedule, filter by status (All / To do / Ongoing / Done), and add a new task.' },
   { icon: 'gantt',     name: 'Gantt',     text: 'Timeline of plan vs. actual. Drag bars to resize/move, see dependency arrows, and filter by a date period.' },
   { icon: 'wbs',       name: 'WBS',       text: 'Work-breakdown structure: Project → Phase → Task → Subtask with duration, dates, resource, and % complete, plus a Gantt-style timeline. Click any row for its activity log; filter by status or date.' },
+  { icon: 'node',      name: 'Node',      text: 'Every task as a node, joined to what it waits on, what follows it, what it is part of and what it relates to — read left to right, the way work flows. Hover a node to light up its connections; click to open the task. Tasks outside your filter that a shown task connects to are drawn faded.' },
   { icon: 'goals',     name: 'Goals',     text: 'Strategic-plan one-pagers — initiative, KPI, change agenda, and deliverables linked to projects for live progress. Pick your own banner + card colors.' },
   { icon: 'messages',  name: 'Messages',  text: 'Direct and group chat with workspace members — real-time, closed to the workspace. Add or remove people from a group.' },
   { icon: 'minutes',   name: 'Minutes',   text: 'Meeting minutes — attendees, notes, decisions, action items, and a boss-focused "Priority" panel. Filter by project from the top bar.' },

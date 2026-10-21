@@ -21,6 +21,7 @@ export const VIEW_REGISTRY = [
   { id: 'gantt',          label: 'Gantt chart',    icon: 'gantt',     words: ['timeline', 'schedule', 'bars'] },
   { id: 'wbs',            label: 'WBS',            icon: 'wbs',       words: ['breakdown', 'work breakdown'] },
   { id: 'workload',       label: 'Workload',       icon: 'goals',     words: ['workload', 'capacity', 'who is busy', 'rebalance', 'people'] },
+  { id: 'node',           label: 'Node',           icon: 'node',      words: ['node', 'nodes', 'mind map', 'mindmap', 'graph', 'network', 'connections', 'dependencies', 'relationships', 'what blocks what', 'flow'] },
   { id: 'goals',          label: 'Goals',          icon: 'goals',     words: ['objectives', 'okr'] },
   { id: 'automations',    label: 'Automations',    icon: 'bolt',      words: ['automations', 'rules', 'when this then that', 'triggers', 'runs'] },
   { id: 'people',         label: 'People',         icon: 'goals',     words: ['people', 'members', 'utilization', 'capacity', 'on-time', 'throughput'] },
@@ -168,6 +169,8 @@ export const HUBS = [
       { view: 'board', label: 'Kanban' },
       { view: 'wbs' },
       { view: 'workload' },
+      // The tasks as a graph of what leads to what (services/nodeGraph.js).
+      { view: 'node' },
     ],
   },
   {

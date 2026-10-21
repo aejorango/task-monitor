@@ -288,8 +288,8 @@ its list through `scopeTasks`, so one input narrows every tab at once. It
 commits on a pause rather than per keystroke, or the back button would walk
 back through every letter.
 
-**The Board hub is five tabs and one toolbar.** Calendar · Gantt · Kanban ·
-WBS · Workload — schedule first, board second (T-0159, at Ace's request; the
+**The Board hub is six tabs and one toolbar.** Calendar · Gantt · Kanban ·
+WBS · Workload · Node — schedule first, board second (T-0159, at Ace's request; the
 Explorer draws Kanban first). The **rail still opens the Kanban**: `landing`
 on the hub states that, because `hubLanding` otherwise returns `tabs[0]` and a
 cosmetic reorder would silently move the hub's home. The Board Explorer draws eight; **Table, Flow and Item were
@@ -359,6 +359,7 @@ The panels the mockups specify, and the modules behind them:
 | Report cards | Reports → Library | `savedViews` + the export builders |
 | Load per person, segmented, against a cap | Board → Workload | `services/workload.js` |
 | Numbered outline (WBS · 1 · 1.2 · dates · priority) | Board → WBS | projects › phases › tasks |
+| Task graph: what leads to what, left to right | Board → Node | `services/nodeGraph.js` |
 | Project list · minute card (two rows) · The Priority | Projects → Minutes | minutes, `tasks` for linked action items |
 
 None of them invent a number. Where the mockup showed something this app does
@@ -573,6 +574,29 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    with a way to clear it. What went: the sideways-scrolling day grid, the
    weekend columns, the per-day header row, the second "actual" bar under
    the plan, the sticky phase column, and the five-chip period filter bar.
+4b. **Node** (Board → Node) — every task as a node, joined to what it waits
+   on and what follows it, read **left to right**: a task sits one column after
+   the furthest thing it waits on (longest path in), so everything that can
+   start now is in the first column. The edges are **only what the tasks say**
+   — `dependsOn` and the editor's Dependencies & relations: *comes before*
+   (`dependsOn`, and a `blocks` link — the same claim, so a pair stated both
+   ways is one edge), *part of* (`child-of` / `parent-of`), and, dashed and
+   without ordering anything, *related* and *duplicate of*. A node is a
+   **fixed 220 units wide** and its title wraps — at most three lines of
+   ~28 characters, then "…" — so a long title can never stretch the graph
+   (`wrapLabel`). Separate groups stack as blocks; tasks with no connection at
+   all are counted in the subtitle and hidden, with **Show unconnected**
+   laying them out as a grid under their own heading. It is a Board page: the
+   toolbar's Project · Status · person · Find narrow it through `scopeTasks`
+   like every tab, and a task the filter left out that a shown task connects
+   to is drawn **faded** rather than dropped — hiding the other end of a
+   dependency hides the reason a task is waiting. A **loop** in the data (A
+   waits on B waits on A) must not hang the page: the edge closing it is left
+   out of the ranking, still drawn, in red. Hover or focus a node to light its
+   neighbours; click (or Enter/Space — `activateProps`) to open its editor;
+   zoom − / + / Fit / 100%. All the geometry is the pure
+   `services/nodeGraph.js` (`buildGraph` → `layoutGraph`), tested by
+   `nodeGraph.test.mjs`.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 9. **Review** (the Reports hub's "Summary" tab) — five `<Tile>`s, a **period band**
    (`.period-bar`) that is deliberately not among the commands because it decides what
@@ -804,6 +828,7 @@ src/
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
 │   ├── WorkloadView.jsx     ← Board → Workload: load per person against a cap
 │   ├── WBSView.jsx          ← Board → WBS: project › phase › item outline
+│   ├── NodeView.jsx         ← Board → Node: the tasks as a graph of what leads to what
 │   ├── MyWeekView.jsx       ← My Week: my tasks from every workspace, by day
 │   ├── ShareLinksPanel.jsx  ← project editor: publish / refresh / turn off a link
 │   ├── SharedViewPage.jsx   ← the public route: fetches one snapshot, no sign-in
@@ -867,6 +892,7 @@ src/
 │   ├── taskTree.js           ← a promoted subtask that is still part of its parent
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
+│   ├── nodeGraph.js          ← Board → Node: edges, columns, wrapping, loops (pure)
 │   ├── workload.js           ← load per person; the weeks-grid arithmetic is
 │   │                            kept but unrendered (see WorkloadView's header)
 │   ├── writeBatches.js       ← chunkWrites: splitting a write into commits

@@ -89,6 +89,14 @@ const PATHS = {
       <path d="m3 17 9 4.5 9-4.5" />
     </>
   ),
+  node: (
+    <>
+      <circle cx="5" cy="6" r="2.5" />
+      <circle cx="19" cy="6" r="2.5" />
+      <circle cx="12" cy="18" r="2.5" />
+      <path d="M7.5 6h9M6.3 8.2l4.4 7.6M17.7 8.2l-4.4 7.6" />
+    </>
+  ),
   wbs: (
     <>
       <rect x="9" y="2" width="6" height="5" rx="1" />

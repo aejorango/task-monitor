@@ -46,6 +46,7 @@ const WorkPerformedView = lazy(() => import('./components/WorkPerformedView'));
 const HowToUseView      = lazy(() => import('./components/HowToUseView'));
 const TutorialView      = lazy(() => import('./components/TutorialView'));
 const WBSView           = lazy(() => import('./components/WBSView'));
+const NodeView          = lazy(() => import('./components/NodeView'));
 const GoalsView         = lazy(() => import('./components/GoalsView'));
 const MessagesView      = lazy(() => import('./components/MessagesView'));
 const MinutesView       = lazy(() => import('./components/MinutesView'));
@@ -236,6 +237,7 @@ function ApprovedApp({ userId, ready, route, navigate, profile }) {
         {route.view === 'gantt'     && <GanttView projectFilter={route.projectFilter} initialTagFilter={route.tagFilter} route={route} />}
         {route.view === 'wbs'       && <WBSView projectFilter={route.projectFilter} route={route} />}
         {route.view === 'workload'  && <WorkloadView projectFilter={route.projectFilter} navigate={navigate} route={route} />}
+        {route.view === 'node'      && <NodeView projectFilter={route.projectFilter} route={route} />}
         {/* No projectFilter: My Week spans every workspace on purpose, so a
             one-project filter would be the opposite of what it is for. */}
         {route.view === 'my-week'   && <MyWeekView />}

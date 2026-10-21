@@ -27,9 +27,10 @@ const BOARD_PAGES = {
   gantt:         'GanttView.jsx',
   wbs:           'WBSView.jsx',
   workload:      'WorkloadView.jsx',
+  node:          'NodeView.jsx',
 };
 
-test('the Board hub holds its five tabs, schedule first', () => {
+test('the Board hub holds its six tabs, schedule first', () => {
   // The Explorer draws Kanban first. Ace asked for it AFTER Gantt, so the
   // strip reads as the schedule (when the work is) and then the board (what
   // state it is in). The rail still opens the Kanban — see `landing` in
@@ -37,11 +38,11 @@ test('the Board hub holds its five tabs, schedule first', () => {
   const hub = HUBS.find((h) => h.id === 'board');
   assert.deepEqual(
     hub.tabs.map((t) => t.view),
-    ['calendar', 'gantt', 'board', 'wbs', 'workload'],
+    ['calendar', 'gantt', 'board', 'wbs', 'workload', 'node'],
   );
   assert.deepEqual(
     tabsForView('board').map((t) => t.label),
-    ['Calendar', 'Gantt', 'Kanban', 'WBS', 'Workload'],
+    ['Calendar', 'Gantt', 'Kanban', 'WBS', 'Workload', 'Node'],
   );
 });
 
