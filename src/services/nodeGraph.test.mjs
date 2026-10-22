@@ -61,6 +61,22 @@ test('columns follow the work: each task one past the furthest thing it waits on
     '"related" draws a line but does not push anything to a later column');
 });
 
+test('a task with nothing before it sits beside what it leads to, not at the far left', () => {
+  // a → b → c → d, and x (connected later) comes before d only.
+  const tasks = [T('a'), T('b', { dependsOn: ['a'] }), T('c', { dependsOn: ['b'] }),
+    T('d', { dependsOn: ['c', 'x'] }), T('x'), T('y'), T('z', { dependsOn: ['y'] })];
+  const g = buildGraph(tasks, tasks);
+  const { rank } = rankNodes(g.nodes, g.edges);
+  assert.equal(rank.get('x'), 2, 'one column before d');
+  assert.equal(rank.get('d'), 3, 'what it leads to does not move');
+  assert.equal(rank.get('a'), 0, 'the start of the longest chain stays first');
+  assert.equal(rank.get('y'), 0);
+  const layout = layoutGraph(g);
+  const x = layout.nodes.find((n) => n.id === 'x');
+  const d = layout.nodes.find((n) => n.id === 'd');
+  assert.ok(x.x < d.x && d.x - x.x < 2 * NODE_W, 'drawn next to d');
+});
+
 test('a loop in the data does not hang the page — it is drawn and flagged', () => {
   const tasks = [T('a', { dependsOn: ['b'] }), T('b', { dependsOn: ['a'] }), T('c', { dependsOn: ['b'] })];
   const g = buildGraph(tasks, tasks);

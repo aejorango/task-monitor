@@ -21,8 +21,9 @@
 //     real "comes before" — and it never contradicts a stated connection.
 //
 // LAYOUT — left to right, the way work flows. A task's column is one past the
-// furthest thing it waits on (the longest path in), so a chain reads in order
-// and everything that can start now sits in the first column. Only 'depends'
+// furthest thing it waits on (the longest path in), so a chain reads in order.
+// A task with nothing before it sits one column before the earliest task it
+// leads to — beside what it feeds, not stranded at the far left. Only 'depends'
 // and 'part' edges decide columns; 'related' and 'duplicate' are drawn but do
 // not push anything sideways, because they say nothing about order. Separate
 // groups of connected tasks are stacked as their own blocks. A cycle — A waits
@@ -285,6 +286,19 @@ export function rankNodes(nodes, edges) {
     return r;
   };
   nodes.forEach((n) => rankOf(n.id));
+
+  // A task with nothing before it is not pinned to the first column: it sits
+  // one column before the EARLIEST task it leads to, so a prior step joined
+  // to a task far down a chain is drawn beside that task rather than at the
+  // far left with a long line across the page. Its successors all have an
+  // incoming line, so none of them moves, and one pass is enough.
+  const outgoing = new Map(nodes.map((n) => [n.id, []]));
+  ordering.filter((e) => !loopEdges.has(e.id)).forEach((e) => outgoing.get(e.from)?.push(e.to));
+  nodes.forEach((n) => {
+    if ((incoming.get(n.id) || []).length) return;
+    const next = (outgoing.get(n.id) || []).map((id) => rank.get(id)).filter((r) => r != null);
+    if (next.length) rank.set(n.id, Math.max(0, Math.min(...next) - 1));
+  });
   return { rank, loopEdges };
 }
 

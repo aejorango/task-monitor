@@ -576,8 +576,10 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    the plan, the sticky phase column, and the five-chip period filter bar.
 4b. **Node** (Board → Node) — every task as a node, joined to what it waits
    on and what follows it, read **left to right**: a task sits one column after
-   the furthest thing it waits on (longest path in), so everything that can
-   start now is in the first column. The edges are **only what the tasks say**
+   the furthest thing it waits on (longest path in). A task with **nothing
+   before it** is not pinned to the first column: it sits one column before
+   the earliest task it leads to (on request), so a prior step connected to a
+   task deep in a chain is drawn beside it rather than at the far left. The edges are **only what the tasks say**
    — `dependsOn` and the editor's Dependencies & relations: *comes before*
    (`dependsOn`, and a `blocks` link — the same claim, so a pair stated both
    ways is one edge), *part of* (`child-of` / `parent-of`), and, dashed and
