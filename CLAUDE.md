@@ -594,8 +594,18 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    (`laneEdgePath`): straight down a lane only where it is clear, across
    between lanes in the gap above a row, and otherwise down the **gutter
    between lanes** — never through a task — nudged apart so two never share a
-   run. Separate connected groups are stacked as bands with a dashed rule
-   between them. The edges are **only what the tasks say**
+   run. The rows are banded by **phase** (on request): a column at the far
+   left names each band **written bottom to top**, a strip of the project's
+   colour on its edge, and a quiet rule runs across between bands — so you
+   can see which tasks fall under which phase. Bands follow each project's
+   own phase order (projects A–Z); a task with no phase closes its project,
+   a project with **no phases at all** is one band named for the project, and
+   no project comes last. With several projects on the page the project
+   rides on a quieter second line beside the phase name. Inside a band the
+   rows are still the ranking, so a phase reads in the order its work leads
+   on; a dependency that runs from a later phase back to an earlier one
+   simply draws upward. (`layoutSwimlanes(…, { bandOf })`; without `bandOf`
+   the bands are the connected groups, unlabelled.) The edges are **only what the tasks say**
    — `dependsOn` and the editor's Dependencies & relations: *comes before*
    (`dependsOn`, and a `blocks` link — the same claim, so a pair stated both
    ways is one edge), *part of* (`child-of` / `parent-of`), and, dashed and

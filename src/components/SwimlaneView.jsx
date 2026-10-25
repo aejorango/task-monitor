@@ -154,7 +154,26 @@ export default function SwimlaneView({ projectFilter = 'all', route = {} }) {
       const ext = (t?.assignedToExternal || [])[0];
       return ext ? { key: `ext:${ext}`, label: ext, person: ext } : { key: '', label: 'Unassigned', person: null };
     },
-  }), [graph, profiles]);
+    // A band is a PHASE of a project, in the project's own phase order;
+    // a task with no phase closes its project, and no project comes last.
+    bandOf: (t) => {
+      const p = projectById[t?.projectId];
+      if (!p) return { key: '|', label: 'No project', project: null, color: null, order: [null] };
+      const phases = [...(p.phases || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      // A project with no phases at all is one band, named for the project.
+      if (!phases.length) return { key: `${p.id}|`, label: p.name || 'Untitled project', project: null, color: p.color || null, order: [p.name || '', 0] };
+      const i = phases.findIndex((ph) => ph.id === t.phaseId);
+      return {
+        key: `${p.id}|${i === -1 ? '' : t.phaseId}`,
+        label: i === -1 ? 'No phase' : phases[i].name || 'Untitled phase',
+        project: p.name,
+        color: p.color || null,
+        order: [p.name || '', i === -1 ? 1e6 : i],
+      };
+    },
+  }), [graph, profiles, projectById]);
+  // With more than one project on the page, a phase name alone is ambiguous.
+  const manyProjects = new Set(layout.bands.map((b) => b.project || b.label)).size > 1;
   const focusId = drag ? drag.fromId : focus;
   const lit = useMemo(() => (focusId ? neighbourhood(focusId, layout.edges) : null), [focusId, layout.edges]);
 
@@ -388,8 +407,32 @@ export default function SwimlaneView({ projectFilter = 'all', route = {} }) {
                   <text className="sl-lane-count" x={ln.x + ln.w - 14} y={PAD + LANE_HEAD / 2 + 4.5} textAnchor="end">{ln.count}</text>
                 </g>
               ))}
+              {/* The phase column: each phase's band named bottom to top, a rule between bands. */}
+              {layout.phaseW > 0 && (
+                <g className="sl-phases">
+                  <rect className="sl-lane-head" x={PAD} y={PAD} width={layout.phaseW} height={LANE_HEAD} />
+                  {layout.bands.map((b) => {
+                    // Written bottom to top. With several projects on the page
+                    // the project rides on a quieter second line beside the phase.
+                    const sub = manyProjects && b.project ? b.project : null;
+                    const fits = Math.max(4, Math.floor((b.h - 18) / 7.4));
+                    return (
+                      <g key={b.key}>
+                        <title>{sub ? `${sub} — ${b.label}` : b.label}</title>
+                        <rect className="sl-phase-cell" x={PAD} y={b.y} width={layout.phaseW} height={b.h} />
+                        {b.color && <rect x={PAD} y={b.y} width="4" height={b.h} style={{ fill: b.color }} />}
+                        <g transform={`translate(${PAD + layout.phaseW / 2 + 2} ${b.y + b.h / 2}) rotate(-90)`}>
+                          {sub && <text className="sl-phase-project" textAnchor="middle" y="-4">{clip(sub, Math.floor(fits * 1.15))}</text>}
+                          <text className="sl-phase-name" textAnchor="middle" y={sub ? 10 : 4}>{clip(b.label, fits)}</text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
               {layout.dividers.map((y) => (
-                <line key={`d${y}`} className="sl-divider" x1={PAD} x2={PAD + layout.lanes.length * (layout.lanes[0]?.w || 0)} y1={y} y2={y} />
+                <line key={`d${y}`} className={`sl-divider${layout.phaseW ? ' is-phase' : ''}`} x1={PAD}
+                  x2={PAD + layout.phaseW + layout.lanes.length * (layout.lanes[0]?.w || 0)} y1={y} y2={y} />
               ))}
               {/* The tray: every task with no connection yet, kept apart from the
                   lanes so they hold only the flow; drag one onto the flow to place it. */}
