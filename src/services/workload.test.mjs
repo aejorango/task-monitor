@@ -253,3 +253,73 @@ test('a drop on nothing is not a write', () => {
   assert.equal(moveTaskPlan(null, { toUserId: MIA }), null);
   assert.equal(moveTaskPlan(task(), {}), null);
 });
+
+// ── One week: planned against actual ────────────────────────────────────────
+import { weekWorkload, planDays } from './workload.js';
+
+const WEEK = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'];  // Mon–Sun
+
+test('a plan is spread over its weekdays; an all-weekend plan keeps its own days', () => {
+  assert.deepEqual(planDays({ plan: { startDate: '2026-10-23', endDate: '2026-10-26' } }), ['2026-10-23', '2026-10-26'],
+    'Fri → Mon is two working days, not four');
+  assert.deepEqual(planDays({ plan: { endDate: '2026-10-21' } }), ['2026-10-21'], 'a due date alone is a one-day plan');
+  assert.deepEqual(planDays({ plan: { startDate: '2026-10-24', endDate: '2026-10-25' } }), ['2026-10-24', '2026-10-25']);
+  assert.equal(planDays({ plan: {} }), null, 'no dates, no plan');
+});
+
+test('planned hours: the share of a task\'s estimate that falls in the week', () => {
+  const tasks = [
+    // 10 weekdays Mon 12 Oct → Fri 23 Oct; 5 of them in this week → half of 20h.
+    { id: 'a', assignedTo: ['ann'], estimateHours: 20, plan: { startDate: '2026-10-12', endDate: '2026-10-23' } },
+    // Due Wed of this week, no start: all 6h land here.
+    { id: 'b', assignedTo: ['ann'], estimateHours: 6, plan: { endDate: '2026-10-21' } },
+    // Outside the week entirely.
+    { id: 'c', assignedTo: ['ann'], estimateHours: 9, plan: { endDate: '2026-11-02' } },
+    // Shared by two: 8h split evenly.
+    { id: 'd', assignedTo: ['ann', 'bob'], estimateHours: 8, plan: { endDate: '2026-10-22' } },
+    // No estimate: assumed at 4h, and counted as assumed.
+    { id: 'e', assignedTo: ['bob'], plan: { endDate: '2026-10-20' } },
+    // Finished still counts toward the PLAN.
+    { id: 'f', assignedTo: ['bob'], estimateHours: 2, status: 'done', plan: { endDate: '2026-10-19' } },
+    // No dates: belongs to no week, reported as undated.
+    { id: 'g', assignedTo: ['bob'], estimateHours: 5 },
+  ];
+  const w = weekWorkload(tasks, [], { days: WEEK, members: ['ann', 'bob', 'cy'] });
+  const ann = w.rows.find((r) => r.uid === 'ann');
+  const bob = w.rows.find((r) => r.uid === 'bob');
+  assert.equal(ann.planned, 10 + 6 + 4);
+  assert.equal(bob.planned, 4 + 4 + 2);
+  assert.equal(bob.assumed, 1);
+  assert.equal(bob.undated, 1);
+  assert.deepEqual(ann.items.find((i) => i.task.id === 'a'), { task: tasks[0], hours: 10, estimate: 20, estimated: true, daysIn: 5, daysTotal: 10, sharedBy: 1 });
+  assert.deepEqual(w.idle.map((r) => r.uid), ['cy'], 'nothing planned or logged: listed, not drawn');
+  assert.equal(w.totals.capacity, 3 * 40);
+});
+
+test('actual hours: what each person logged inside the week, on the tasks shown', () => {
+  const tasks = [{ id: 'a', assignedTo: ['ann'], estimateHours: 4, plan: { endDate: '2026-10-21' } }];
+  const acts = [
+    { taskId: 'a', userId: 'ann', date: '2026-10-20', hoursSpent: 3 },
+    { taskId: 'a', userId: 'ann', date: '2026-10-22', hoursSpent: 2.5 },
+    { taskId: 'a', userId: 'bob', date: '2026-10-21', hoursSpent: 1 },     // bob helped
+    { taskId: 'a', userId: 'ann', date: '2026-10-26', hoursSpent: 9 },     // next week
+    { taskId: 'zz', userId: 'ann', date: '2026-10-20', hoursSpent: 7 },    // a task this view does not show
+  ];
+  const w = weekWorkload(tasks, acts, { days: WEEK, members: ['ann', 'bob'] });
+  const ann = w.rows.find((r) => r.uid === 'ann');
+  assert.equal(ann.actual, 5.5);
+  assert.equal(ann.variance, 1.5, 'actual minus planned');
+  assert.deepEqual(ann.logs.map((l) => [l.task.id, l.hours, l.entries]), [['a', 5.5, 2]]);
+  assert.equal(w.rows.find((r) => r.uid === 'bob').actual, 1, 'logged by someone not assigned still counts for them');
+  assert.equal(w.totals.actual, 6.5);
+});
+
+test('work nobody owns is its own row, last, and is not counted against anyone\'s capacity', () => {
+  const tasks = [{ id: 'u', estimateHours: 6, plan: { endDate: '2026-10-21' } }, { id: 'a', assignedTo: ['ann'], estimateHours: 2, plan: { endDate: '2026-10-21' } }];
+  const w = weekWorkload(tasks, [], { days: WEEK, members: ['ann'] });
+  assert.deepEqual(w.rows.map((r) => r.uid), ['ann', UNASSIGNED]);
+  assert.equal(w.rows[1].name, 'Not assigned');
+  assert.equal(w.totals.planned, 2);
+  assert.equal(w.totals.unassigned, 6);
+  assert.equal(w.totals.capacity, 40);
+});

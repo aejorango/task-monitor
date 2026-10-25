@@ -1135,35 +1135,63 @@ function LibrarySample() {
   );
 }
 
+// Board → Workload: one week, planned against actual (T-0161). Static twin of
+// WorkloadView — the same classes, with sample people so it renders signed out.
+const WL_SAMPLE = [
+  { name: 'Ace Jorango', planned: 44, actual: 38, assumed: 1, segs: [[26, '#0051BA'], [18, '#e2892e']], tasks: 6, logged: 4 },
+  { name: 'Mia Santos', planned: 30, actual: 33.5, assumed: 0, segs: [[22, '#e2892e'], [8, '#7B2D8F']], tasks: 4, logged: 4 },
+  { name: 'Rafael Cruz', planned: 12, actual: 6, assumed: 2, segs: [[12, '#137a36']], tasks: 3, logged: 2 },
+];
+
 function WorkloadSample() {
-  const widest = 50;
+  const widest = 55;
+  const gap = (p) => (Math.abs(p.actual - p.planned) < 0.5 ? ['on', 'on plan']
+    : p.actual > p.planned ? ['over', `+${p.actual - p.planned}h over plan`] : ['under', `${p.planned - p.actual}h under plan`]);
   return (
     <section className="wl-card">
       <div className="wl-head">
-        <span className="wl-title">Workload</span>
-        <span className="wl-cap">cap 40h</span>
+        <span className="wl-title">Workload · 19–25 Oct 2026</span>
+        <span className="wl-cap">cap 40h a person</span>
       </div>
       <div className="wl-rows">
-        {WL.map((p) => {
-          const tone = p.hours > 40 ? 'red' : p.hours >= 32 ? 'amber' : 'green';
+        {WL_SAMPLE.map((p) => {
+          const tone = p.planned > 40 ? 'red' : p.planned >= 32 ? 'amber' : 'green';
+          const [state, text] = gap(p);
           return (
-            <button type="button" key={p.name} className="wl-row">
-              <Avatar id={p.name} name={p.name} size={30} />
-              <span className="wl-name">
-                <span className="wl-person">{p.name}</span>
-                <span className="wl-count">{p.open} open · {p.done} done</span>
-              </span>
-              <span className="wl-track">
-                {p.segs.map(([h, c]) => (
-                  <span key={c} className="wl-seg" style={{ width: `${(h / widest) * 100}%`, background: c }} />
-                ))}
-                <span className="wl-notch" style={{ left: `${(40 / widest) * 100}%` }} aria-hidden="true" />
-              </span>
-              <span className="wl-assumed-slot">
-                {p.guessed > 0 && <span className="wl-assumed">{p.guessed} assumed</span>}
-              </span>
-              <span className={`wl-hours tone-ink-${tone}`}>{p.hours}h</span>
-            </button>
+            <div key={p.name} className="wl-row">
+              <button type="button" className="wl-row-head" aria-expanded={false}>
+                <Avatar id={p.name} name={p.name} size={30} />
+                <span className="wl-name">
+                  <span className="wl-person">{p.name}</span>
+                  <span className="wl-count">{p.tasks} tasks · {p.logged} logged</span>
+                </span>
+                <span className="wl-bars">
+                  <span className="wl-bar-row">
+                    <span className="wl-bar-lbl">Plan</span>
+                    <span className="wl-track">
+                      {p.segs.map(([h, c]) => (
+                        <span key={c} className="wl-seg" style={{ width: `${(h / widest) * 100}%`, background: c }} />
+                      ))}
+                      <span className="wl-notch" style={{ left: `${(40 / widest) * 100}%` }} aria-hidden="true" />
+                    </span>
+                    <span className={`wl-hours tone-ink-${tone}`}>{p.planned}h</span>
+                  </span>
+                  <span className="wl-bar-row">
+                    <span className="wl-bar-lbl">Actual</span>
+                    <span className="wl-track is-actual">
+                      <span className="wl-actual" style={{ width: `${(p.actual / widest) * 100}%` }} />
+                      <span className="wl-notch" style={{ left: `${(40 / widest) * 100}%` }} aria-hidden="true" />
+                    </span>
+                    <span className="wl-hours">{p.actual}h</span>
+                  </span>
+                </span>
+                <span className="wl-assumed-slot">
+                  {p.assumed > 0 && <span className="wl-assumed">{p.assumed} assumed</span>}
+                </span>
+                <span className={`wl-gap-chip is-${state}`}>{text}</span>
+                <span className="wl-chev" aria-hidden="true">▾</span>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -1171,12 +1199,9 @@ function WorkloadSample() {
         <span className="wl-leg"><span className="wl-leg-dot" style={{ background: '#0051BA' }} />SBLAF onboarding</span>
         <span className="wl-leg"><span className="wl-leg-dot" style={{ background: '#e2892e' }} />Partner API</span>
         <span className="wl-leg"><span className="wl-leg-dot" style={{ background: '#7B2D8F' }} />Marketplace</span>
+        <span className="wl-leg"><span className="wl-leg-dot wl-leg-actual" />Actual (logged)</span>
         <span className="wl-leg"><span className="wl-leg-line" />40h cap</span>
       </div>
-      <p className="wl-note">
-        Open work only, in estimated hours. A task with no estimate is counted
-        at 4h — the row says how many of those there were.
-      </p>
     </section>
   );
 }

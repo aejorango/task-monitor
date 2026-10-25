@@ -1,4 +1,8 @@
-// T-0079 / NEW-005 / T-0150 — Board → Workload.
+// T-0079 / NEW-005 / T-0150 / T-0161 — Board → Workload.
+//
+// T-0161 made it about ONE week the user picks: planned hours (estimates
+// spread over each plan's weekdays) against actual hours (time logged that
+// week), per person, with the working on the page.
 //
 // T-0150 rebuilt this page to `Board Explorer.dc.html`: it is now ONE panel —
 // a person per row, a bar segmented by project, a cap notch and the hours.
@@ -50,58 +54,67 @@ test('the panel is the mockup’s, to the pixel', () => {
   assert.match(css, /\.wl-leg-dot \{ width: 9px; height: 9px; border-radius: 3px/);
 });
 
-test('a bar is segmented by project and measured against a real cap', () => {
+test('two bars on one scale: the plan segmented by project, the actual beside it, one cap through both', () => {
   assert.match(view, /className="wl-seg"/);
-  assert.match(view, /width: `\$\{\(sg\.h \/ load\.widest\) \* 100\}%`/);
-  assert.match(view, /capPct: \(DEFAULT_CAPACITY_HOURS \/ widest\) \* 100/);
-  assert.match(view, /Math\.max\(DEFAULT_CAPACITY_HOURS \* 1\.25/,
+  assert.match(view, /width: `\$\{\(sg\.h \/ widest\) \* 100\}%`/);
+  assert.match(view, /className="wl-actual" style=\{\{ width: `\$\{\(p\.actual \/ widest\) \* 100\}%` \}\}/,
+    'the actual is drawn on the SAME scale as the plan, or the two cannot be compared by eye');
+  assert.match(view, /const capPct = \(CAP \/ widest\) \* 100/);
+  assert.match(view, /Math\.max\(CAP \* 1\.25/,
     'the notch must stay inside the track, and an over-cap bar needs somewhere to go');
+  assert.equal((view.match(/className="wl-notch"/g) || []).length, 2, 'the cap runs through both bars');
 });
 
-test('the legend names every project on screen, and the cap line', () => {
+test('the legend names every project on screen, the actual, and the cap line', () => {
   assert.match(view, /className="wl-leg-dot"/);
+  assert.match(view, /wl-leg-actual/);
   assert.match(view, /className="wl-leg-line"/);
-  assert.match(view, /\{DEFAULT_CAPACITY_HOURS\}h cap/);
+  assert.match(view, /\{CAP\}h cap/);
 });
 
-// ─── honesty ────────────────────────────────────────────────────────────────
+test('the page is about ONE week, and the user picks which', () => {
+  assert.match(view, /weekDays\(anchor, weekStart\)/, 'a week, honouring the week-start preference');
+  assert.match(view, /← Previous week/);
+  assert.match(view, /Next week →/);
+  assert.match(view, /This week<\/button>/, 'and a way straight back');
+  assert.match(view, /weekWorkload\(visible, activities, \{ days/,
+    'the arithmetic is the pure, tested module — not inline here');
+});
 
 test('the page never lets an assumed hour pass as a measured one', () => {
-  // A full bar the reader believes is measured, when half of it was a 4h
-  // fallback, is the oldest trap on this page.
-  assert.match(view, /if \(t\.estimateHours == null\) guessed \+= 1/);
-  assert.match(view, /\{p\.guessed\} assumed<\/span>/,     'each row says how many');
-  assert.match(view, /className="wl-assumed"/,
-    'and it sits OUTSIDE the 104px name column, which truncates');
+  assert.match(view, /\{p\.assumed\} assumed/, 'each row says how many');
+  assert.match(view, /className="wl-assumed"/);
   assert.match(view, /HOURS_PER_TASK/);
-  assert.match(view, /a full bar built out of assumptions is worse than no bar/);
+  assert.match(view, /a full bar\s+built out of assumptions is worse than no bar/);
+  assert.match(view, /is-assumed/, 'and the breakdown marks the assumed line itself');
 });
 
-test('the bar counts open work whether or not it has a date', () => {
-  // With the weeks grid gone there is no date window, so an undated task is
-  // no longer invisible here — which is why the "no due date" rail could go.
-  assert.match(view, /const open = visible\.filter\(\(t\) => t\.status !== 'done'\)/);
-  assert.doesNotMatch(view, /plan\?\.endDate/, 'no date filter belongs in this sum');
+test('the arithmetic is on the page, and every row shows its own working', () => {
+  assert.match(view, /How these numbers are worked out/);
+  ['Planned', 'Actual', 'Capacity', 'Not counted'].forEach((term) => assert.match(view, new RegExp(`<dt>${term}</dt>`)));
+  assert.match(view, /aria-expanded=\{isOpen\}/, 'a row opens its working');
+  assert.match(view, /function mathOf\(i\)/, 'one line per task, as a sum a reader can redo');
+  assert.match(view, /Logged this week/);
 });
 
-test('a person with nothing open is left out, not drawn as an empty row', () => {
-  assert.match(view, /\.filter\(\(p\) => p\.open > 0\)/);
+test('a week older than the loaded logs says so, instead of reading short', () => {
+  assert.match(view, /const logsShort = hasMore && oldestLoaded && days\[0\] <= oldestLoaded/);
+  assert.match(view, /Load older logs/);
 });
 
-// ─── what a row does ────────────────────────────────────────────────────────
+test('people with nothing that week are named, not drawn as empty rows', () => {
+  assert.match(view, /week\.idle\.length > 0/);
+  assert.match(view, /Nothing planned or logged this week/);
+});
 
-test('a row filters the whole Board hub to that person', () => {
-  // The mockup's row is not a control. Making it one re-homes the grid's
-  // "look at just this person" without adding anything the mockup lacks:
-  // ?who= is the route the Board toolbar's roster already sets.
-  assert.match(view, /navigate\?\.\(\{ who: isOn \? null : p\.uid \}\)/);
-  assert.match(view, /aria-pressed=\{isOn\}/);
+test('a row can still narrow the whole Board hub to that person', () => {
+  assert.match(view, /navigate\?\.\(\{ who: p\.uid \}\)/);
   assert.match(view, /Show everybody/, 'and a way back out when it is applied');
 });
 
-test('an empty workspace says what would make the panel appear', async () => {
+test('an empty week says what would make the panel appear', async () => {
   const ui = await render({ projectFilter: 'all' });
-  assert.match(text(ui.container), /Nobody is carrying open work|Loading the plan/);
+  assert.match(text(ui.container), /Nothing is planned or logged in|Loading the plan/);
   ui.unmount();
 });
 

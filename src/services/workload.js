@@ -315,3 +315,162 @@ export function describeCell(row, week, cell) {
     + `about ${cell.hours} hour${cell.hours === 1 ? '' : 's'} — ${LOAD_LABEL[cell.level].toLowerCase()}`
     + basis;
 }
+
+// ── One week: planned against actual (Board → Workload) ─────────────────────
+//
+// The page asks one question about ONE week: how much work was each person
+// planned to carry in it, and how much did they actually log? Both halves are
+// measured in hours, against the same weekly cap, so the gap between them is
+// the thing to read.
+//
+//   PLANNED — every task whose plan touches the week, finished or not (a plan
+//             is what was intended, and it does not shrink as work gets done).
+//             Its estimate is spread evenly across the WEEKDAYS of its plan
+//             (Mon–Fri; a plan that is all weekend uses its own days), and the
+//             week takes the share of days that fall inside it. A task with
+//             only a due date is a one-day plan on that date — the Gantt reads
+//             it the same way. A task shared by several people is split evenly
+//             between them. No estimate → HOURS_PER_TASK, counted and named
+//             as assumed, never passed off as measured.
+//   ACTUAL  — the hours each person logged with a date inside the week, on
+//             the tasks this view shows (so the Board's filters apply to both
+//             halves alike).
+//   CAPACITY — DEFAULT_CAPACITY_HOURS per person per week. Holidays and
+//             leave are not known to the app, so they are not subtracted.
+//
+// A task with no dates belongs to no week. It is counted per person as
+// "undated" rather than quietly left out or forced into this one.
+
+const isWeekend = (iso) => { const d = new Date(`${iso}T00:00:00`).getDay(); return d === 0 || d === 6; };
+const MAX_PLAN_DAYS = 1100;   // three years of days — past that a plan is a typo
+
+/**
+ * The days a task's planned effort is spread over: the weekdays of its plan,
+ * or every day of it when the plan falls only on a weekend. Null when the
+ * task has no dates at all.
+ */
+export function planDays(task) {
+  const s = task?.plan?.startDate || null;
+  const e = task?.plan?.endDate || null;
+  if (!s && !e) return null;
+  let a = s || e;
+  let b = e || s;
+  if (a > b) [a, b] = [b, a];
+  const all = [];
+  for (let d = a, i = 0; d <= b && i < MAX_PLAN_DAYS; d = addDaysISO(d, 1), i += 1) all.push(d);
+  const work = all.filter((d) => !isWeekend(d));
+  return work.length ? work : all;
+}
+
+/**
+ * Planned and actual hours for one week, per person.
+ *
+ * @param tasks       the tasks the view shows (already filtered)
+ * @param activities  activity entries; only those on a shown task count
+ * @param opts.days   the week, as seven YYYY-MM-DD strings (`weekDays`)
+ * @returns {{ rows, idle, totals, start, end }}
+ *   rows: [{ uid, name, planned, actual, variance, assumed, undated,
+ *            segs: [{ pid, h }], items: [...], logs: [...] }]
+ *   idle: members with nothing planned and nothing logged that week
+ */
+export function weekWorkload(tasks = [], activities = [], {
+  days = [],
+  members = [],
+  memberProfiles = {},
+  selfUid = null,
+  capacity = DEFAULT_CAPACITY_HOURS,
+  hoursPerTask = HOURS_PER_TASK,
+} = {}) {
+  const start = days[0];
+  const end = days[days.length - 1];
+  const inWeek = (d) => !!d && d >= start && d <= end;
+  const rows = new Map();
+  const row = (uid) => {
+    if (!rows.has(uid)) {
+      rows.set(uid, {
+        uid,
+        name: uid === UNASSIGNED ? 'Not assigned' : memberLabel(uid, memberProfiles, { selfUid }),
+        planned: 0, actual: 0, assumed: 0, undated: 0,
+        byProject: {}, items: [], logs: new Map(),
+      });
+    }
+    return rows.get(uid);
+  };
+  members.filter(Boolean).forEach(row);
+
+  const shown = new Map();
+  for (const t of tasks) {
+    if (!t || t.deleted || t.archived) continue;
+    shown.set(t.id, t);
+    const owners = ownersOf(t);
+    const plan = planDays(t);
+    if (!plan) {
+      if (t.status !== 'done') owners.forEach((u) => { if (u !== UNASSIGNED) row(u).undated += 1; });
+      continue;
+    }
+    const daysIn = plan.filter(inWeek).length;
+    if (!daysIn) continue;
+    const est = Number(t.estimateHours);
+    const estimated = Number.isFinite(est) && est > 0;
+    const estimate = estimated ? est : hoursPerTask;
+    const hours = (estimate * daysIn) / plan.length / owners.length;
+    owners.forEach((u) => {
+      const r = row(u);
+      r.planned += hours;
+      if (!estimated) r.assumed += 1;
+      const pid = t.projectId || 'none';
+      r.byProject[pid] = (r.byProject[pid] || 0) + hours;
+      r.items.push({ task: t, hours: round1(hours), estimate, estimated, daysIn, daysTotal: plan.length, sharedBy: owners.length });
+    });
+  }
+
+  for (const a of activities) {
+    if (!a || !a.userId || !inWeek(a.date) || !shown.has(a.taskId)) continue;
+    const h = Number(a.hoursSpent) || 0;
+    if (h <= 0) continue;
+    const r = row(a.userId);
+    r.actual += h;
+    const log = r.logs.get(a.taskId) || { task: shown.get(a.taskId), hours: 0, entries: 0 };
+    log.hours += h;
+    log.entries += 1;
+    r.logs.set(a.taskId, log);
+  }
+
+  const all = [...rows.values()].map((r) => ({
+    uid: r.uid,
+    name: r.name,
+    planned: round1(r.planned),
+    actual: round1(r.actual),
+    variance: round1(r.actual - r.planned),
+    assumed: r.assumed,
+    undated: r.undated,
+    segs: Object.entries(r.byProject).map(([pid, h]) => ({ pid, h: round1(h) })).sort((x, y) => y.h - x.h),
+    items: r.items.sort((x, y) => y.hours - x.hours),
+    logs: [...r.logs.values()].map((l) => ({ ...l, hours: round1(l.hours) })).sort((x, y) => y.hours - x.hours),
+  }));
+  const busy = all.filter((r) => r.planned > 0 || r.actual > 0);
+  const people = busy.filter((r) => r.uid !== UNASSIGNED);
+  const sorted = [
+    ...people.sort((x, y) => y.planned - x.planned || y.actual - x.actual || x.name.localeCompare(y.name)),
+    ...busy.filter((r) => r.uid === UNASSIGNED),
+  ];
+  const idle = all.filter((r) => r.uid !== UNASSIGNED && r.planned === 0 && r.actual === 0);
+  const headcount = all.filter((r) => r.uid !== UNASSIGNED).length;
+  return {
+    start,
+    end,
+    rows: sorted,
+    idle,
+    totals: {
+      planned: round1(people.reduce((n, r) => n + r.planned, 0)),
+      unassigned: round1(busy.find((r) => r.uid === UNASSIGNED)?.planned || 0),
+      actual: round1(people.reduce((n, r) => n + r.actual, 0)),
+      capacity: headcount * capacity,
+      people: headcount,
+      over: people.filter((r) => r.planned > capacity).length,
+      assumed: people.reduce((n, r) => n + r.assumed, 0),
+    },
+  };
+}
+
+const round1 = (n) => Math.round(n * 10) / 10;

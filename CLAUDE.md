@@ -357,7 +357,7 @@ The panels the mockups specify, and the modules behind them:
 | Utilization with a cap notch | Reports → People | activities + `assignedTo` |
 | Diverging plan-vs-actual bars | Reports → Variance | `services/effort.js` |
 | Report cards | Reports → Library | `savedViews` + the export builders |
-| Load per person, segmented, against a cap | Board → Workload | `services/workload.js` |
+| One week: planned vs actual hours per person, against a cap | Board → Workload | `weekWorkload` in `services/workload.js` |
 | Numbered outline (WBS · 1 · 1.2 · dates · priority) | Board → WBS | projects › phases › tasks |
 | Swimlane flowchart: a lane per person, top to bottom, status-coloured | Board → Swimlane | `services/nodeGraph.js` |
 | Project list · minute card (two rows) · The Priority | Projects → Minutes | minutes, `tasks` for linked action items |
@@ -650,6 +650,32 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    `services/nodeGraph.js` (`buildGraph` → `layoutSwimlanes`), tested by
    `nodeGraph.test.mjs`. The per-device keys kept their `task-monitor.node.*`
    names through the rename, so nobody's choices were reset.
+4c. **Workload** (Board → Workload, T-0161) — about **one week the user
+   picks** (← Previous week · the week · Next week → · This week, honouring
+   the week-start preference). It used to be one bar per person of every open
+   task's remaining estimate, dated or not — a number with no week behind it
+   that nobody could check, so it was rebuilt on request. Four tiles —
+   Planned, Actual (logged), Capacity, Planned vs capacity — then a row per
+   person with **two bars on one scale**: PLAN (segmented by project) and
+   ACTUAL, the cap notch through both, and the gap in words (`+3h over plan`,
+   `4h under plan`, `on plan`, `2h unplanned`). The arithmetic is the pure
+   `weekWorkload` (tested): **planned** = every task whose plan touches the
+   week, finished or not, its estimate spread evenly over the **weekdays** of
+   its plan (`planDays`; an all-weekend plan uses its own days; a due date
+   alone is a one-day plan, as the Gantt reads it), the week taking its share
+   of those days, split evenly between a shared task's assignees, no estimate
+   → `HOURS_PER_TASK` and marked **assumed**; **actual** = hours logged with a
+   date in the week, for whoever logged them, on the tasks the view shows (so
+   the Board's filters apply to both halves); **capacity** = 40h a person,
+   holidays not known. Clicking a row opens its **working** — every task's
+   share as a sum a reader can redo ("12h estimate × 4 of 8 workdays"), every
+   logged task with its entries, and how many of theirs have no dates (they
+   belong to no week). Work nobody owns is a "Not assigned" row, last, not
+   counted against anyone's capacity; people with nothing that week are
+   named in one line, not drawn as empty rows. The activity listener holds
+   only the newest page, so a week older than it says so and offers **Load
+   older logs** rather than reading short. "How these numbers are worked out"
+   is always on the page.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 9. **Review** (the Reports hub's "Summary" tab) — five `<Tile>`s, a **period band**
    (`.period-bar`) that is deliberately not among the commands because it decides what
@@ -879,7 +905,7 @@ src/
 │   ├── DueTaskAlertModal.jsx ← two-column due alert: task + actions left, GenAI prompt right
 │   ├── KnowledgeSection.jsx  ← Settings: NotebookLM setup states, notebooks, sources, usage
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
-│   ├── WorkloadView.jsx     ← Board → Workload: load per person against a cap
+│   ├── WorkloadView.jsx     ← Board → Workload: one picked week, planned vs actual per person
 │   ├── WBSView.jsx          ← Board → WBS: project › phase › item outline
 │   ├── SwimlaneView.jsx     ← Board → Swimlane: the tasks as a flowchart, a lane per person
 │   ├── MyWeekView.jsx       ← My Week: my tasks from every workspace, by day
