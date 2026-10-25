@@ -27,7 +27,7 @@ const BOARD_PAGES = {
   gantt:         'GanttView.jsx',
   wbs:           'WBSView.jsx',
   workload:      'WorkloadView.jsx',
-  node:          'NodeView.jsx',
+  swimlane:      'SwimlaneView.jsx',
 };
 
 test('the Board hub holds its six tabs, schedule first', () => {
@@ -38,11 +38,11 @@ test('the Board hub holds its six tabs, schedule first', () => {
   const hub = HUBS.find((h) => h.id === 'board');
   assert.deepEqual(
     hub.tabs.map((t) => t.view),
-    ['calendar', 'gantt', 'board', 'wbs', 'workload', 'node'],
+    ['calendar', 'gantt', 'board', 'wbs', 'workload', 'swimlane'],
   );
   assert.deepEqual(
     tabsForView('board').map((t) => t.label),
-    ['Calendar', 'Gantt', 'Kanban', 'WBS', 'Workload', 'Node'],
+    ['Calendar', 'Gantt', 'Kanban', 'WBS', 'Workload', 'Swimlane'],
   );
 });
 

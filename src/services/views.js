@@ -21,7 +21,7 @@ export const VIEW_REGISTRY = [
   { id: 'gantt',          label: 'Gantt chart',    icon: 'gantt',     words: ['timeline', 'schedule', 'bars'] },
   { id: 'wbs',            label: 'WBS',            icon: 'wbs',       words: ['breakdown', 'work breakdown'] },
   { id: 'workload',       label: 'Workload',       icon: 'goals',     words: ['workload', 'capacity', 'who is busy', 'rebalance', 'people'] },
-  { id: 'node',           label: 'Node',           icon: 'node',      words: ['node', 'nodes', 'mind map', 'mindmap', 'graph', 'network', 'connections', 'dependencies', 'relationships', 'what blocks what', 'flow'] },
+  { id: 'swimlane',       label: 'Swimlane',       icon: 'swimlane',  words: ['swimlane', 'swim lane', 'lanes', 'flowchart', 'flow chart', 'node', 'nodes', 'graph', 'connections', 'dependencies', 'relationships', 'what blocks what', 'who does what', 'handoff', 'flow'] },
   { id: 'goals',          label: 'Goals',          icon: 'goals',     words: ['objectives', 'okr'] },
   { id: 'automations',    label: 'Automations',    icon: 'bolt',      words: ['automations', 'rules', 'when this then that', 'triggers', 'runs'] },
   { id: 'people',         label: 'People',         icon: 'goals',     words: ['people', 'members', 'utilization', 'capacity', 'on-time', 'throughput'] },
@@ -76,6 +76,9 @@ export const MOVED_VIEWS = {
   // modal. So this is a move, not a deletion — a bookmark or saved view
   // pointing at `#/members` lands on the page that now holds it.
   members: 'workspaces',
+  // Board → Node became Board → Swimlane: the same tasks and connections,
+  // laid out in a column per person and read top to bottom.
+  node: 'swimlane',
 };
 
 /** Where a view id should actually render — itself, unless it has moved. */
@@ -170,7 +173,7 @@ export const HUBS = [
       { view: 'wbs' },
       { view: 'workload' },
       // The tasks as a graph of what leads to what (services/nodeGraph.js).
-      { view: 'node' },
+      { view: 'swimlane' },
     ],
   },
   {

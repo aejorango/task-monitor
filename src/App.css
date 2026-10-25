@@ -15285,7 +15285,7 @@ a:hover { text-decoration: underline; }
 .m-sheet-actions.is-one { grid-template-columns: 1fr; }
 .m-sheet-actions .m-foot-btn { height: 56px; }
 
-/* ── Board → Node: the tasks as a graph (NodeView.jsx, services/nodeGraph.js) ──
+/* ── Board → Swimlane: the tasks as a flowchart in a lane per person (SwimlaneView.jsx, services/nodeGraph.js) ──
    A fixed-width node, so a long title wraps (three lines, then "…") instead
    of stretching the graph. The lines say what the tasks say: solid = an
    order (comes before / part of), dashed = no order (related, duplicate). */
@@ -15308,7 +15308,6 @@ a:hover { text-decoration: underline; }
 .nd-zval { min-width: 44px; text-align: center; font-size: 12px; font-weight: 700; color: var(--c-text-2); font-variant-numeric: tabular-nums; }
 .nd-canvas { position: relative; overflow-x: auto; overflow-y: hidden; min-height: 320px; }
 .nd-svg { display: block; }
-.nd-loose-label { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; fill: var(--c-text-2); }
 
 /* the lines */
 .nd-edge { fill: none; stroke-width: 2; transition: opacity .12s, stroke-width .12s; }
@@ -15349,27 +15348,37 @@ a:hover { text-decoration: underline; }
 .nd-node:hover .nd-box, .nd-node.is-focus .nd-box { stroke: var(--c-accent); stroke-width: 2; }
 .nd-node:focus-visible .nd-box { stroke: var(--c-accent); stroke-width: 3; }
 .nd-node.is-context .nd-box { fill: var(--c-surface-2); stroke: var(--c-text-muted); stroke-dasharray: 5 4; filter: none; }
-.nd-node.is-context .nd-title, .nd-node.is-context .nd-rail { opacity: .6; }
-.nd-st { fill: var(--c-st-idle); }
-.nd-st.st-done   { fill: var(--c-st-done); }
-.nd-st.st-doing  { fill: var(--c-st-doing); }
-.nd-st.st-stuck  { fill: var(--c-st-stuck); }
-.nd-st.st-review { fill: var(--c-st-review); }
-.nd-st-text { font-size: 10.5px; font-weight: 800; fill: #fff; }
-.nd-st-text.st-todo { fill: var(--c-st-idle-ink); }
-.nd-proj { font-size: 11px; font-weight: 700; fill: var(--c-text-2); }
+.nd-node.is-context .nd-title { opacity: .6; }
+/* Each task in its status colour: a tint of the status behind the text, the status itself as the edge. */
+.nd-box.fill-todo   { fill: var(--c-surface); stroke: color-mix(in srgb, var(--c-text-muted) 70%, transparent); }
+.nd-box.fill-doing  { fill: color-mix(in srgb, var(--c-st-doing) 16%, var(--c-surface)); stroke: var(--c-st-doing); }
+.nd-box.fill-review { fill: color-mix(in srgb, var(--c-st-review) 15%, var(--c-surface)); stroke: var(--c-st-review); }
+.nd-box.fill-done   { fill: color-mix(in srgb, var(--c-st-done) 15%, var(--c-surface)); stroke: var(--c-st-done); }
+.nd-box[class*="fill-"] { stroke-width: 1.6; }
+.sl-swatch { width: 18px; height: 12px; border-radius: 4px; border: 1.6px solid; flex: none; }
+.sl-swatch.fill-todo   { background: var(--c-surface); border-color: var(--c-text-muted); }
+.sl-swatch.fill-doing  { background: color-mix(in srgb, var(--c-st-doing) 16%, var(--c-surface)); border-color: var(--c-st-doing); }
+.sl-swatch.fill-review { background: color-mix(in srgb, var(--c-st-review) 15%, var(--c-surface)); border-color: var(--c-st-review); }
+.sl-swatch.fill-done   { background: color-mix(in srgb, var(--c-st-done) 15%, var(--c-surface)); border-color: var(--c-st-done); }
+.nd-key-sep { width: 1px; height: 14px; background: var(--c-border); align-self: center; }
+/* The lanes. */
+.sl-lane-bg { fill: transparent; stroke: var(--c-border); stroke-width: 1; }
+.sl-lane.is-alt .sl-lane-bg { fill: color-mix(in srgb, var(--c-surface-2) 55%, transparent); }
+.sl-lane-head { fill: var(--c-surface); stroke: var(--c-border); stroke-width: 1; }
+.sl-lane-name { font-size: 13px; font-weight: 800; fill: var(--c-text); }
+.sl-lane-count { font-size: 11.5px; font-weight: 700; fill: var(--c-text-2); font-variant-numeric: tabular-nums; }
+.sl-av { font-size: 10.5px; }
+.sl-av-none { fill: none; stroke: var(--c-text-muted); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.sl-divider { stroke: var(--c-border); stroke-width: 1.2; stroke-dasharray: 6 5; }
 .nd-title { font-size: 13px; font-weight: 700; fill: var(--c-text); }
+/* The tray of tasks not connected yet: a box of its own, right of the lanes. */
+.sl-tray-bg { fill: var(--c-surface); stroke: var(--c-text-muted); stroke-width: 1.4; stroke-dasharray: 6 5; }
+.sl-tray-title { font-size: 11px; font-weight: 800; letter-spacing: .12em; fill: var(--c-text-2); }
 .nd-av { font-size: 9.5px; font-weight: 800; fill: #fff; }
-.nd-owner { font-size: 11.5px; font-weight: 700; fill: var(--c-text-2); }
-.nd-owner.is-none { fill: var(--c-text-muted); font-style: italic; }
-.nd-due { font-size: 11.5px; font-weight: 700; fill: var(--c-text-2); font-variant-numeric: tabular-nums; }
-.nd-due.is-late { fill: var(--c-danger-ink, var(--c-danger)); }
 
 .nd-empty { padding: 40px 24px; text-align: center; color: var(--c-text-2); display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .nd-empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--c-text); }
 .nd-empty p { max-width: 520px; margin: 0; line-height: 1.55; }
-.nd-proj-head { font-size: 13px; font-weight: 800; fill: var(--c-text); }
-.nd-proj-count { font-size: 11.5px; font-weight: 700; fill: var(--c-text-2); }
 .nd-switch {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px;
   border: 0; background: none; border-radius: 8px; cursor: pointer;

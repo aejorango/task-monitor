@@ -289,7 +289,7 @@ commits on a pause rather than per keystroke, or the back button would walk
 back through every letter.
 
 **The Board hub is six tabs and one toolbar.** Calendar · Gantt · Kanban ·
-WBS · Workload · Node — schedule first, board second (T-0159, at Ace's request; the
+WBS · Workload · Swimlane — schedule first, board second (T-0159, at Ace's request; the
 Explorer draws Kanban first). The **rail still opens the Kanban**: `landing`
 on the hub states that, because `hubLanding` otherwise returns `tabs[0]` and a
 cosmetic reorder would silently move the hub's home. The Board Explorer draws eight; **Table, Flow and Item were
@@ -359,7 +359,7 @@ The panels the mockups specify, and the modules behind them:
 | Report cards | Reports → Library | `savedViews` + the export builders |
 | Load per person, segmented, against a cap | Board → Workload | `services/workload.js` |
 | Numbered outline (WBS · 1 · 1.2 · dates · priority) | Board → WBS | projects › phases › tasks |
-| Task graph: what leads to what, left to right | Board → Node | `services/nodeGraph.js` |
+| Swimlane flowchart: a lane per person, top to bottom, status-coloured | Board → Swimlane | `services/nodeGraph.js` |
 | Project list · minute card (two rows) · The Priority | Projects → Minutes | minutes, `tasks` for linked action items |
 
 None of them invent a number. Where the mockup showed something this app does
@@ -574,12 +574,28 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    with a way to clear it. What went: the sideways-scrolling day grid, the
    weekend columns, the per-day header row, the second "actual" bar under
    the plan, the sticky phase column, and the five-chip period filter bar.
-4b. **Node** (Board → Node) — every task as a node, joined to what it waits
-   on and what follows it, read **left to right**: a task sits one column after
-   the furthest thing it waits on (longest path in). A task with **nothing
-   before it** is not pinned to the first column: it sits one column before
-   the earliest task it leads to (on request), so a prior step connected to a
-   task deep in a chain is drawn beside it rather than at the far left. The edges are **only what the tasks say**
+4b. **Swimlane** (Board → Swimlane; it was Board → **Node**, a left-to-right
+   graph, and `#/node` forwards here through `MOVED_VIEWS`) — the work as a
+   flowchart in the reference's swimlane shape: **one lane (column) per person
+   accountable** — the task's first assignee, else the first external name,
+   else **Unassigned**, always last — with the lane's face, name and count at
+   its head, and the work read **top to bottom**. Lanes are ordered by where
+   their work first appears in the flow, so the chart reads left to right as
+   the hand-offs do. Each task is **coloured by its own status** (on request:
+   Not started · Working on it · In review · Done — a tint of the status
+   behind the text, the status itself as the edge, keyed in the legend), and
+   a node shows **its title and nothing else** (on request): no status chip,
+   no owner, no date. Those are in the node's tooltip and its editor, and the
+   lane already says whose it is. A task's row
+   is one past the furthest thing it waits on (longest path in); a task with
+   **nothing before it** sits one row above the earliest task it leads to,
+   beside what it feeds rather than stranded at the top. Tasks of one lane in
+   one row are stacked. Lines are **right angles with soft corners**
+   (`laneEdgePath`): straight down a lane only where it is clear, across
+   between lanes in the gap above a row, and otherwise down the **gutter
+   between lanes** — never through a task — nudged apart so two never share a
+   run. Separate connected groups are stacked as bands with a dashed rule
+   between them. The edges are **only what the tasks say**
    — `dependsOn` and the editor's Dependencies & relations: *comes before*
    (`dependsOn`, and a `blocks` link — the same claim, so a pair stated both
    ways is one edge), *part of* (`child-of` / `parent-of`), and, dashed and
@@ -592,9 +608,11 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    WBS and Gantt do. Separate groups stack as blocks. **Every task is on the
    page by default**, connected or not: the page is for planning what to do
    next, and a graph that quietly drops two-thirds of the work cannot be
-   planned from. The unconnected sit below the graph under "Not connected to
-   another task", **filed by project** (A–Z, "No project" last, each with its
-   count), open work first by due date and finished work last. **Hide
+   planned from. The lanes hold **only connected work**; every task with
+   no connection waits in a separate **NOT CONNECTED tray to the right of the
+   lanes** (on request), open work first by due date and finished work last,
+   a column per ten tasks up to three, so it can be dragged onto the flow —
+   connect it and it moves into its owner's lane. **Hide
    unconnected** folds them away, and that choice is remembered per device
    (`task-monitor.node.hideUnconnected.v1`) — never the default.
    **Auto-connect by date** is a **switch, off by default** (on request: the
@@ -610,9 +628,9 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    through its first task; a pair already connected, or already in order
    through other tasks, gets no extra line; and a line that would make a loop
    with a stated dependency is not drawn. A task with no date is not guessed
-   in. **Connecting by hand**: hover a task and a dot appears on each side;
-   drag the right one onto the task that comes next (the left one onto the
-   task that comes first) and a menu offers comes before (either way round) ·
+   in. **Connecting by hand**: hover a task and a dot appears at its top and
+   bottom; drag the bottom one onto the task that comes next (the top one onto
+   the task that comes first) and a menu offers comes before (either way round) ·
    part of · related · duplicate of. It writes **the same fields the task
    editor writes** (`connectionUpdate` in `nodeGraph.js`), so the line is real
    on the Gantt and in the editor too; an option it cannot write says why —
@@ -629,8 +647,9 @@ Which hub each one belongs to, and in what order its tab strip lists them, is
    out of the ranking, still drawn, in red. Hover or focus a node to light its
    neighbours; click (or Enter/Space — `activateProps`) to open its editor;
    zoom − / + / Fit / 100%. All the geometry is the pure
-   `services/nodeGraph.js` (`buildGraph` → `layoutGraph`), tested by
-   `nodeGraph.test.mjs`.
+   `services/nodeGraph.js` (`buildGraph` → `layoutSwimlanes`), tested by
+   `nodeGraph.test.mjs`. The per-device keys kept their `task-monitor.node.*`
+   names through the rename, so nobody's choices were reset.
 4. **Calendar** — Month grid. **Tasks are draggable between days to reschedule** — drops update `plan.endDate` and shift `plan.startDate` to preserve duration. Click a task to edit.
 9. **Review** (the Reports hub's "Summary" tab) — five `<Tile>`s, a **period band**
    (`.period-bar`) that is deliberately not among the commands because it decides what
@@ -862,7 +881,7 @@ src/
 │   ├── AutomationsSection.jsx ← Settings: rule list, the dropdown editor, run log, notices
 │   ├── WorkloadView.jsx     ← Board → Workload: load per person against a cap
 │   ├── WBSView.jsx          ← Board → WBS: project › phase › item outline
-│   ├── NodeView.jsx         ← Board → Node: the tasks as a graph of what leads to what
+│   ├── SwimlaneView.jsx     ← Board → Swimlane: the tasks as a flowchart, a lane per person
 │   ├── MyWeekView.jsx       ← My Week: my tasks from every workspace, by day
 │   ├── ShareLinksPanel.jsx  ← project editor: publish / refresh / turn off a link
 │   ├── SharedViewPage.jsx   ← the public route: fetches one snapshot, no sign-in
@@ -926,7 +945,7 @@ src/
 │   ├── taskTree.js           ← a promoted subtask that is still part of its parent
 │   ├── knowledge.js          ← THE knowledge module: bridge client + shared cache
 │   ├── mentions.js           ← who a message is for, and the notice they get
-│   ├── nodeGraph.js          ← Board → Node: edges, columns, wrapping, loops (pure)
+│   ├── nodeGraph.js          ← Board → Swimlane: edges, rows, lanes, routing, loops (pure)
 │   ├── workload.js           ← load per person; the weeks-grid arithmetic is
 │   │                            kept but unrendered (see WorkloadView's header)
 │   ├── writeBatches.js       ← chunkWrites: splitting a write into commits

@@ -1,8 +1,11 @@
-// src/components/NodeView.jsx — Board → Node: every task as a node, joined to
-// the tasks it waits on, leads to, is part of or relates to.
+// src/components/SwimlaneView.jsx — Board → Swimlane: the work as a
+// flowchart, one LANE per person accountable, read TOP TO BOTTOM.
 //
-// Read left to right, the way work flows: a task sits one column after the
-// furthest thing it waits on. The lines are what the tasks say — `dependsOn`
+// A task sits one row below the furthest thing it waits on, in the lane of
+// the person it is assigned to (its first assignee; "Unassigned" last), and
+// each task is coloured by its status — Not started · Working on it · In
+// review · Done. It was Board → Node, a left-to-right graph; `#/node`
+// forwards here (MOVED_VIEWS). The lines are what the tasks say — `dependsOn`
 // and the editor's Dependencies & relations — so the picture is the
 // connections somebody chose. "Auto-connect by date" is a switch, OFF unless
 // turned on (remembered per device): it adds dotted lines that READ the plan
@@ -10,8 +13,8 @@
 // to wiring the ones that matter. They are drawn differently, never stored,
 // and one can be saved as a real "comes before".
 //
-// CONNECTING BY HAND: hover a task and a dot appears on each side. Drag the
-// right-hand dot onto another task ("this comes first") or the left-hand one
+// CONNECTING BY HAND: hover a task and a dot appears at its top and bottom.
+// Drag the bottom dot onto another task ("this comes first") or the top one
 // ("that comes first") and a menu asks what the connection is. It writes the
 // same fields the task editor writes, so the line is real everywhere. Click
 // a line to remove it (or to save a dotted one). Each write has an Undo.
@@ -19,8 +22,8 @@
 // the pure services/nodeGraph.js; this file draws them.
 //
 // EVERY task is on it (the toolbar's filters aside): the ones joined to
-// another form the graph, and the rest are filed by project in a grid below
-// it, because a plan has to see the work nobody has connected yet too.
+// another form the flow, and the rest sit in their lanes at the foot,
+// because a plan has to see the work nobody has connected yet too.
 // "Hide unconnected" narrows it to the chains alone, remembered per device.
 //
 // It is a Board page, so the toolbar above it narrows it like every other tab
@@ -35,8 +38,8 @@ import { useWorkspaces, useActiveWorkspaceId } from '../hooks/useWorkspace';
 import { todayLocal, updateTask } from '../services/firebase';
 import { scopeTasks, scopeOf, blockedTaskIds, displayStatus } from '../services/boardScope';
 import {
-  buildGraph, layoutGraph, neighbourhood, connectionUpdate, disconnectUpdates,
-  EDGE_KINDS, LINE_H, NODE_W, GAP_X, PAD,
+  buildGraph, layoutSwimlanes, neighbourhood, connectionUpdate, disconnectUpdates,
+  EDGE_KINDS, LINE_H, PAD, LANE_HEAD,
 } from '../services/nodeGraph';
 import { taskRights } from '../services/mobileModel';
 import { friendlyError } from '../services/access';
@@ -47,6 +50,10 @@ import TaskEditor, { newTaskDraft } from './TaskEditor';
 import { PageActions, PageSubtitle } from './PageHeader';
 
 const ZOOMS = [0.5, 0.65, 0.8, 1, 1.2, 1.4];
+// A task is coloured by its own status (the four the board uses); the chip on
+// it still says Stuck when it is, so a late "Working on it" reads as both.
+const STATUS_FILL = { todo: 'todo', doing: 'doing', review: 'review', done: 'done' };
+const STATUS_KEYS = [['todo', 'Not started'], ['doing', 'Working on it'], ['review', 'In review'], ['done', 'Done']];
 const HIDE_KEY = 'task-monitor.node.hideUnconnected.v1';
 const AUTO_KEY = 'task-monitor.node.autoConnect.v1';
 
@@ -83,7 +90,7 @@ function toSvg(svg, clientX, clientY) {
   return { x: p.x, y: p.y };
 }
 
-export default function NodeView({ projectFilter = 'all', route = {} }) {
+export default function SwimlaneView({ projectFilter = 'all', route = {} }) {
   const { tasks, loading, userId } = useTasks();
   const { projects, byId: projectById } = useProjects();
   const { activities } = useAllActivities();
@@ -104,8 +111,6 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   const setShowLoose = useCallback((v) => setHideLoose((cur) => !(typeof v === 'function' ? v(!cur) : v)), [setHideLoose]);
   // The dotted date-order lines: a guide, off unless somebody switches it on here.
   const [autoConnect, setAutoConnect] = useDeviceToggle(AUTO_KEY, false);
-  // How wide the card is, so the grid of unconnected tasks fills it.
-  const [canvasW, setCanvasW] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [focus, setFocus] = useState(null);     // the node hovered or focused
   const [editing, setEditing] = useState(null);
@@ -117,16 +122,6 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
   const svgRef = useRef(null);
   const menuRef = useRef(null);
   const scroller = useRef(null);
-  // A callback ref: the canvas only exists once there is something to draw.
-  const observer = useRef(null);
-  const measure = useCallback((el) => {
-    scroller.current = el;
-    observer.current?.disconnect();
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    observer.current = new ResizeObserver(([entry]) => setCanvasW(Math.round(entry.contentRect.width)));
-    observer.current.observe(el);
-  }, []);
-  useEffect(() => () => observer.current?.disconnect(), []);
 
   // The toolbar's filters, exactly as every Board tab applies them.
   const inView = useMemo(
@@ -150,14 +145,16 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
     () => buildGraph(inView, all, { includeUnlinked: showLoose, autoConnect }),
     [inView, all, showLoose, autoConnect],
   );
-  const across = Math.max(3, Math.floor((canvasW - PAD) / (NODE_W + GAP_X / 2)) || 0);
-  const layout = useMemo(() => layoutGraph(graph, {
-    across,
-    groupOf: (t) => {
-      const p = projectById[t?.projectId];
-      return p ? { key: p.id, label: p.name, color: p.color } : { key: '', label: 'No project', color: null };
+  // A lane is the person accountable: the task's first assignee, else the
+  // first name typed for somebody outside the workspace, else Unassigned.
+  const layout = useMemo(() => layoutSwimlanes(graph, {
+    laneOf: (t) => {
+      const uid = (t?.assignedTo || [])[0];
+      if (uid) return { key: uid, label: profiles[uid]?.displayName || profiles[uid]?.email || 'Someone', person: uid };
+      const ext = (t?.assignedToExternal || [])[0];
+      return ext ? { key: `ext:${ext}`, label: ext, person: ext } : { key: '', label: 'Unassigned', person: null };
     },
-  }), [graph, across, projectById]);
+  }), [graph, profiles]);
   const focusId = drag ? drag.fromId : focus;
   const lit = useMemo(() => (focusId ? neighbourhood(focusId, layout.edges) : null), [focusId, layout.edges]);
 
@@ -174,7 +171,7 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
     ev.preventDefault();
     setMenu(null);
     const p = toSvg(ev.currentTarget.ownerSVGElement, ev.clientX, ev.clientY);
-    setDrag({ fromId: n.id, side, x0: side === 'out' ? n.x + n.w : n.x, y0: n.y + n.h / 2, x: p.x, y: p.y, overId: null });
+    setDrag({ fromId: n.id, side, x0: n.x + n.w / 2, y0: side === 'out' ? n.y + n.h : n.y, x: p.x, y: p.y, overId: null });
   }, []);
   const dragging = !!drag;
   // Keyed on whether a drag is ON, not on the drag — the move replaces the
@@ -308,7 +305,11 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
       {/* No card around it: the legend and the graph sit on the page itself. */}
       <div className="nd-panel">
         <div className="nd-head">
-          <div className="nd-legend" aria-label="What the lines mean">
+          <div className="nd-legend" aria-label="What the colours and lines mean">
+            {STATUS_KEYS.map(([k, text]) => (
+              <span key={k} className="nd-key"><span className={`sl-swatch fill-${k}`} />{text}</span>
+            ))}
+            <span className="nd-key-sep" aria-hidden="true" />
             <span className="nd-key"><svg width="30" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="nd-edge k-depends" /><path d="M22 1 L30 5 L22 9 z" className="nd-arrow k-depends" /></svg>Comes before</span>
             <span className="nd-key"><svg width="30" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="nd-edge k-part" /><path d="M22 1 L30 5 L22 9 z" className="nd-arrow k-part" /></svg>Part of</span>
             <span className="nd-key"><svg width="30" height="10" aria-hidden="true"><line x1="0" y1="5" x2="30" y2="5" className="nd-edge k-related" /></svg>Related</span>
@@ -330,9 +331,9 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
         {layout.nodes.length > 0 && (
           <div className="nd-hint">
             {statedLines === 0 && <><strong>No task here is connected to another yet.</strong> </>}
-            Hover a task and drag the <span className="nd-hint-dot" aria-hidden="true" /> on its right edge onto the task
-            that comes next — or the one on its left onto the task that comes first. You choose what the line means;
-            click a line to remove it.
+            One column per person accountable, read top to bottom. Hover a task and drag the{' '}
+            <span className="nd-hint-dot" aria-hidden="true" /> at its bottom onto the task that comes next — or the one
+            at its top onto the task that comes first. You choose what the line means; click a line to remove it.
           </div>
         )}
         {layout.nodes.length === 0 ? (
@@ -351,7 +352,7 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
             )}
           </div>
         ) : (
-          <div className="nd-canvas" ref={measure}>
+          <div className="nd-canvas" ref={scroller}>
             <svg
               ref={svgRef}
               className={`nd-svg${lit ? ' has-focus' : ''}${drag ? ' is-dragging' : ''}`}
@@ -370,14 +371,35 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
                 ))}
               </defs>
 
-              {layout.headings.map((hd) => (hd.kind === 'section' ? (
-                <text key={`s${hd.y}`} x={PAD} y={hd.y + 16} className="nd-loose-label">{hd.label}</text>
-              ) : (
-                <g key={`p${hd.y}`} transform={`translate(${PAD} ${hd.y})`}>
-                  <circle cx="5" cy="9" r="5" style={{ fill: hd.color || 'var(--c-text-muted)' }} />
-                  <text x="16" y="13" className="nd-proj-head">{hd.label}<tspan className="nd-proj-count" dx="8">{hd.count}</tspan></text>
+              {/* The lanes: a column per person, its name at the head, ruled full height. */}
+              {layout.lanes.map((ln, i) => (
+                <g key={ln.key || 'unassigned'} className={`sl-lane${i % 2 ? ' is-alt' : ''}`}>
+                  <rect className="sl-lane-bg" x={ln.x} y={PAD} width={ln.w} height={layout.height - PAD * 2} />
+                  <rect className="sl-lane-head" x={ln.x} y={PAD} width={ln.w} height={LANE_HEAD} />
+                  {ln.person ? (
+                    <>
+                      <circle cx={ln.x + 26} cy={PAD + LANE_HEAD / 2} r="11" style={{ fill: avatarColor(ln.person) }} />
+                      <text className="nd-av sl-av" x={ln.x + 26} y={PAD + LANE_HEAD / 2 + 4} textAnchor="middle">{avatarInitial(ln.label)}</text>
+                    </>
+                  ) : (
+                    <circle className="sl-av-none" cx={ln.x + 26} cy={PAD + LANE_HEAD / 2} r="10" />
+                  )}
+                  <text className="sl-lane-name" x={ln.x + 44} y={PAD + LANE_HEAD / 2 + 4.5}>{clip(ln.label, 22)}</text>
+                  <text className="sl-lane-count" x={ln.x + ln.w - 14} y={PAD + LANE_HEAD / 2 + 4.5} textAnchor="end">{ln.count}</text>
                 </g>
-              )))}
+              ))}
+              {layout.dividers.map((y) => (
+                <line key={`d${y}`} className="sl-divider" x1={PAD} x2={PAD + layout.lanes.length * (layout.lanes[0]?.w || 0)} y1={y} y2={y} />
+              ))}
+              {/* The tray: every task with no connection yet, kept apart from the
+                  lanes so they hold only the flow; drag one onto the flow to place it. */}
+              {layout.tray && (
+                <g className="sl-tray">
+                  <rect className="sl-tray-bg" x={layout.tray.x} y={layout.tray.y} width={layout.tray.w} height={layout.tray.h} rx="14" />
+                  <text className="sl-tray-title" x={layout.tray.x + 18} y={layout.tray.y + LANE_HEAD / 2 + 4.5}>NOT CONNECTED</text>
+                  <text className="sl-lane-count" x={layout.tray.x + layout.tray.w - 16} y={layout.tray.y + LANE_HEAD / 2 + 4.5} textAnchor="end">{layout.tray.count}</text>
+                </g>
+              )}
 
               {/* Lines under the nodes; a wide invisible twin makes each one clickable. */}
               {layout.edges.map((e) => {
@@ -398,22 +420,21 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
 
               {drag && (
                 <path className="nd-edge k-draft"
-                  d={`M ${drag.x0} ${drag.y0} C ${drag.x0 + (drag.side === 'out' ? 60 : -60)} ${drag.y0}, ${drag.x} ${drag.y}, ${drag.x} ${drag.y}`}
+                  d={`M ${drag.x0} ${drag.y0} C ${drag.x0} ${drag.y0 + (drag.side === 'out' ? 60 : -60)}, ${drag.x} ${drag.y}, ${drag.x} ${drag.y}`}
                   markerEnd={drag.side === 'out' ? 'url(#nd-arrow-draft)' : undefined}
                   markerStart={drag.side === 'in' ? 'url(#nd-arrow-draft)' : undefined} />
               )}
 
               {layout.nodes.map((n) => {
                 const t = n.task;
+                // The node shows the title alone; everything else is in its tooltip.
                 const st = displayStatus(t, blockedIds, today);
                 const project = projectById[t.projectId];
                 const owner = (t.assignedTo || [])[0] || null;
                 const ownerName = owner ? nameOf(owner) : (t.assignedToExternal || [])[0] || '';
                 const due = t.plan?.endDate;
-                const late = due && t.status !== 'done' && due < today;
                 const dim = lit && !lit.ids.has(n.id);
-                const chipW = 16 + st.label.length * 6.1;
-                const label = `${t.title || 'Untitled task'} — ${st.label}${project ? `, ${project.name}` : ''}${due ? `, due ${shortDue(due)}` : ''}${n.context ? ', outside your filter' : ''}`;
+                const label = `${t.title || 'Untitled task'} — ${st.label}${ownerName ? `, ${ownerName}` : ''}${project ? `, ${project.name}` : ''}${due ? `, due ${shortDue(due)}` : ''}${n.context ? ', outside your filter' : ''}`;
                 return (
                   <g key={n.id}
                     className={`nd-node${n.context ? ' is-context' : ''}${dim && drag?.overId !== n.id ? ' is-dim' : ''}${focusId === n.id ? ' is-focus' : ''}${drag?.overId === n.id ? ' is-target' : ''}`}
@@ -422,35 +443,17 @@ export default function NodeView({ projectFilter = 'all', route = {} }) {
                     onFocus={() => setFocus(n.id)} onBlur={() => setFocus(null)}
                     {...activateProps(() => { if (!justDragged) setEditing(t); }, { label: `Open ${label}` })}>
                     <title>{label}</title>
-                    <rect className="nd-box" width={n.w} height={n.h} rx="12" />
-                    <rect className="nd-rail" width="5" height={n.h} rx="2.5" style={{ fill: project?.color || 'var(--c-border)' }} />
-                    <rect className={`nd-st st-${st.id}`} x="16" y="12" width={chipW} height="18" rx="9" />
-                    <text className={`nd-st-text st-${st.id}`} x={16 + chipW / 2} y="24.5" textAnchor="middle">{st.label}</text>
-                    <text className="nd-proj" x={n.w - 12} y="25" textAnchor="end">
-                      {n.context ? 'outside filter' : clip(project?.name || '', Math.max(6, Math.floor((n.w - chipW - 40) / 6.2)))}
+                    <rect className={`nd-box fill-${STATUS_FILL[t.status] || 'todo'}`} width={n.w} height={n.h} rx="12" />
+                    <text className="nd-title" x={n.w / 2} y={15 + 12.5} textAnchor="middle">
+                      {n.lines.map((line, k) => <tspan key={k} x={n.w / 2} dy={k ? LINE_H : 0}>{line}</tspan>)}
                     </text>
-                    <text className="nd-title" x="16" y={40 + 13}>
-                      {n.lines.map((line, i) => <tspan key={i} x="16" dy={i ? LINE_H : 0}>{line}</tspan>)}
-                    </text>
-                    <g transform={`translate(0 ${n.h - 22})`}>
-                      {ownerName ? (
-                        <>
-                          <circle cx="25" cy="0" r="9" style={{ fill: avatarColor(owner || ownerName) }} />
-                          <text className="nd-av" x="25" y="3.5" textAnchor="middle">{avatarInitial(ownerName)}</text>
-                          <text className="nd-owner" x="40" y="4">{clip(ownerName.split(/[\s@]/)[0], 14)}</text>
-                        </>
-                      ) : (
-                        <text className="nd-owner is-none" x="16" y="4">No owner</text>
-                      )}
-                      {due && <text className={`nd-due${late ? ' is-late' : ''}`} x={n.w - 12} y="4" textAnchor="end">{late ? `${shortDue(due)} · late` : shortDue(due)}</text>}
-                    </g>
                     {/* The connect dots: shown on hover, for a task this person may change. */}
-                    {focus === n.id && !drag && canEdit(t) && [['in', 0], ['out', n.w]].map(([side, x]) => (
+                    {focus === n.id && !drag && canEdit(t) && [['in', 0], ['out', n.h]].map(([side, y]) => (
                       <g key={side} className={`nd-handle is-${side}`} aria-hidden="true"
                         onPointerDown={(ev) => startDrag(n, side, ev)} onClick={(ev) => ev.stopPropagation()}>
                         <title>{side === 'out' ? 'Drag onto the task that comes after this one' : 'Drag onto the task that comes before this one'}</title>
-                        <circle className="nd-handle-hit" cx={x} cy={n.h / 2} r="14" />
-                        <circle className="nd-handle-dot" cx={x} cy={n.h / 2} r="6.5" />
+                        <circle className="nd-handle-hit" cx={n.w / 2} cy={y} r="14" />
+                        <circle className="nd-handle-dot" cx={n.w / 2} cy={y} r="6.5" />
                       </g>
                     ))}
                   </g>

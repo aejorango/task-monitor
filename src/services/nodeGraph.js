@@ -1,6 +1,6 @@
 // src/services/nodeGraph.js — Board → Node: tasks as a graph of what leads to what.
 //
-// Pure: no React, no Firebase. The page (components/NodeView.jsx) draws what
+// Pure: no React, no Firebase. The page (components/SwimlaneView.jsx) draws what
 // this returns, and tests/ui + nodeGraph.test.mjs pin the rules.
 //
 // WHAT AN EDGE IS — what the task itself says:
@@ -20,10 +20,11 @@
 //     anybody made, so it is never written unless somebody saves it as a
 //     real "comes before" — and it never contradicts a stated connection.
 //
-// LAYOUT — left to right, the way work flows. A task's column is one past the
-// furthest thing it waits on (the longest path in), so a chain reads in order.
-// A task with nothing before it sits one column before the earliest task it
-// leads to — beside what it feeds, not stranded at the far left. Only 'depends'
+// LAYOUT — swimlanes: a lane per person accountable, the work read top to
+// bottom. A task's row is one past the furthest thing it waits on (the
+// longest path in), so a chain reads in order. A task with nothing before it
+// sits one row above the earliest task it leads to — beside what it feeds,
+// not stranded at the top. Only 'depends'
 // and 'part' edges decide columns; 'related' and 'duplicate' are drawn but do
 // not push anything sideways, because they say nothing about order. Separate
 // groups of connected tasks are stacked as their own blocks. A cycle — A waits
@@ -48,10 +49,10 @@ export const NODE_W = 220;
 export const LABEL_CHARS = 28;   // per line, at the 13px label size
 export const LABEL_LINES = 3;    // then "…"
 export const LINE_H = 17;
-const NODE_TOP = 40;             // status chip row + gap above the label
-const NODE_FOOT = 34;            // gap + the owner/due row + padding
-export const GAP_X = 96;         // between columns: room for the curves
-export const GAP_Y = 22;         // between nodes in a column
+// A node is its title and nothing else (on request): the status is its
+// colour, and the rest is in its tooltip and its editor.
+const NODE_TOP = 15;
+const NODE_FOOT = 13;
 export const GROUP_GAP = 48;     // between separate groups
 export const PAD = 28;
 
@@ -304,28 +305,46 @@ export function rankNodes(nodes, edges) {
 
 const dueKey = (t) => t?.plan?.endDate || '9999-99-99';
 
+// ── Swimlanes ────────────────────────────────────────────────────────────────
+// One LANE (column) per person accountable, and the work read TOP TO BOTTOM:
+// a task's row is its column in the ranking above (longest path in, a task
+// with nothing before it pulled down beside what it leads to). Separate
+// groups of connected tasks are stacked as their own bands. The lanes hold
+// only the CONNECTED work; every task with no connection waits in a separate
+// TRAY to the right of the lanes, open work first, ready to be dragged onto
+// the flow.
+
+export const LANE_PAD = 22;                  // between a lane's edge and its tasks
+export const LANE_W = NODE_W + LANE_PAD * 2;
+export const LANE_HEAD = 44;                 // the lane's name row
+export const ROW_GAP = 48;                   // between rows: room for the elbows
+export const STACK_GAP = 14;                 // two tasks of one lane in one row
+export const TRAY_GAP = 36;                  // between the last lane and the tray
+const TRAY_ROWS = 10;                        // the tray adds a column every ten tasks, up to three
+
+const defaultLaneOf = (t) => {
+  const uid = (t?.assignedTo || [])[0];
+  if (uid) return { key: uid, label: uid };
+  const ext = (t?.assignedToExternal || [])[0];
+  return ext ? { key: `ext:${ext}`, label: ext } : { key: '', label: 'Unassigned' };
+};
+
 /**
- * Positions for every node, and a path for every edge.
- *
- * Within a column, nodes are ordered to keep lines short: by the average row
- * of what feeds them (two passes), then by due date, then by title — so the
- * same data always draws the same picture.
+ * Positions for every task in lanes, and an orthogonal path for every line.
+ * `laneOf(task)` → { key, label, … } names the lane (the key '' is
+ * "Unassigned", always last). Lanes are ordered by where their work first
+ * appears in the flow, so the chart reads left to right as the hand-offs do.
  */
-export function layoutGraph(graph, {
-  labelOf = (t) => t?.title,
-  // What a task with no connection is filed under in the grid: its project.
-  groupOf = (t) => ({ key: t?.projectId || '', label: t?.projectId ? 'Project' : 'No project', color: null }),
-  // How many across the grid may go — the page passes what fits its width.
-  across: acrossWanted = 0,
-} = {}) {
+export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = defaultLaneOf } = {}) {
   const { nodes, edges } = graph;
   const { rank, loopEdges } = rankNodes(nodes, edges);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const lines = new Map(nodes.map((n) => [n.id, wrapLabel(labelOf(n.task))]));
+  const lane = new Map(nodes.map((n) => [n.id, laneOf(n.task) || { key: '', label: 'Unassigned' }]));
+  const tie = (a, b) => dueKey(byId.get(a).task).localeCompare(dueKey(byId.get(b).task))
+    || String(labelOf(byId.get(a).task) || '').localeCompare(String(labelOf(byId.get(b).task) || ''))
+    || a.localeCompare(b);
 
-  // Bigger groups first, then the group whose earliest task is due soonest.
-  // A task with no connection at all is not a group: those are laid out as a
-  // grid at the foot (see below), not as a column of one-node "groups".
   const linkedIds = new Set(edges.flatMap((e) => [e.from, e.to]));
   const loose = nodes.filter((n) => !linkedIds.has(n.id)).map((n) => n.id);
   const groups = groupsOf(nodes.filter((n) => linkedIds.has(n.id)), edges)
@@ -334,147 +353,167 @@ export function layoutGraph(graph, {
       || dueKey(byId.get(a[0])?.task).localeCompare(dueKey(byId.get(b[0])?.task))
       || a[0].localeCompare(b[0]));
 
-  const pos = new Map();
-  let top = PAD;
-  let width = 0;
-  const neighbours = new Map(nodes.map((n) => [n.id, []]));
-  edges.forEach((e) => { neighbours.get(e.from)?.push(e.to); neighbours.get(e.to)?.push(e.from); });
-
-  groups.forEach((ids) => {
-    const cols = new Map();
-    ids.forEach((id) => {
-      const r = rank.get(id) || 0;
-      if (!cols.has(r)) cols.set(r, []);
-      cols.get(r).push(id);
-    });
-    const colIdx = [...cols.keys()].sort((a, b) => a - b);
-    const order = new Map();
-    const tie = (a, b) => dueKey(byId.get(a).task).localeCompare(dueKey(byId.get(b).task))
-      || String(labelOf(byId.get(a).task) || '').localeCompare(String(labelOf(byId.get(b).task) || ''))
-      || a.localeCompare(b);
-    colIdx.forEach((c) => { cols.get(c).sort(tie).forEach((id, i) => order.set(id, i)); });
-    // Two barycentre sweeps: a node moves toward the rows of its neighbours.
-    for (let pass = 0; pass < 2; pass += 1) {
-      colIdx.forEach((c) => {
-        const bary = (id) => {
-          const ns = (neighbours.get(id) || []).filter((m) => order.has(m) && rank.get(m) !== c);
-          return ns.length ? ns.reduce((s, m) => s + order.get(m), 0) / ns.length : order.get(id);
-        };
-        cols.get(c).sort((a, b) => bary(a) - bary(b) || tie(a, b)).forEach((id, i) => order.set(id, i));
-      });
-    }
-    // Stack each column; the group is as tall as its tallest column, and the
-    // columns are centred against each other so a short chain does not hug
-    // the top edge of a tall one.
-    const colH = new Map(colIdx.map((c) => [c,
-      cols.get(c).reduce((h, id) => h + nodeHeight(lines.get(id).length), 0) + (cols.get(c).length - 1) * GAP_Y]));
-    const groupH = Math.max(...colH.values());
-    colIdx.forEach((c) => {
-      let y = top + (groupH - colH.get(c)) / 2;
-      cols.get(c).forEach((id) => {
-        const h = nodeHeight(lines.get(id).length);
-        const x = PAD + c * (NODE_W + GAP_X);
-        pos.set(id, { x, y, w: NODE_W, h, rank: c, lines: lines.get(id) });
-        width = Math.max(width, x + NODE_W + PAD);
-        y += h + GAP_Y;
-      });
-    });
-    top += groupH + GROUP_GAP;
+  // Each group's rows: the ranks it uses, in order, with no empty rows.
+  const groupRows = groups.map((ids) => {
+    const ranks = [...new Set(ids.map((id) => rank.get(id) || 0))].sort((a, b) => a - b);
+    return ranks.map((r) => ids.filter((id) => (rank.get(id) || 0) === r));
   });
 
-  // Everything with no connection — the rest of the work, which a strategy
-  // still has to see — as a grid under the graph, filed by PROJECT so it can
-  // be read as "what is left in each", open work first by due date and the
-  // finished last. One heading for the section, one per project.
-  const headings = [];
-  let looseTop = null;
+  // Lane order: where each lane's work first appears; Unassigned last.
+  const first = new Map();
+  const info = new Map();
+  const note = (id, at) => {
+    const l = lane.get(id);
+    if (!info.has(l.key)) info.set(l.key, { ...l, count: 0 });
+    info.get(l.key).count += 1;
+    if (!first.has(l.key) || at < first.get(l.key)) first.set(l.key, at);
+  };
+  groupRows.forEach((rows, g) => rows.forEach((row, r) => row.forEach((id) => note(id, g * 10000 + r))));
+  const lanes = [...info.values()].sort((a, b) => (!a.key) - (!b.key)
+    || first.get(a.key) - first.get(b.key) || String(a.label).localeCompare(String(b.label)));
+  const laneIdx = new Map(lanes.map((l, i) => [l.key, i]));
+  lanes.forEach((l, i) => { l.x = PAD + i * LANE_W; l.w = LANE_W; });
+  const laneOfId = (id) => laneIdx.get(lane.get(id).key);
+
+  const pos = new Map();
+  const rowTopOf = new Map();
+  const dividers = [];
+  let top = PAD + LANE_HEAD + 18;
+  const place = (ids, rowTop, order = tie) => {
+    // One row: in each lane its tasks stacked; the row is as tall as its tallest lane.
+    const cells = new Map();
+    ids.forEach((id) => { const i = laneOfId(id); if (!cells.has(i)) cells.set(i, []); cells.get(i).push(id); });
+    let rowH = 0;
+    cells.forEach((cell, i) => {
+      let y = rowTop;
+      cell.sort(order).forEach((id) => {
+        const h = nodeHeight(lines.get(id).length);
+        pos.set(id, { x: lanes[i].x + LANE_PAD, y, w: NODE_W, h, lane: i, lines: lines.get(id) });
+        rowTopOf.set(id, rowTop);
+        y += h + STACK_GAP;
+      });
+      rowH = Math.max(rowH, y - STACK_GAP - rowTop);
+    });
+    return rowH;
+  };
+  groupRows.forEach((rows, g) => {
+    if (g > 0) { dividers.push(top - GROUP_GAP / 2 - ROW_GAP / 2); }
+    rows.forEach((row) => { top += place(row, top) + ROW_GAP; });
+    top += GROUP_GAP;
+  });
+
+  const lanesBottom = groups.length ? top - GROUP_GAP - ROW_GAP + PAD : 0;
+
+  // The tray: everything not connected, in a box of its own right of the lanes.
+  let tray = null;
   if (loose.length) {
-    looseTop = top;
-    headings.push({ kind: 'section', y: top, label: linkedIds.size ? 'NOT CONNECTED TO ANOTHER TASK' : 'NO CONNECTIONS YET — EVERY TASK, BY PROJECT' });
-    top += 30;
-    const across = Math.max(3, acrossWanted || 0, Math.round((width - PAD) / (NODE_W + GAP_X / 2)) || 0);
-    const files = new Map();
-    loose.forEach((id) => {
-      const g = groupOf(byId.get(id).task) || { key: '', label: 'No project' };
-      if (!files.has(g.key)) files.set(g.key, { ...g, ids: [] });
-      files.get(g.key).ids.push(id);
-    });
-    const order = [...files.values()].sort((a, b) => (!a.key) - (!b.key) || String(a.label).localeCompare(String(b.label)));
-    const openFirst = (a, b) => {
-      const ta = byId.get(a).task; const tb = byId.get(b).task;
-      return (ta?.status === 'done') - (tb?.status === 'done')
-        || dueKey(ta).localeCompare(dueKey(tb))
-        || String(labelOf(ta) || '').localeCompare(String(labelOf(tb) || ''))
-        || a.localeCompare(b);
-    };
-    order.forEach((file) => {
-      headings.push({ kind: 'project', y: top, label: file.label, color: file.color, count: file.ids.length });
-      top += 24;
-      const sorted = [...file.ids].sort(openFirst);
-      for (let i = 0; i < sorted.length; i += across) {
-        const row = sorted.slice(i, i + across);
-        const rowH = Math.max(...row.map((id) => nodeHeight(lines.get(id).length)));
-        row.forEach((id, j) => {
-          const x = PAD + j * (NODE_W + GAP_X / 2);
-          pos.set(id, { x, y: top, w: NODE_W, h: nodeHeight(lines.get(id).length), rank: null, lines: lines.get(id) });
-          width = Math.max(width, x + NODE_W + PAD);
-        });
-        top += rowH + GAP_Y;
-      }
-      top += 14;
-    });
-    top += GROUP_GAP - GAP_Y - 14;
+    const cols = Math.min(3, Math.ceil(loose.length / TRAY_ROWS));
+    const x = PAD + lanes.length * LANE_W + (lanes.length ? TRAY_GAP : 0);
+    const openFirst = (a, b) => (byId.get(a).task?.status === 'done') - (byId.get(b).task?.status === 'done') || tie(a, b);
+    const sorted = [...loose].sort(openFirst);
+    let y = PAD + LANE_HEAD + 18;
+    for (let i = 0; i < sorted.length; i += cols) {
+      const row = sorted.slice(i, i + cols);
+      const rowH = Math.max(...row.map((id) => nodeHeight(lines.get(id).length)));
+      row.forEach((id, c) => {
+        pos.set(id, { x: x + LANE_PAD + c * (NODE_W + STACK_GAP), y, w: NODE_W, h: nodeHeight(lines.get(id).length), lane: null, lines: lines.get(id) });
+      });
+      y += rowH + STACK_GAP;
+    }
+    tray = { x, y: PAD, w: LANE_PAD * 2 + cols * NODE_W + (cols - 1) * STACK_GAP, h: y - STACK_GAP + LANE_PAD - PAD, count: loose.length };
   }
 
-  const paths = edges.map((e) => {
+  const width = Math.max(PAD * 2 + LANE_W, tray ? tray.x + tray.w + PAD : PAD * 2 + lanes.length * LANE_W);
+  const height = Math.max(lanesBottom, tray ? tray.y + tray.h + PAD : 0, PAD * 2 + LANE_HEAD + 40);
+
+  // Is the stretch of a lane between y1 and y2 free of tasks (other than a and b)?
+  const inLane = lanes.map(() => []);
+  pos.forEach((p, id) => { if (p.lane != null) inLane[p.lane].push({ id, ...p }); });
+  const clear = (i, y1, y2, skip) => !inLane[i].some((p) => !skip.includes(p.id) && p.y < y2 && p.y + p.h > y1);
+
+  const paths = edges.map((e, k) => {
     const a = pos.get(e.from);
     const b = pos.get(e.to);
     if (!a || !b) return null;
-    // A line between two tasks in one column bows out to the right; the
-    // canvas has to be wide enough for the bow, or it is clipped at the edge.
-    if (a.x === b.x) width = Math.max(width, a.x + a.w + sameColumnBow(a, b) + PAD);
-    return { ...e, loop: loopEdges.has(e.id), d: edgePath(a, b) };
+    return { ...e, loop: loopEdges.has(e.id), d: laneEdgePath(a, b, { lanes, rowTopOf: (n) => rowTopOf.get(n), from: e.from, to: e.to, clear, nudge: ((k % 5) - 2) * 3 }) };
   }).filter(Boolean);
 
   return {
     nodes: nodes.map((n) => ({ ...n, ...pos.get(n.id) })),
     edges: paths,
-    width: Math.max(width, PAD * 2 + NODE_W),
-    height: Math.max(top - GROUP_GAP + PAD, PAD * 2),
+    lanes,
+    width,
+    height,
     groups: groups.length,
-    looseTop,
-    headings,
+    dividers,
+    lanesBottom,
+    tray,
   };
 }
 
 /**
- * A curve from `a` to `b`. Forward (b to the right): right edge → left edge.
- * Same column: out of the right side and back in, bowing outward. Backward
- * (a loop, drawn anyway): out of the left of `a`, into the right of `b`.
+ * The line from `a` to `b` as right angles, never through a task: lines run
+ * down a lane only where it is clear, cross between lanes in the gap above a
+ * row, and otherwise travel in the gutter between two lanes. A line that
+ * goes up or sideways (a relation, or a loop) leaves and enters by the side.
  */
-export function edgePath(a, b) {
-  const ay = a.y + a.h / 2;
-  const by = b.y + b.h / 2;
-  if (b.x > a.x) {
-    const x1 = a.x + a.w;
-    const x2 = b.x;
-    const k = Math.max(36, (x2 - x1) / 2);
-    return `M ${x1} ${ay} C ${x1 + k} ${ay}, ${x2 - k} ${by}, ${x2} ${by}`;
+export function laneEdgePath(a, b, { lanes, rowTopOf, from, to, clear, nudge = 0 }) {
+  const ax = a.x + a.w / 2;
+  const bx = b.x + b.w / 2;
+  const skip = [from, to];
+  const gutter = (i, toward) => (toward > i ? lanes[i].x + LANE_W : toward < i ? lanes[i].x : lanes[i].x + LANE_W) + nudge;
+  const aBottom = a.y + a.h;
+  const pts = [];
+  if (b.y > aBottom) {
+    // Lines crossing the same gap are nudged apart, so two never share a run.
+    const gapY = rowTopOf(to) - (rowTopOf(to) > rowTopOf(from) ? ROW_GAP / 2 + nudge : STACK_GAP / 2);
+    pts.push([ax, aBottom]);
+    if (clear(a.lane, aBottom, gapY, skip)) pts.push([ax, gapY]);
+    else {
+      const g = gutter(a.lane, b.lane);
+      pts.push([ax, aBottom + STACK_GAP / 2], [g, aBottom + STACK_GAP / 2], [g, gapY]);
+    }
+    if (clear(b.lane, gapY, b.y, skip)) pts.push([bx, gapY], [bx, b.y]);
+    else {
+      const g = gutter(b.lane, a.lane);
+      pts.push([g, gapY], [g, b.y - STACK_GAP / 2], [bx, b.y - STACK_GAP / 2], [bx, b.y]);
+    }
+  } else {
+    const ay = a.y + a.h / 2;
+    const by = b.y + b.h / 2;
+    const right = b.lane >= a.lane;
+    const aSide = right ? a.x + a.w : a.x;
+    const bSide = b.lane > a.lane ? b.x : b.x + b.w;
+    const gA = gutter(a.lane, b.lane === a.lane ? a.lane + 1 : b.lane);
+    const gB = gutter(b.lane, b.lane === a.lane ? b.lane + 1 : a.lane);
+    const gy = Math.min(rowTopOf(from), rowTopOf(to)) - ROW_GAP / 2;
+    pts.push([aSide, ay], [gA, ay]);
+    if (gA !== gB) pts.push([gA, gy], [gB, gy]);
+    pts.push([gB, by], [bSide, by]);
   }
-  if (b.x === a.x) {
-    const x = a.x + a.w;
-    const bow = sameColumnBow(a, b);
-    return `M ${x} ${ay} C ${x + bow} ${ay}, ${x + bow} ${by}, ${x} ${by}`;
-  }
-  const x1 = a.x;
-  const x2 = b.x + b.w;
-  const k = Math.max(60, (x1 - x2) / 2);
-  return `M ${x1} ${ay} C ${x1 - k} ${ay}, ${x2 + k} ${by}, ${x2} ${by}`;
+  return roundedPath(pts);
 }
 
-/** How far a same-column line bows out: more for nodes further apart. */
-export function sameColumnBow(a, b) {
-  return 46 + Math.min(60, Math.abs((b.y + b.h / 2) - (a.y + a.h / 2)) / 4);
+/** A polyline with softened corners; repeated and straight-through points are dropped. */
+export function roundedPath(points, r = 8) {
+  const pts = points.filter((p, i) => i === 0 || p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1]);
+  const keep = pts.filter((p, i) => {
+    if (i === 0 || i === pts.length - 1) return true;
+    const [x0, y0] = pts[i - 1]; const [x1, y1] = p; const [x2, y2] = pts[i + 1];
+    return (x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1) !== 0;
+  });
+  if (keep.length < 2) return `M ${keep[0]?.[0] || 0} ${keep[0]?.[1] || 0}`;
+  let d = `M ${keep[0][0]} ${keep[0][1]}`;
+  for (let i = 1; i < keep.length - 1; i += 1) {
+    const [px, py] = keep[i - 1]; const [x, y] = keep[i]; const [nx, ny] = keep[i + 1];
+    const r1 = Math.min(r, Math.hypot(x - px, y - py) / 2);
+    const r2 = Math.min(r, Math.hypot(nx - x, ny - y) / 2);
+    const ux = Math.sign(x - px); const uy = Math.sign(y - py);
+    const vx = Math.sign(nx - x); const vy = Math.sign(ny - y);
+    d += ` L ${x - ux * r1} ${y - uy * r1} Q ${x} ${y} ${x + vx * r2} ${y + vy * r2}`;
+  }
+  const last = keep[keep.length - 1];
+  return `${d} L ${last[0]} ${last[1]}`;
 }
 
 /** Everything one hop from `id` — what a hover lights up. */

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  wrapLabel, edgesOf, buildGraph, rankNodes, layoutGraph, neighbourhood, groupsOf,
+  wrapLabel, edgesOf, buildGraph, rankNodes, layoutSwimlanes, neighbourhood, groupsOf,
   sequenceEdges, connectionUpdate, disconnectUpdates,
   LABEL_CHARS, LABEL_LINES, NODE_W,
 } from './nodeGraph.js';
@@ -64,52 +64,86 @@ test('columns follow the work: each task one past the furthest thing it waits on
 test('a task with nothing before it sits beside what it leads to, not at the far left', () => {
   // a → b → c → d, and x (connected later) comes before d only.
   const tasks = [T('a'), T('b', { dependsOn: ['a'] }), T('c', { dependsOn: ['b'] }),
-    T('d', { dependsOn: ['c', 'x'] }), T('x'), T('y'), T('z', { dependsOn: ['y'] })];
+    T('d', { dependsOn: ['c', 'x'] }), T('x', { assignedTo: ['other'] }), T('y'), T('z', { dependsOn: ['y'] })];
   const g = buildGraph(tasks, tasks);
   const { rank } = rankNodes(g.nodes, g.edges);
   assert.equal(rank.get('x'), 2, 'one column before d');
   assert.equal(rank.get('d'), 3, 'what it leads to does not move');
   assert.equal(rank.get('a'), 0, 'the start of the longest chain stays first');
   assert.equal(rank.get('y'), 0);
-  const layout = layoutGraph(g);
+  const layout = layoutSwimlanes(g);
   const x = layout.nodes.find((n) => n.id === 'x');
+  const c = layout.nodes.find((n) => n.id === 'c');
   const d = layout.nodes.find((n) => n.id === 'd');
-  assert.ok(x.x < d.x && d.x - x.x < 2 * NODE_W, 'drawn next to d');
+  assert.equal(x.y, c.y, 'in the row just above d, beside c — not at the top');
+  assert.ok(x.y < d.y);
 });
 
 test('a loop in the data does not hang the page — it is drawn and flagged', () => {
   const tasks = [T('a', { dependsOn: ['b'] }), T('b', { dependsOn: ['a'] }), T('c', { dependsOn: ['b'] })];
   const g = buildGraph(tasks, tasks);
-  const layout = layoutGraph(g);
+  const layout = layoutSwimlanes(g);
   assert.equal(layout.nodes.length, 3);
   assert.equal(layout.edges.filter((e) => e.loop).length, 1, 'exactly the edge that closes the loop');
   assert.ok(layout.edges.every((e) => typeof e.d === 'string' && e.d.startsWith('M ')));
 });
 
-test('the layout: fixed-width nodes, no overlaps, separate groups stacked, the unconnected as a grid', () => {
+const who = (t) => (t.owner ? { key: t.owner, label: t.owner.toUpperCase() } : { key: '', label: 'Unassigned' });
+
+test('swimlanes: a lane per person, read top to bottom, nothing overlaps', () => {
   const tasks = [
-    T('a', { title: 'A very long task title that will certainly need to wrap onto several lines here' }),
-    T('b', { dependsOn: ['a'] }), T('c', { dependsOn: ['a'] }),
-    T('x'), T('y', { dependsOn: ['x'] }),
-    T('lone1'), T('lone2'),
+    T('a', { owner: 'ann', title: 'A very long task title that will certainly need to wrap onto several lines here' }),
+    T('b', { owner: 'bob', dependsOn: ['a'] }), T('c', { owner: 'ann', dependsOn: ['a'] }),
+    T('x', { owner: 'cy' }), T('y', { owner: 'bob', dependsOn: ['x'] }),
+    T('lone1', { owner: 'ann' }), T('lone2'),
   ];
-  const layout = layoutGraph(buildGraph(tasks, tasks, { includeUnlinked: true }));
+  const layout = layoutSwimlanes(buildGraph(tasks, tasks, { includeUnlinked: true }), { laneOf: who });
+  assert.deepEqual(layout.lanes.map((l) => l.label), ['ANN', 'BOB', 'CY'],
+    'lanes in the order their work first appears — and only for connected work');
+  assert.deepEqual(layout.lanes.map((l) => l.count), [2, 2, 1]);
+  const at = (id) => layout.nodes.find((n) => n.id === id);
+  const laneX = (label) => layout.lanes.find((l) => l.label === label).x;
+  assert.ok(at('a').x > laneX('ANN') && at('a').x < laneX('BOB'), 'a sits in Ann\'s lane');
+  assert.ok(at('b').x > laneX('BOB'), 'b sits in Bob\'s lane');
+  assert.ok(at('b').y > at('a').y && at('c').y > at('a').y, 'what follows sits below');
+  assert.equal(at('b').y, at('c').y, 'one step, one row — across lanes');
   assert.ok(layout.nodes.every((n) => n.w === NODE_W));
-  const boxes = layout.nodes;
-  for (let i = 0; i < boxes.length; i += 1) {
-    for (let j = i + 1; j < boxes.length; j += 1) {
-      const p = boxes[i]; const q = boxes[j];
-      const overlap = p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h;
-      assert.ok(!overlap, `${p.id} overlaps ${q.id}`);
+  for (let i = 0; i < layout.nodes.length; i += 1) {
+    for (let k = i + 1; k < layout.nodes.length; k += 1) {
+      const p = layout.nodes[i]; const q = layout.nodes[k];
+      assert.ok(!(p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h), `${p.id} overlaps ${q.id}`);
     }
   }
-  assert.equal(layout.groups, 2, 'a–b–c and x–y are two groups');
-  assert.ok(layout.looseTop != null, 'the unconnected get their own heading');
-  const lone = layout.nodes.filter((n) => n.id.startsWith('lone'));
-  assert.ok(lone.every((n) => n.y > layout.looseTop), 'and sit under it');
-  const a = layout.nodes.find((n) => n.id === 'a');
-  assert.equal(a.lines.length, 3);
-  assert.ok(layout.width > 0 && layout.height > a.y + a.h);
+  assert.equal(layout.groups, 2);
+  assert.equal(layout.dividers.length, 1, 'the second group is ruled off from the first');
+  const lastLane = layout.lanes.at(-1);
+  assert.ok(layout.tray && layout.tray.count === 2, 'the unconnected wait in a tray');
+  assert.ok(['lone1', 'lone2'].every((id) => at(id).x >= layout.tray.x && at(id).x > lastLane.x + lastLane.w),
+    'the tray sits to the right of every lane');
+  assert.ok(layout.width >= layout.tray.x + layout.tray.w);
+  assert.equal(at('a').lines.length, 3);
+  assert.ok(layout.height > at('a').y + at('a').h);
+});
+
+test('a line runs at right angles and never through a task', () => {
+  // a (Ann) → d (Ann) two rows down, with c (Ann) in between: the line must
+  // leave the lane rather than run straight down through c.
+  const tasks = [T('a', { owner: 'ann' }), T('b', { owner: 'bob', dependsOn: ['a'] }),
+    T('c', { owner: 'ann', dependsOn: ['a'] }), T('d', { owner: 'ann', dependsOn: ['b'] })];
+  const layout = layoutSwimlanes(buildGraph(tasks, tasks), { laneOf: who });
+  const at = (id) => layout.nodes.find((n) => n.id === id);
+  const path = layout.edges.find((e) => e.from === 'b' && e.to === 'd').d;
+  assert.match(path, /^M [\d.]+ [\d.]+( (L|Q) [\d. ]+)+$/, 'straight runs and rounded corners only');
+  // Sample the polyline's corner points and check none falls inside c.
+  const c = at('c');
+  const nums = path.replace(/[MLQ]/g, ' ').trim().split(/\s+/).map(Number);
+  for (let i = 0; i < nums.length; i += 2) {
+    const [x, y] = [nums[i], nums[i + 1]];
+    assert.ok(!(x > c.x && x < c.x + c.w && y > c.y && y < c.y + c.h), `the line b→d passes through c at ${x},${y}`);
+  }
+  const ad = layout.edges.find((e) => e.from === 'a' && e.to === 'c').d;
+  assert.match(ad, new RegExp(`^M ${at('a').x + NODE_W / 2} ${at('a').y + at('a').h} L ${at('c').x + NODE_W / 2} ${at('c').y}$`),
+    'straight down when nothing is in the way');
 });
 
 test('a hover lights a node and everything one step from it', () => {
@@ -121,38 +155,19 @@ test('a hover lights a node and everything one step from it', () => {
   assert.equal(groupsOf(g.nodes, g.edges).length, 1);
 });
 
-test('a line between two tasks in one column is not clipped at the canvas edge', () => {
-  const tasks = [T('p'), T('a', { links: [{ type: 'child-of', targetId: 'p' }] }),
-    T('b', { links: [{ type: 'child-of', targetId: 'p' }, { type: 'duplicate-of', targetId: 'a' }] })];
-  const layout = layoutGraph(buildGraph(tasks, tasks));
-  const a = layout.nodes.find((n) => n.id === 'a');
-  const b = layout.nodes.find((n) => n.id === 'b');
-  assert.equal(a.x, b.x, 'both children sit in one column');
-  assert.ok(layout.width >= a.x + a.w + 46, 'room for the bow to the right');
-});
-
-test('every task is on the page: the unconnected are filed by project, open work first', () => {
+test('every task is on the page: the unconnected are open work first, finished last', () => {
   const tasks = [
     T('a'), T('b', { dependsOn: ['a'] }),
-    T('x1', { projectId: 'px', title: 'Later one', plan: { endDate: '2026-12-01' } }),
-    T('x2', { projectId: 'px', title: 'Done one', status: 'done', plan: { endDate: '2026-01-01' } }),
-    T('x3', { projectId: 'px', title: 'Sooner one', plan: { endDate: '2026-11-01' } }),
-    T('y1', { projectId: 'py' }),
-    T('n1'),
+    T('x1', { owner: 'ann', title: 'Later one', plan: { endDate: '2026-12-01' } }),
+    T('x2', { owner: 'ann', title: 'Done one', status: 'done', plan: { endDate: '2026-01-01' } }),
+    T('x3', { owner: 'ann', title: 'Sooner one', plan: { endDate: '2026-11-01' } }),
   ];
   const g = buildGraph(tasks, tasks, { includeUnlinked: true });
   assert.equal(g.nodes.length, tasks.length, 'no task is left out');
-  const names = { px: 'Alpha', py: 'Beta' };
-  const layout = layoutGraph(g, {
-    groupOf: (t) => (t.projectId ? { key: t.projectId, label: names[t.projectId] } : { key: '', label: 'No project' }),
-  });
-  const heads = layout.headings.filter((h) => h.kind === 'project');
-  assert.deepEqual(heads.map((h) => [h.label, h.count]), [['Alpha', 3], ['Beta', 1], ['No project', 1]],
-    'projects A–Z, "No project" last, each with its count');
-  const x = ['x1', 'x2', 'x3'].map((id) => layout.nodes.find((n) => n.id === id));
-  const byReading = [...x].sort((p, q) => p.y - q.y || p.x - q.x).map((n) => n.id);
-  assert.deepEqual(byReading, ['x3', 'x1', 'x2'], 'soonest due first, finished last');
-  assert.ok(layout.headings[0].kind === 'section');
+  const layout = layoutSwimlanes(g, { laneOf: who });
+  const order = ['x1', 'x2', 'x3'].map((id) => layout.nodes.find((n) => n.id === id)).sort((p, q) => p.y - q.y).map((n) => n.id);
+  assert.deepEqual(order, ['x3', 'x1', 'x2'], 'soonest due first, finished last');
+  assert.equal(layout.tray.count, 3);
 });
 
 const D = (id, date, o = {}) => T(id, { projectId: 'p', plan: { startDate: date }, ...o });
@@ -180,7 +195,7 @@ test('auto-connect never contradicts or repeats what the tasks say', () => {
   const seq = sequenceEdges(tasks, stated);
   assert.ok(!seq.some((e) => key(e) === 'a>b'), 'against a stated dependency');
   assert.ok(!seq.some((e) => key(e) === 'b>c'), 'already in order through a');
-  const layout = layoutGraph(buildGraph(tasks, tasks, { autoConnect: true }));
+  const layout = layoutSwimlanes(buildGraph(tasks, tasks, { autoConnect: true }));
   assert.equal(layout.edges.filter((e) => e.loop).length, 0);
 });
 

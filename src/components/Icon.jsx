@@ -89,12 +89,13 @@ const PATHS = {
       <path d="m3 17 9 4.5 9-4.5" />
     </>
   ),
-  node: (
+  swimlane: (
     <>
-      <circle cx="5" cy="6" r="2.5" />
-      <circle cx="19" cy="6" r="2.5" />
-      <circle cx="12" cy="18" r="2.5" />
-      <path d="M7.5 6h9M6.3 8.2l4.4 7.6M17.7 8.2l-4.4 7.6" />
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16M15 4v16" />
+      <rect x="4.6" y="7" width="2.8" height="2.6" rx=".8" />
+      <rect x="10.6" y="11" width="2.8" height="2.6" rx=".8" />
+      <rect x="16.6" y="15" width="2.8" height="2.6" rx=".8" />
     </>
   ),
   wbs: (
