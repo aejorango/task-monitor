@@ -23,6 +23,7 @@ import { buildCommands, buildDuplicateCommands, commandsFirst, CREATE_VIEW, rece
 import { requestQuickCreate } from '../hooks/useQuickCreate';
 import { useToast } from './Toast';
 import { useDialog } from './Dialog';
+import { pickerProjects } from '../services/projectPicker';
 
 // The rail reads the one view registry (services/views.js), which the ⌘K
 // palette reads too — so a page cannot exist in one and not the other.
@@ -791,11 +792,9 @@ export function ProjectPicker({ projects, value, onChange, triggerClassName = 'b
     ? { name: 'All projects', color: '#a1a1aa' }
     : projects.find((p) => p.id === value);
 
-  // Sort projects alphabetically by name for the dropdown.
-  const sortedProjects = useMemo(
-    () => [...projects].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
-    [projects],
-  );
+  // Active projects only, A–Z (services/projectPicker.js) — an archived one
+  // stays only while it is the one chosen, so the menu never hides the filter.
+  const sortedProjects = useMemo(() => pickerProjects(projects, value), [projects, value]);
 
   // `proj-picker` is what makes the menu drop DOWN-RIGHT rather than
   // down-left: `.dropdown-menu` is right-anchored, which is correct for a
@@ -833,6 +832,10 @@ export function ProjectPicker({ projects, value, onChange, triggerClassName = 'b
             >
               <span className="proj-dot" style={{ background: p.color }} />
               <span className="proj-picker-name">{p.name}</span>
+              {p._archived && (
+                <span className="badge badge-soft-muted" style={{ marginLeft: 'auto', fontSize: '10px' }}
+                  title="This project is archived; pick another to hide it">Archived</span>
+              )}
               {p._shared && (
                 <span
                   className="badge badge-soft-info"

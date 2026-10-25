@@ -252,6 +252,7 @@ const CALLS = {
     return { id };
   },
   async updateProject(id, updates) { set((s) => ({ ...s, projects: s.projects.map((x) => (x.id === id ? { ...x, ...updates } : x)) })); },
+  async archiveProject(id) { set((s) => ({ ...s, projects: s.projects.map((x) => (x.id === id ? { ...x, archived: true } : x)) })); },
   async addSegmentToWorkspace(wsId, name) {
     set((s) => ({ ...s, workspaces: s.workspaces.map((w) => (w.id === wsId ? { ...w, segments: [...(w.segments || []), { id: nid('sg'), name }] } : w)) }));
   },
