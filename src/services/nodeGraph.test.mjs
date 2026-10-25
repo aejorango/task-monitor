@@ -125,29 +125,6 @@ test('swimlanes: a lane per person, read top to bottom, nothing overlaps', () =>
   assert.ok(layout.height > at('a').y + at('a').h);
 });
 
-test('phases: each a band of its own, in phase order, with a rule between them', () => {
-  const PH = { p1: 0, p2: 1 };
-  const tasks = [
-    T('a', { owner: 'ann', phaseId: 'p1' }), T('b', { owner: 'bob', phaseId: 'p1', dependsOn: ['a'] }),
-    T('c', { owner: 'ann', phaseId: 'p2', dependsOn: ['b'] }), T('d', { owner: 'bob', phaseId: 'p2', dependsOn: ['c'] }),
-    T('e', { owner: 'ann', dependsOn: ['d'] }),
-  ];
-  const layout = layoutSwimlanes(buildGraph(tasks, tasks), {
-    laneOf: who,
-    bandOf: (t) => (t.phaseId ? { key: t.phaseId, label: `Phase ${t.phaseId}`, order: ['P', PH[t.phaseId]] } : { key: '', label: 'No phase', order: ['P', 99] }),
-  });
-  assert.deepEqual(layout.bands.map((b) => b.label), ['Phase p1', 'Phase p2', 'No phase']);
-  assert.ok(layout.phaseW > 0 && layout.lanes[0].x >= layout.phaseW, 'the phase column sits left of every lane');
-  const at = (id) => layout.nodes.find((n) => n.id === id);
-  layout.bands.forEach((band, i) => {
-    const ids = [['a', 'b'], ['c', 'd'], ['e']][i];
-    ids.forEach((id) => assert.ok(at(id).y >= band.y && at(id).y + at(id).h <= band.y + band.h, `${id} sits inside ${band.label}`));
-  });
-  assert.deepEqual(layout.dividers, layout.bands.slice(1).map((b) => b.y), 'one rule where each band begins');
-  assert.ok(at('b').y > at('a').y, 'inside a phase the work still reads in order');
-  assert.deepEqual(layoutSwimlanes(buildGraph(tasks, tasks)).bands, [], 'no bandOf, no phase column');
-});
-
 test('a line runs at right angles and never through a task', () => {
   // a (Ann) → d (Ann) two rows down, with c (Ann) in between: the line must
   // leave the lane rather than run straight down through c.

@@ -53,6 +53,7 @@ export const LINE_H = 17;
 // colour, and the rest is in its tooltip and its editor.
 const NODE_TOP = 15;
 const NODE_FOOT = 13;
+export const GROUP_GAP = 48;     // between separate groups
 export const PAD = 28;
 
 /**
@@ -308,10 +309,7 @@ const dueKey = (t) => t?.plan?.endDate || '9999-99-99';
 // One LANE (column) per person accountable, and the work read TOP TO BOTTOM:
 // a task's row is its column in the ranking above (longest path in, a task
 // with nothing before it pulled down beside what it leads to). Separate
-// groups of connected tasks are stacked as their own bands — or, when the page
-// passes `bandOf`, the bands are the PHASES: a column at the far left names
-// each one, written bottom to top, and a subtle rule runs across between
-// them, so you can see which tasks fall under which phase. The lanes hold
+// groups of connected tasks are stacked as their own bands. The lanes hold
 // only the CONNECTED work; every task with no connection waits in a separate
 // TRAY to the right of the lanes, open work first, ready to be dragged onto
 // the flow.
@@ -322,9 +320,6 @@ export const LANE_HEAD = 44;                 // the lane's name row
 export const ROW_GAP = 48;                   // between rows: room for the elbows
 export const STACK_GAP = 14;                 // two tasks of one lane in one row
 export const TRAY_GAP = 36;                  // between the last lane and the tray
-export const PHASE_W = 46;                   // the phase column at the far left
-const BAND_TOP = 34;                         // inside a band: above its first row
-const BAND_FOOT = 26;                        // and below its last
 const TRAY_ROWS = 10;                        // the tray adds a column every ten tasks, up to three
 
 const defaultLaneOf = (t) => {
@@ -340,7 +335,7 @@ const defaultLaneOf = (t) => {
  * "Unassigned", always last). Lanes are ordered by where their work first
  * appears in the flow, so the chart reads left to right as the hand-offs do.
  */
-export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = defaultLaneOf, bandOf = null } = {}) {
+export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = defaultLaneOf } = {}) {
   const { nodes, edges } = graph;
   const { rank, loopEdges } = rankNodes(nodes, edges);
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -358,27 +353,11 @@ export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = def
       || dueKey(byId.get(a[0])?.task).localeCompare(dueKey(byId.get(b[0])?.task))
       || a[0].localeCompare(b[0]));
 
-  // The bands, top to bottom: each PHASE when the page names them (in the
-  // order `bandOf` gives), else each connected group. A band's rows are the
-  // ranks its tasks use, in order, with no empty rows — so inside a phase the
-  // work still reads in the order it leads on.
-  let bands;
-  if (bandOf) {
-    const byKey = new Map();
-    groups.flat().forEach((id) => {
-      const b = bandOf(byId.get(id).task) || { key: '', label: '' };
-      if (!byKey.has(b.key)) byKey.set(b.key, { ...b, ids: [] });
-      byKey.get(b.key).ids.push(id);
-    });
-    bands = [...byKey.values()].sort((a, b) => compareOrder(a.order, b.order) || String(a.label).localeCompare(String(b.label)));
-  } else {
-    bands = groups.map((ids, g) => ({ key: `group-${g}`, label: null, ids }));
-  }
-  const groupRows = bands.map((band) => {
-    const ranks = [...new Set(band.ids.map((id) => rank.get(id) || 0))].sort((a, b) => a - b);
-    return ranks.map((r) => band.ids.filter((id) => (rank.get(id) || 0) === r));
+  // Each group's rows: the ranks it uses, in order, with no empty rows.
+  const groupRows = groups.map((ids) => {
+    const ranks = [...new Set(ids.map((id) => rank.get(id) || 0))].sort((a, b) => a - b);
+    return ranks.map((r) => ids.filter((id) => (rank.get(id) || 0) === r));
   });
-  const phaseW = bandOf && bands.length ? PHASE_W : 0;
 
   // Lane order: where each lane's work first appears; Unassigned last.
   const first = new Map();
@@ -393,13 +372,13 @@ export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = def
   const lanes = [...info.values()].sort((a, b) => (!a.key) - (!b.key)
     || first.get(a.key) - first.get(b.key) || String(a.label).localeCompare(String(b.label)));
   const laneIdx = new Map(lanes.map((l, i) => [l.key, i]));
-  lanes.forEach((l, i) => { l.x = PAD + phaseW + i * LANE_W; l.w = LANE_W; });
+  lanes.forEach((l, i) => { l.x = PAD + i * LANE_W; l.w = LANE_W; });
   const laneOfId = (id) => laneIdx.get(lane.get(id).key);
 
   const pos = new Map();
   const rowTopOf = new Map();
   const dividers = [];
-  let top = PAD + LANE_HEAD;
+  let top = PAD + LANE_HEAD + 18;
   const place = (ids, rowTop, order = tie) => {
     // One row: in each lane its tasks stacked; the row is as tall as its tallest lane.
     const cells = new Map();
@@ -418,23 +397,18 @@ export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = def
     return rowH;
   };
   groupRows.forEach((rows, g) => {
-    const band = bands[g];
-    band.y = top;
-    if (g > 0) dividers.push(top);
-    top += BAND_TOP;
+    if (g > 0) { dividers.push(top - GROUP_GAP / 2 - ROW_GAP / 2); }
     rows.forEach((row) => { top += place(row, top) + ROW_GAP; });
-    top += BAND_FOOT - ROW_GAP;
-    band.h = top - band.y;
-    delete band.ids;
+    top += GROUP_GAP;
   });
 
-  const lanesBottom = bands.length ? top + PAD : 0;
+  const lanesBottom = groups.length ? top - GROUP_GAP - ROW_GAP + PAD : 0;
 
   // The tray: everything not connected, in a box of its own right of the lanes.
   let tray = null;
   if (loose.length) {
     const cols = Math.min(3, Math.ceil(loose.length / TRAY_ROWS));
-    const x = PAD + phaseW + lanes.length * LANE_W + (lanes.length ? TRAY_GAP : 0);
+    const x = PAD + lanes.length * LANE_W + (lanes.length ? TRAY_GAP : 0);
     const openFirst = (a, b) => (byId.get(a).task?.status === 'done') - (byId.get(b).task?.status === 'done') || tie(a, b);
     const sorted = [...loose].sort(openFirst);
     let y = PAD + LANE_HEAD + 18;
@@ -449,7 +423,7 @@ export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = def
     tray = { x, y: PAD, w: LANE_PAD * 2 + cols * NODE_W + (cols - 1) * STACK_GAP, h: y - STACK_GAP + LANE_PAD - PAD, count: loose.length };
   }
 
-  const width = Math.max(PAD * 2 + LANE_W, tray ? tray.x + tray.w + PAD : PAD * 2 + phaseW + lanes.length * LANE_W);
+  const width = Math.max(PAD * 2 + LANE_W, tray ? tray.x + tray.w + PAD : PAD * 2 + lanes.length * LANE_W);
   const height = Math.max(lanesBottom, tray ? tray.y + tray.h + PAD : 0, PAD * 2 + LANE_HEAD + 40);
 
   // Is the stretch of a lane between y1 and y2 free of tasks (other than a and b)?
@@ -471,27 +445,10 @@ export function layoutSwimlanes(graph, { labelOf = (t) => t?.title, laneOf = def
     width,
     height,
     groups: groups.length,
-    bands: bandOf ? bands : [],
-    phaseW,
     dividers,
     lanesBottom,
     tray,
   };
-}
-
-// Sort keys a page hands over as arrays — [project name, phase order] — compared
-// item by item, numbers as numbers, anything missing last.
-function compareOrder(a = [], b = []) {
-  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
-    const x = a[i]; const y = b[i];
-    if (x === y) continue;
-    if (x == null) return 1;
-    if (y == null) return -1;
-    if (typeof x === 'number' && typeof y === 'number') return x - y;
-    const c = String(x).localeCompare(String(y));
-    if (c) return c;
-  }
-  return 0;
 }
 
 /**
