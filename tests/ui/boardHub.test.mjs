@@ -222,10 +222,12 @@ test('the find box does not write a history entry per keystroke', () => {
     'a fresh arrow each render would tear the debounce down before it fires');
 });
 
-test('the Kanban column beds are the mockup\'s own, and answer dark mode', () => {
+test('the Kanban column beds are the theme\'s own, and answer dark mode', () => {
+  // Cloud beds since the deep-blue / light-blue theme (they were the mockup's
+  // warm cream); Done keeps its green tint, because that one is a meaning.
   const css = read('src', 'App.css');
-  assert.match(css, /--c-col-todo:\s+#efe6d8/);
-  assert.match(css, /--c-col-doing:\s+#f0e6dc/);
+  assert.match(css, /--c-col-todo:\s+#eef1f5/);
+  assert.match(css, /--c-col-doing:\s+#eff3f8/);
   assert.match(css, /--c-col-done:\s+#e6ecdf/);
   // Both dark blocks — the media query AND the explicit override.
   assert.equal((css.match(/--c-col-todo:\s+#1e2938/g) || []).length, 2,

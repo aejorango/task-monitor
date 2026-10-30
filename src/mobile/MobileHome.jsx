@@ -121,7 +121,7 @@ export default function MobileHome() {
       </div>
 
       <div className="m-week-card">
-        <span className="m-ring" style={{ background: `conic-gradient(var(--m-orange) ${ringPct}%, var(--m-rule) 0)` }}>
+        <span className="m-ring" style={{ background: `conic-gradient(var(--m-accent) ${ringPct}%, var(--m-rule) 0)` }}>
           <span className="m-ring-in">{Math.round((mine / WEEK_HOURS) * 100)}%</span>
         </span>
         <div className="m-week-text">

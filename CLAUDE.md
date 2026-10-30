@@ -881,6 +881,19 @@ module-level helper cannot, so it returns a result and the component speaks.
 - **An attachment belongs to the workspace.** Uploads go to `workspaces/{workspaceId}/{taskId|general|logo}/…` — `uploadPath()` in the pure `services/uploadPaths.js` builds every one and refuses a path with no workspace. `storage.rules` reads that workspace document to decide access, so any member can open, replace or delete the file. `users/{uid}/…` is frozen legacy: readable and deletable by its uploader, never written again.
 - **Soft delete** via `deleted: false` flag; **archive** via `archived: false`. Never hard-delete tasks because activities reference them.
 - **`userId` on every document** — keeps security rules trivial.
+- **Palette: deep blue and light blue, on cloud and white** (on request — it
+  was navy and orange on warm cream). `--c-accent` is light blue (`#2b8bdb`,
+  `#3a97e3` in dark), the neutrals are cloud (`--c-bg #f2f5f9`) and white, and
+  the rail, headers and ink stay navy. The phone app has its own
+  `--m-accent` / `--m-accent-ink` / `--m-accent-tint` / `--m-accent-hi` (light
+  blue that reads on the navy hero) and `--m-sky` (the secondary fill that was
+  `--m-gold`). **Orange survives only where it means something**: the "Working
+  on it" status (`--c-st-doing`, `--m-orange` on `.m-rail-doing`), amber
+  warnings ("offline", the warn chip, Ask AI's amber tone, an amber load), and
+  project and avatar colours, which are data. `tests/ui/theme.test.mjs` fails
+  the build if the accent stops being light blue in any of the three theme
+  blocks, if the old cream comes back, or if the old brand orange is written
+  by hand anywhere else.
 - **Theme:** CSS variables in `:root` and `@media (prefers-color-scheme: dark)`. All tokens prefixed `--c-` (colors), `--s-` (spacing), `--r-` (radii). **The default is `'system'`** (T-0126) — it was `'light'` from before the System option existed, so a new user on a dark-mode Mac got a bright white app. No migration was written and none is wanted: a stored value always beats a default, so a device that chose Light keeps Light. **`color-scheme` is declared beside the tokens in all three states**, because native chrome — date pickers, number spinners, select popups, scrollbars — is painted by the browser and stays light without it, which is a white date picker inside a dark task editor.
 - **Mobile** — at ≤720px the app is the **phone app** (`src/mobile`), not the desktop shell squeezed; see "The phone app". A desktop page that the phone embeds (Settings, Goals) must still work at that width.
 

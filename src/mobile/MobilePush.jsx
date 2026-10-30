@@ -541,7 +541,7 @@ function GoalsScreen() {
               <span className="m-goal-title">{goal.title || 'Untitled goal'}</span>
               <span className="m-goal-bar">
                 <span className="m-goal-track">
-                  {g.rows.map((r) => <span key={r.id} style={{ width: `${r.contrib}%`, background: r.color || 'var(--m-orange)' }} />)}
+                  {g.rows.map((r) => <span key={r.id} style={{ width: `${r.contrib}%`, background: r.color || 'var(--m-accent)' }} />)}
                 </span>
                 <span className="m-goal-pct">{g.pct == null ? '—' : `${g.pct}%`}</span>
               </span>

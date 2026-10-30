@@ -205,7 +205,7 @@ export function buildDigest({
     const wt = allWorkspaceTasks.filter((t) => live(t) && wp.some((p) => p.id === t.projectId));
     const wDone = wt.filter((t) => t.status === 'done').length;
     return {
-      id: w.id, name: w.name || 'Workspace', color: w.color || '#e2892e',
+      id: w.id, name: w.name || 'Workspace', color: w.color || '#2b8bdb',
       projects: wp.length, tasks: wt.length, done: wDone,
       donePct: pct(wDone, wt.length),
       members: (w.members || []).length,
